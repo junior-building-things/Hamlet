@@ -53,16 +53,16 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
       </div>
 
       {/* Desktop layout */}
-      <div className="hidden sm:grid grid-cols-[2fr_1fr_auto_1fr_1fr] gap-4 items-center justify-items-start">
+      <div className="hidden sm:grid grid-cols-[2fr_1fr_auto_1fr_1fr] gap-4 items-center">
         <button
           onClick={() => onEdit(feature)}
-          className="text-white text-sm font-semibold truncate text-left hover:text-purple-300 transition-colors"
+          className="w-full min-w-0 text-white text-sm font-semibold truncate text-left hover:text-purple-300 transition-colors cursor-pointer"
         >
           {feature.name}
         </button>
         <StatusBadge status={feature.status} />
         <PriorityBadge priority={feature.priority} />
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           {feature.meegoUrl && (
             <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="text-xs text-purple-400 hover:text-purple-300 transition-colors whitespace-nowrap">
               Meego ↗
@@ -79,7 +79,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
             </a>
           )}
         </div>
-        <span className="flex items-center gap-1 text-xs text-gray-400">
+        <span className="flex items-center gap-1 text-xs text-gray-400 truncate">
           <Calendar className="w-3 h-3 shrink-0" />
           {new Date(feature.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </span>
