@@ -266,7 +266,10 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
       .then(res => res.json().then(data => ({ ok: res.ok, data })))
       .then(({ ok, data }: { ok: boolean; data: { id?: string; meegoUrl?: string; prd?: string; prdError?: string; error?: string } }) => {
         if (!ok) throw new Error(data.error ?? 'Create failed');
-        if (data.prdError) console.error('PRD creation failed:', data.prdError);
+        if (data.prdError) {
+          console.error('PRD creation failed:', data.prdError);
+          alert(`PRD creation failed: ${data.prdError}`);
+        }
         onFeatureCreated?.(tempId, {
           id:              data.id ?? tempId,
           name:            form.name.trim(),
