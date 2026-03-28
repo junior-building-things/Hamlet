@@ -25,18 +25,21 @@ export default function Home() {
   const [syncingId, setSyncingId]         = useState<string | null>(null);
   const [syncingAll, setSyncingAll]       = useState(false);
 
-  // Load from localStorage, then fetch from Meego if empty
+  // Load from localStorage if non-empty, otherwise always fetch from Meego
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
-        setFeatures(JSON.parse(stored) as Feature[]);
-        setHydrated(true);
-        setLoading(false);
-        return;
-      } catch { /* fall through to Meego fetch */ }
+        const parsed = JSON.parse(stored) as Feature[];
+        if (parsed.length > 0) {
+          setFeatures(parsed);
+          setHydrated(true);
+          setLoading(false);
+          return;
+        }
+      } catch { /* fall through */ }
     }
-    // First visit — load from Meego
+    // No cached data — fetch from Meego
     fetchFromMeego().finally(() => {
       setHydrated(true);
       setLoading(false);
@@ -44,19 +47,30 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist to localStorage when features change
+  // Only persist to localStorage when we actually have features
   useEffect(() => {
-    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(features));
+    if (hydrated && features.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(features));
+    }
   }, [features, hydrated]);
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   async function fetchFromMeego() {
+    setFetchError(null);
     try {
       const res = await fetch('/api/meego/features');
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json() as { features: Feature[] };
-      if (data.features?.length) setFeatures(data.features);
+      const data = await res.json() as { features?: Feature[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (data.features && data.features.length > 0) {
+        setFeatures(data.features);
+      } else {
+        setFetchError('No features returned from Meego');
+      }
     } catch (err) {
-      console.error('Meego fetch error:', err);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Meego fetch error:', msg);
+      setFetchError(msg);
     }
   }
 
@@ -135,6 +149,14 @@ export default function Home() {
             <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
               <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
               <p className="text-sm">Loading features from Meego…</p>
+            </div>
+          ) : fetchError ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
+              <p className="text-sm text-red-400">Failed to load from Meego: {fetchError}</p>
+              <button onClick={() => { setLoading(true); fetchFromMeego().finally(() => setLoading(false)); }}
+                className="text-xs text-purple-400 hover:text-purple-300 underline">
+                Retry
+              </button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 gap-2 text-gray-500">
