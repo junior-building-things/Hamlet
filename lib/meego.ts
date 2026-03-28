@@ -369,6 +369,56 @@ export async function completeNode(
   });
 }
 
+export interface CreateFeatureParams {
+  name: string;
+  priority: Priority;
+  quarterlyCycleOptionId?: string;
+  businessLineOptionId?: string;
+  socialComponentOptionId?: string;
+  roles: Array<{ role: string; owners: string[] }>;
+}
+
+export async function createFeature(params: CreateFeatureParams): Promise<{ id: string; meegoUrl: string }> {
+  const fields: Array<{ field_key: string; field_value: string }> = [
+    { field_key: 'template',  field_value: '207989' },
+    { field_key: 'name',      field_value: params.name },
+    { field_key: 'priority',  field_value: PRIORITY_TO_MEEGO[params.priority] },
+  ];
+
+  if (params.quarterlyCycleOptionId)
+    fields.push({ field_key: 'field_675419', field_value: JSON.stringify([{ option_id: params.quarterlyCycleOptionId }]) });
+  if (params.businessLineOptionId)
+    fields.push({ field_key: 'field_a4c558', field_value: params.businessLineOptionId });
+  if (params.socialComponentOptionId)
+    fields.push({ field_key: 'field_2e7909', field_value: params.socialComponentOptionId });
+  if (params.roles.length > 0)
+    fields.push({ field_key: 'role_owners', field_value: JSON.stringify(params.roles) });
+
+  const raw = await callMeegoMcp('create_workitem', {
+    project_key: TIKTOK_PROJECT_KEY,
+    work_item_type: 'story',
+    fields,
+  });
+
+  // Parse work_item_id from response (may be JSON or markdown text)
+  let workItemId = '';
+  try {
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    const nested = data.data as Record<string, unknown> | undefined;
+    workItemId = String(data.work_item_id ?? nested?.work_item_id ?? '');
+  } catch { /* fall through to regex */ }
+  if (!workItemId) {
+    const m = raw.match(/"?work_item_id"?\s*[:\s]+(\d+)/);
+    if (m) workItemId = m[1];
+  }
+  if (!workItemId) throw new Error(`Could not parse work_item_id from response: ${raw}`);
+
+  return {
+    id: workItemId,
+    meegoUrl: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/${workItemId}`,
+  };
+}
+
 export async function updateFeatureFields(
   projectKey: string,
   workItemId: string,
