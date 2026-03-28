@@ -1,5 +1,6 @@
 const LARK_BASE_URL   = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 const TEMPLATE_TOKEN  = 'Z5qldS3kEoC1WAxPyMucR9RpneX';
+const OWNER_EMAIL     = 'thomas.oefverstroem@bytedance.com';
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
 
@@ -69,6 +70,13 @@ export async function copyPrdTemplate(featureName: string): Promise<string> {
 
   const fileToken = data.data?.file?.token;
   if (!fileToken) throw new Error('Lark response missing file token');
+
+  // Add owner as full-access collaborator so they can access the doc
+  await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/permissions/${fileToken}/members?type=docx&need_notification=false`, {
+    method:  'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ member_type: 'email', member_id: OWNER_EMAIL, perm: 'full_access', type: 'user' }),
+  });
 
   return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;
 }
