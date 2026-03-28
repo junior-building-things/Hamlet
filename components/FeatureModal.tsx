@@ -90,6 +90,12 @@ const TECH_OWNERS: AvatarOption[] = [
   { value: '6990536503940218908', label: 'Xuan Sheng',   avatarUrl: AV['Xuan Sheng'] },
   { value: '7405623196516450307', label: 'Tianyang Ni',  avatarUrl: AV['Tianyang Ni'] },
 ];
+const SERVER_OWNERS: AvatarOption[] = [
+  { value: '7210676945535778820', label: 'Austin Lee',   avatarUrl: AV['Austin Lee'] },
+  { value: '7291604705006895105', label: 'Kyle Chan',    avatarUrl: AV['Kyle Chan'] },
+  { value: '6990536503940218908', label: 'Xuan Sheng',   avatarUrl: AV['Xuan Sheng'] },
+  { value: '7405623196516450307', label: 'Tianyang Ni',  avatarUrl: AV['Tianyang Ni'] },
+];
 const ANDROID_OWNERS: AvatarOption[] = [
   { value: '7210676945535778820', label: 'Austin Lee',  avatarUrl: AV['Austin Lee'] },
   { value: '6990536503940218908', label: 'Xuan Sheng',  avatarUrl: AV['Xuan Sheng'] },
@@ -188,6 +194,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     businessLine:    '2hj6rn3ao',   // Social Messaging default
     socialComponent: 'mz8vxxems',   // Sticker & Typing Rec default
     techOwner:       '',
+    server:          '',
     android:         '',
     ios:             '',
     uiux:            '',
@@ -239,6 +246,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
       { role: 'role_e8ce24', owners: [form.tpm] },
     ];
     if (form.techOwner) roles.push({ role: 'Tech_Owner', owners: [form.techOwner] });
+    if (form.server)    roles.push({ role: 'Server',     owners: [form.server] });
     if (form.android)   roles.push({ role: 'Android',    owners: [form.android] });
     if (form.ios)       roles.push({ role: 'iOS',        owners: [form.ios] });
     if (form.uiux)      roles.push({ role: 'UI',         owners: [form.uiux] });
@@ -340,14 +348,15 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <FormLabel>Business Line</FormLabel>
-                <CustomSelect options={BUSINESS_LINES.map(b => ({ value: b.id, label: b.label }))} value={form.businessLine} onChange={v => setField('businessLine', v)} />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <FormLabel>Social Component</FormLabel>
-                <CustomSelect options={SOCIAL_COMPONENTS.map(s => ({ value: s.id, label: s.label }))} value={form.socialComponent} onChange={v => setField('socialComponent', v)} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <FormLabel>Business Line</FormLabel>
+                  <CustomSelect options={BUSINESS_LINES.map(b => ({ value: b.id, label: b.label }))} value={form.businessLine} onChange={v => setField('businessLine', v)} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <FormLabel>Social Component</FormLabel>
+                  <CustomSelect options={SOCIAL_COMPONENTS.map(s => ({ value: s.id, label: s.label }))} value={form.socialComponent} onChange={v => setField('socialComponent', v)} />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -356,6 +365,13 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                   <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" />
                 </div>
                 <div className="flex flex-col gap-1.5">
+                  <FormLabel>Server</FormLabel>
+                  <AvatarSelect options={SERVER_OWNERS} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
                   <FormLabel>Android</FormLabel>
                   <AvatarSelect options={ANDROID_OWNERS} value={form.android} onChange={v => setField('android', v)} placeholder="Optional" />
                 </div>
@@ -363,9 +379,16 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                   <FormLabel>iOS</FormLabel>
                   <AvatarSelect options={IOS_OWNERS} value={form.ios} onChange={v => setField('ios', v)} placeholder="Optional" />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>UI&amp;UX</FormLabel>
                   <AvatarSelect options={UIUX_OWNERS} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <FormLabel>Content Designer</FormLabel>
+                  <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} locked />
                 </div>
               </div>
 
@@ -378,10 +401,9 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                   <FormLabel>DA</FormLabel>
                   <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>Content Designer</FormLabel>
-                  <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} locked />
-                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>QA</FormLabel>
                   <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} locked />
