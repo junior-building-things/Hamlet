@@ -89,19 +89,23 @@ interface MeegoTodoResponse {
 }
 
 export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
-  const raw = await callMeegoMcp('list_todo', {
-    work_item_type_key: 'story',
-    action_type: 'created',
-  });
-
-  let data: MeegoTodoResponse;
-  try {
-    data = JSON.parse(raw) as MeegoTodoResponse;
-  } catch {
-    throw new Error('Failed to parse Meego list_todo response');
+  // Paginate through all pages (50 items per page)
+  const allItems: MeegoTodoItem[] = [];
+  let page = 1;
+  while (true) {
+    let data: MeegoTodoResponse;
+    try {
+      const raw = await callMeegoMcp('list_todo', { action: 'todo', page_num: page });
+      data = JSON.parse(raw) as MeegoTodoResponse;
+    } catch {
+      throw new Error(`Failed to parse Meego list_todo response (page ${page})`);
+    }
+    allItems.push(...(data.list ?? []));
+    if (allItems.length >= data.total) break;
+    page++;
   }
 
-  return (data.list ?? [])
+  return allItems
     .filter(item =>
       item.project_key === projectKey &&
       item.work_item_info.work_item_type_key === 'story'
