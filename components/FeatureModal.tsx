@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { X, ExternalLink, Loader2, CheckCircle2 } from 'lucide-react';
-import { AvatarSelect, AvatarOption, UserAvatar } from './AvatarSelect';
+import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
 
 interface Props {
   mode: 'add' | 'edit';
@@ -161,8 +161,7 @@ function FormLabel({ children, required }: { children: React.ReactNode; required
   );
 }
 
-const inputCls  = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500 placeholder-gray-600';
-const selectCls = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500';
+const inputCls = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500 placeholder-gray-600';
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -314,30 +313,22 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <FormLabel required>Priority</FormLabel>
-                  <select className={selectCls} value={form.priority} onChange={e => setField('priority', e.target.value)}>
-                    {PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                  </select>
+                  <CustomSelect options={PRIORITIES.map(p => ({ value: p.id, label: p.label }))} value={form.priority} onChange={v => setField('priority', v)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>Quarterly Cycle</FormLabel>
-                  <select className={selectCls} value={form.quarterlyCycle} onChange={e => setField('quarterlyCycle', e.target.value)}>
-                    {QUARTERLY_CYCLES.map(q => <option key={q.id} value={q.id}>{q.label}</option>)}
-                  </select>
+                  <CustomSelect options={QUARTERLY_CYCLES.map(q => ({ value: q.id, label: q.label }))} value={form.quarterlyCycle} onChange={v => setField('quarterlyCycle', v)} />
                 </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <FormLabel>Business Line</FormLabel>
-                <select className={selectCls} value={form.businessLine} onChange={e => setField('businessLine', e.target.value)}>
-                  {BUSINESS_LINES.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
-                </select>
+                <CustomSelect options={BUSINESS_LINES.map(b => ({ value: b.id, label: b.label }))} value={form.businessLine} onChange={v => setField('businessLine', v)} />
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <FormLabel>Social Component</FormLabel>
-                <select className={selectCls} value={form.socialComponent} onChange={e => setField('socialComponent', e.target.value)}>
-                  {SOCIAL_COMPONENTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
+                <CustomSelect options={SOCIAL_COMPONENTS.map(s => ({ value: s.id, label: s.label }))} value={form.socialComponent} onChange={v => setField('socialComponent', v)} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
