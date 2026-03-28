@@ -115,11 +115,32 @@ export default function Home() {
     return matchSearch && matchStatus && matchPriority;
   }), [features, search, statusFilter, priorityFilter]);
 
-  function handleSave(saved: Feature) {
+  async function handleSave(saved: Feature) {
     if (modalMode === 'add') {
       setFeatures(prev => [saved, ...prev]);
     } else {
       setFeatures(prev => prev.map(f => f.id === saved.id ? saved : f));
+
+      // Write back to Meego if this feature is linked
+      if (saved.meegoIssueId && saved.meegoProjectKey) {
+        try {
+          await fetch('/api/meego/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectKey: saved.meegoProjectKey,
+              workItemId: saved.meegoIssueId,
+              fields: {
+                name:        saved.name,
+                description: saved.description,
+                priority:    saved.priority,
+              },
+            }),
+          });
+        } catch (err) {
+          console.error('Failed to update Meego:', err);
+        }
+      }
     }
     setModalMode(null);
     setEditing(undefined);

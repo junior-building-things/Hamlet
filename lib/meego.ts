@@ -163,4 +163,36 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{ status: str
   return { status: translateNode(currentNode) || 'Unknown', name: workItemName, owner };
 }
 
+const PRIORITY_TO_MEEGO: Record<string, string> = {
+  Critical: '0', // P0
+  High:     '1', // P1
+  Medium:   '2', // P2
+  Low:      '3', // P3
+};
+
+export async function updateFeatureFields(
+  projectKey: string,
+  workItemId: string,
+  fields: { name?: string; description?: string; priority?: string },
+): Promise<void> {
+  const updates: { field_key: string; field_value: string }[] = [];
+
+  if (fields.name !== undefined)
+    updates.push({ field_key: 'name', field_value: fields.name });
+
+  if (fields.description !== undefined)
+    updates.push({ field_key: 'description', field_value: fields.description });
+
+  if (fields.priority !== undefined && PRIORITY_TO_MEEGO[fields.priority])
+    updates.push({ field_key: 'priority', field_value: PRIORITY_TO_MEEGO[fields.priority] });
+
+  if (updates.length === 0) return;
+
+  await callMeegoMcp('update_field', {
+    project_key: projectKey,
+    work_item_id: workItemId,
+    fields: updates,
+  });
+}
+
 export { mapMeegoPriority };
