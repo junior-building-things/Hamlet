@@ -16,6 +16,23 @@ const NODE_PRIORITY = [
   '结束',
 ];
 
+const NODE_TRANSLATIONS: Record<string, string> = {
+  '产品需求准备':  'Requirements Prep',
+  '产品线内初评':  'Initial Review',
+  '技术评估&排优': 'Tech Assessment',
+  '需求详评':     'Detailed Review',
+  '技术方案设计':  'Technical Design',
+  'iOS 开发':     'iOS Development',
+  'UI&UX验收':    'UI/UX Acceptance',
+  'Server上线':   'Server Launch',
+  'AB实验':       'AB Testing',
+  '结束':         'Done',
+};
+
+export function translateNode(node: string): string {
+  return NODE_TRANSLATIONS[node] ?? node;
+}
+
 function pickNode(nodes: string[]): string {
   if (nodes.length === 0) return '';
   return nodes.slice().sort((a, b) => {
@@ -93,7 +110,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       id: String(item.work_item_info.work_item_id),
       name: item.work_item_info.work_item_name,
       description: '',
-      status: item.node_info?.node_name ?? 'Unknown',
+      status: translateNode(item.node_info?.node_name ?? 'Unknown'),
       priority: 'Medium',
       owner: 'Thomas',
       tasks: [],
@@ -134,7 +151,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{ status: str
   }
   currentNode = pickNode(activeNodes);
 
-  return { status: currentNode || 'Unknown', name: workItemName, owner };
+  return { status: translateNode(currentNode) || 'Unknown', name: workItemName, owner };
 }
 
 export { mapMeegoPriority };
