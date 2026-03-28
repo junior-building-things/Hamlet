@@ -285,7 +285,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
-    fields: ['wiki', 'priority', 'field_due3fb', 'field_675419', 'field_a4c558', 'field_2e7909'],
+    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909'],
   });
 
   const lines = raw.split('\n');
@@ -315,11 +315,11 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const bestWithOwners = activeNodes.find(n => n.key === best?.key);
   const canCompleteNode = bestWithOwners?.owners.includes(MY_EMAIL) ?? false;
 
-  const quarterlyCycleRaw = parseWorkItemField(raw, '季度规划');
-  let quarterlyCycle = quarterlyCycleRaw;
+  const commitStatusRaw = parseWorkItemField(raw, 'Commit Status');
+  let quarterlyCycle = commitStatusRaw;
   try {
-    const parsed = JSON.parse(quarterlyCycleRaw);
-    if (Array.isArray(parsed)) quarterlyCycle = parsed.join(', ');
+    const parsed = JSON.parse(commitStatusRaw);
+    if (Array.isArray(parsed) && parsed.length > 0) quarterlyCycle = parsed[parsed.length - 1];
   } catch { /* keep raw value */ }
   const businessLine   = parseWorkItemField(raw, 'DM Business Line');
   const socialComponent = parseWorkItemField(raw, 'Social模块');
