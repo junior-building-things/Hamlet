@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { X, ExternalLink, Loader2, CheckCircle2 } from 'lucide-react';
+import { AvatarSelect, AvatarOption, UserAvatar } from './AvatarSelect';
 
 interface Props {
   mode: 'add' | 'edit';
@@ -10,6 +11,27 @@ interface Props {
   onClose: () => void;
   onNodeCompleted?: (featureId: string) => void;
 }
+
+// ─── Avatar URLs ──────────────────────────────────────────────────────────────
+
+const AV: Record<string, string> = {
+  'Austin Lee':    'https://pan16.larksuitecdn.com/static-resource/v1/v2_cf35e3a3-be89-4e2f-9998-b813f928f77h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Kyle Chan':     'https://pan16.larksuitecdn.com/static-resource/v1/v2_042084af-a296-44f0-a9b5-0116f934742h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Xuan Sheng':    'https://s1-imfile.feishucdn.com/static-resource/v1/d118fefe-52ae-4b21-8aa5-c99a20748c7g~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  '盛煊':          'https://s1-imfile.feishucdn.com/static-resource/v1/d118fefe-52ae-4b21-8aa5-c99a20748c7g~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Tianyang Ni':   'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00vr_0a4c671c-c533-46aa-9fac-fd51782d7ehu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  '倪天洋':        'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00vr_0a4c671c-c533-46aa-9fac-fd51782d7ehu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Rishou Bao':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_0068_cc598725-854f-41e0-bb58-0cb5ee5cachu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  '包日守':        'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_0068_cc598725-854f-41e0-bb58-0cb5ee5cachu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Kim Li':        'https://pan16.larksuitecdn.com/static-resource/v1/v3_00qf_51fb0974-66d5-4069-aff5-c2de14bde7ch~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Lionel Lew':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00f1_17ab3065-3434-4398-9a00-247d1d7880hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Edward Lin':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00104_8c5bf311-78ed-45cf-ab81-47bd4032a6hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Tao Zhu':       'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00fg_2e6b01f3-4700-473a-9ebb-698203fdbahu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Hazel Li':      'https://pan16.larksuitecdn.com/static-resource/v1/v3_00tj_78445933-31f7-4349-adcb-3e11d4e0b64h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Xiaobo Tian':   'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00l5_7ccb4901-d79c-4997-9538-b90bfae341hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+};
+
+function av(name: string): AvatarOption { return { value: name, label: name, avatarUrl: AV[name] }; }
 
 // ─── Static option lists ──────────────────────────────────────────────────────
 
@@ -35,56 +57,56 @@ const BUSINESS_LINES = [
 ];
 
 const SOCIAL_COMPONENTS = [
-  { id: 'mz8vxxems',           label: 'Sticker & Typing Rec' },
-  { id: 'lpdmxqui2',           label: 'AI in DM' },
-  { id: 'xory3g7r6',           label: 'Chat experience' },
-  { id: 'vpw0ytamc',           label: 'Group chat' },
-  { id: 'uyk6ev819',           label: 'Avatar' },
-  { id: 'elnrsmb1h',           label: 'DM Camera' },
-  { id: 'hzxm3i0l3',           label: 'DM Growth' },
-  { id: 'vg3bccd0p',           label: 'Rich Message (sticker & camera)' },
+  { id: 'mz8vxxems',              label: 'Sticker & Typing Rec' },
+  { id: 'lpdmxqui2',              label: 'AI in DM' },
+  { id: 'xory3g7r6',              label: 'Chat experience' },
+  { id: 'vpw0ytamc',              label: 'Group chat' },
+  { id: 'uyk6ev819',              label: 'Avatar' },
+  { id: 'elnrsmb1h',              label: 'DM Camera' },
+  { id: 'hzxm3i0l3',              label: 'DM Growth' },
+  { id: 'vg3bccd0p',              label: 'Rich Message (sticker & camera)' },
   { id: 'Advanced message types', label: 'Advanced message types' },
-  { id: 'DM tech Horizontal',  label: 'Tech Horizontal' },
-  { id: 'ea3daoeps',           label: 'Streak' },
-  { id: 'cldbdsu8k',           label: 'B2C (Business Messaging)' },
-  { id: 'n9owpaqxm',           label: 'Inbox & Notice' },
-  { id: 'f5hto66ka',           label: 'Relation' },
-  { id: 'hyojgtl64',           label: 'Internal Share' },
-  { id: '4gvqfvw9l',           label: 'DM Push' },
-  { id: '4u0yg974v',           label: 'IMSDK' },
-  { id: 'g16xgcqb3',           label: 'Messaging Safety & Permission' },
-  { id: 'dya1s1cea',           label: 'Platforms (Msg Management+SCP)' },
-  { id: 'IMCloud',             label: 'IMCloud' },
+  { id: 'DM tech Horizontal',     label: 'Tech Horizontal' },
+  { id: 'ea3daoeps',              label: 'Streak' },
+  { id: 'cldbdsu8k',              label: 'B2C (Business Messaging)' },
+  { id: 'n9owpaqxm',              label: 'Inbox & Notice' },
+  { id: 'f5hto66ka',              label: 'Relation' },
+  { id: 'hyojgtl64',              label: 'Internal Share' },
+  { id: '4gvqfvw9l',              label: 'DM Push' },
+  { id: '4u0yg974v',              label: 'IMSDK' },
+  { id: 'g16xgcqb3',              label: 'Messaging Safety & Permission' },
+  { id: 'dya1s1cea',              label: 'Platforms (Msg Management+SCP)' },
+  { id: 'IMCloud',                label: 'IMCloud' },
 ];
 
-const TECH_OWNERS = [
-  { key: '7210676945535778820', label: 'Austin Lee' },
-  { key: '7291604705006895105', label: 'Kyle Chan' },
-  { key: '6990536503940218908', label: 'Xuan Sheng' },
-  { key: '7405623196516450307', label: 'Tianyang Ni' },
+// Role members with keys + avatars
+const TECH_OWNERS: AvatarOption[] = [
+  { value: '7210676945535778820', label: 'Austin Lee',   avatarUrl: AV['Austin Lee'] },
+  { value: '7291604705006895105', label: 'Kyle Chan',    avatarUrl: AV['Kyle Chan'] },
+  { value: '6990536503940218908', label: 'Xuan Sheng',   avatarUrl: AV['Xuan Sheng'] },
+  { value: '7405623196516450307', label: 'Tianyang Ni',  avatarUrl: AV['Tianyang Ni'] },
 ];
-
-const ANDROID_OWNERS = [
-  { key: '7210676945535778820', label: 'Austin Lee' },
-  { key: '6990536503940218908', label: 'Xuan Sheng' },
+const ANDROID_OWNERS: AvatarOption[] = [
+  { value: '7210676945535778820', label: 'Austin Lee',  avatarUrl: AV['Austin Lee'] },
+  { value: '6990536503940218908', label: 'Xuan Sheng',  avatarUrl: AV['Xuan Sheng'] },
 ];
-
-const IOS_OWNERS = [
-  { key: 'baorishouaries',     label: 'Rishou Bao' },
-  { key: '7226934680916967426', label: 'Kim Li' },
+const IOS_OWNERS: AvatarOption[] = [
+  { value: 'baorishouaries',      label: 'Rishou Bao',  avatarUrl: AV['Rishou Bao'] },
+  { value: '7226934680916967426', label: 'Kim Li',      avatarUrl: AV['Kim Li'] },
 ];
-
-const UIUX_OWNERS = [
-  { key: '7205032929586593796', label: 'Tao Zhu' },
-  { key: '7493184335885942785', label: 'Hazel Li' },
+const UIUX_OWNERS: AvatarOption[] = [
+  { value: '7205032929586593796', label: 'Tao Zhu',   avatarUrl: AV['Tao Zhu'] },
+  { value: '7493184335885942785', label: 'Hazel Li',  avatarUrl: AV['Hazel Li'] },
 ];
-
-// Pre-selected members
-const PRESET = {
-  da:              { key: '7107489609088647170', name: 'Lionel Lew' },
-  contentDesigner: { key: '7005856195756032028', name: 'Edward Lin' },
-  qa:              { key: '7242202760668643331', name: 'Xiaobo Tian' },
-};
+const DA_OPTIONS: AvatarOption[] = [
+  { value: '7107489609088647170', label: 'Lionel Lew', avatarUrl: AV['Lionel Lew'] },
+];
+const CONTENT_OPTIONS: AvatarOption[] = [
+  { value: '7005856195756032028', label: 'Edward Lin', avatarUrl: AV['Edward Lin'] },
+];
+const QA_OPTIONS: AvatarOption[] = [
+  { value: '7242202760668643331', label: 'Xiaobo Tian', avatarUrl: AV['Xiaobo Tian'] },
+];
 
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
@@ -98,6 +120,28 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
+/** Shows a name with an optional avatar circle. Handles comma-separated multi-names. */
+function AvatarInfoField({ label, value }: { label: string; value?: string }) {
+  const names = value ? value.split(',').map(n => n.trim()).filter(Boolean) : [];
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[11px] text-gray-500 font-medium">{label}</span>
+      {names.length === 0 ? (
+        <span className="text-sm text-gray-200">—</span>
+      ) : (
+        <div className="flex flex-col gap-1 mt-0.5">
+          {names.map(name => (
+            <div key={name} className="flex items-center gap-1.5">
+              <UserAvatar name={name} url={AV[name]} size={5} />
+              <span className="text-sm text-gray-200">{name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InfoField({ label, value }: { label: string; value?: string }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -107,7 +151,7 @@ function InfoField({ label, value }: { label: string; value?: string }) {
   );
 }
 
-// ─── Create-form sub-components ───────────────────────────────────────────────
+// ─── Create-form helpers ──────────────────────────────────────────────────────
 
 function FormLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
@@ -132,14 +176,17 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
   // ── Add-mode state ──
   const [form, setForm] = useState({
     name:            '',
-    priority:        '1',          // P1 default
-    quarterlyCycle:  '5350il55y',  // 2026-Q2 default
-    businessLine:    '2hj6rn3ao',  // Social Messaging default
-    socialComponent: 'mz8vxxems', // Sticker & Typing Rec default
+    priority:        '1',           // P1 default
+    quarterlyCycle:  '5350il55y',   // 2026-Q2 default
+    businessLine:    '2hj6rn3ao',   // Social Messaging default
+    socialComponent: 'mz8vxxems',   // Sticker & Typing Rec default
     techOwner:       '',
     android:         '',
     ios:             '',
     uiux:            '',
+    da:              DA_OPTIONS[0].value,
+    contentDesigner: CONTENT_OPTIONS[0].value,
+    qa:              QA_OPTIONS[0].value,
   });
   const [submitting, setSubmitting]   = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -165,16 +212,16 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
     setSubmitError(null);
 
     const roles: Array<{ role: string; owners: string[] }> = [
-      { role: 'DA',       owners: [PRESET.da.key] },
-      { role: 'UX_Writer',owners: [PRESET.contentDesigner.key] },
-      { role: 'QA',       owners: [PRESET.qa.key] },
+      { role: 'DA',        owners: [form.da] },
+      { role: 'UX_Writer', owners: [form.contentDesigner] },
+      { role: 'QA',        owners: [form.qa] },
     ];
     if (form.techOwner) roles.push({ role: 'Tech_Owner', owners: [form.techOwner] });
     if (form.android)   roles.push({ role: 'Android',    owners: [form.android] });
     if (form.ios)       roles.push({ role: 'iOS',        owners: [form.ios] });
     if (form.uiux)      roles.push({ role: 'UI',         owners: [form.uiux] });
 
-    const priority = (PRIORITIES.find(p => p.id === form.priority)?.label ?? 'P2') as Priority;
+    const priority = (PRIORITIES.find(p => p.id === form.priority)?.label ?? 'P1') as Priority;
 
     try {
       const res = await fetch('/api/meego/create', {
@@ -189,7 +236,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
           roles,
         }),
       });
-      const data = await res.json() as { id?: string; meegoUrl?: string; error?: string };
+      const data = await res.json() as { id?: string; meegoUrl?: string; prd?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Create failed');
 
       onSave({
@@ -204,6 +251,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
         meegoUrl:        data.meegoUrl,
         meegoIssueId:    data.id,
         meegoProjectKey: TIKTOK_PROJECT_KEY,
+        prd:             data.prd,
       });
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to create feature');
@@ -246,7 +294,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-[#0e1120] border border-[#1e2240] rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
 
-          {/* Header */}
           <div className="px-6 py-4 border-b border-[#1e2240] shrink-0 flex items-center justify-between">
             <h2 className="text-white font-semibold text-lg">New Feature</h2>
             <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
@@ -254,24 +301,16 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
             </button>
           </div>
 
-          {/* Scrollable form + footer in one <form> */}
           <form onSubmit={handleCreate} className="flex flex-col min-h-0 flex-1">
             <div className="px-6 py-5 flex flex-col gap-4 overflow-y-auto flex-1">
 
-              {/* Feature name */}
               <div className="flex flex-col gap-1.5">
                 <FormLabel required>Feature name</FormLabel>
-                <input
-                  autoFocus
-                  type="text"
-                  className={inputCls}
+                <input autoFocus type="text" className={inputCls}
                   placeholder="Enter feature name…"
-                  value={form.name}
-                  onChange={e => setField('name', e.target.value)}
-                />
+                  value={form.name} onChange={e => setField('name', e.target.value)} />
               </div>
 
-              {/* Priority + Quarterly Cycle */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <FormLabel required>Priority</FormLabel>
@@ -288,7 +327,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
                 </div>
               </div>
 
-              {/* Business Line */}
               <div className="flex flex-col gap-1.5">
                 <FormLabel>Business Line</FormLabel>
                 <select className={selectCls} value={form.businessLine} onChange={e => setField('businessLine', e.target.value)}>
@@ -297,7 +335,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
                 </select>
               </div>
 
-              {/* Social Component */}
               <div className="flex flex-col gap-1.5">
                 <FormLabel>Social Component</FormLabel>
                 <select className={selectCls} value={form.socialComponent} onChange={e => setField('socialComponent', e.target.value)}>
@@ -306,85 +343,56 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
                 </select>
               </div>
 
-              {/* Optional roles */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>Tech Owner</FormLabel>
-                  <select className={selectCls} value={form.techOwner} onChange={e => setField('techOwner', e.target.value)}>
-                    <option value="">—</option>
-                    {TECH_OWNERS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
-                  </select>
+                  <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>Android</FormLabel>
-                  <select className={selectCls} value={form.android} onChange={e => setField('android', e.target.value)}>
-                    <option value="">—</option>
-                    {ANDROID_OWNERS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
-                  </select>
+                  <AvatarSelect options={ANDROID_OWNERS} value={form.android} onChange={v => setField('android', v)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>iOS</FormLabel>
-                  <select className={selectCls} value={form.ios} onChange={e => setField('ios', e.target.value)}>
-                    <option value="">—</option>
-                    {IOS_OWNERS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
-                  </select>
+                  <AvatarSelect options={IOS_OWNERS} value={form.ios} onChange={v => setField('ios', v)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <FormLabel>UI&UX</FormLabel>
-                  <select className={selectCls} value={form.uiux} onChange={e => setField('uiux', e.target.value)}>
-                    <option value="">—</option>
-                    {UIUX_OWNERS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
-                  </select>
+                  <FormLabel>UI&amp;UX</FormLabel>
+                  <AvatarSelect options={UIUX_OWNERS} value={form.uiux} onChange={v => setField('uiux', v)} />
                 </div>
               </div>
 
-              {/* Pre-selected roles */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>DA</FormLabel>
-                  <select className={selectCls} defaultValue={PRESET.da.key}>
-                    <option value={PRESET.da.key}>{PRESET.da.name}</option>
-                  </select>
+                  <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>Content Designer</FormLabel>
-                  <select className={selectCls} defaultValue={PRESET.contentDesigner.key}>
-                    <option value={PRESET.contentDesigner.key}>{PRESET.contentDesigner.name}</option>
-                  </select>
+                  <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} locked />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>QA</FormLabel>
-                  <select className={selectCls} defaultValue={PRESET.qa.key}>
-                    <option value={PRESET.qa.key}>{PRESET.qa.name}</option>
-                  </select>
+                  <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} locked />
                 </div>
               </div>
 
               {submitError && <p className="text-xs text-red-400">{submitError}</p>}
-
             </div>
 
-            {/* Footer */}
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#1e2240] shrink-0">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-5 py-2 bg-[#1e2240] text-gray-300 hover:text-white text-sm font-semibold rounded-lg transition-colors"
-              >
+              <button type="button" onClick={onClose}
+                className="px-5 py-2 bg-[#1e2240] text-gray-300 hover:text-white text-sm font-semibold rounded-lg transition-colors">
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={submitting || !form.name.trim()}
-                className="flex items-center gap-2 px-5 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
-              >
+              <button type="submit" disabled={submitting || !form.name.trim()}
+                className="flex items-center gap-2 px-5 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
                 {submitting
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</>
                   : 'Create in Meego'}
               </button>
             </div>
           </form>
-
         </div>
       </div>
     );
@@ -397,7 +405,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-[#0e1120] border border-[#1e2240] rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
 
-        {/* Header */}
         <div className="px-6 py-4 border-b border-[#1e2240] shrink-0">
           <div className="flex items-start justify-between gap-3">
             <h2 className="text-white font-semibold text-lg leading-snug pr-2">
@@ -429,10 +436,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
           )}
         </div>
 
-        {/* Scrollable body */}
         <div className="px-6 py-5 flex flex-col gap-0 overflow-y-auto divide-y divide-[#1e2240]">
 
-          {/* Current Status */}
           <div className="pb-5">
             <SectionHeader title="Current Status" />
             <InfoField label="Node" value={nodeName} />
@@ -443,11 +448,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
                     <CheckCircle2 className="w-4 h-4" /> Node completed!
                   </div>
                 ) : (
-                  <button
-                    onClick={handleCompleteNode}
-                    disabled={completing}
-                    className="flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-                  >
+                  <button onClick={handleCompleteNode} disabled={completing}
+                    className="flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
                     {completing
                       ? <><Loader2 className="w-4 h-4 animate-spin" /> Completing…</>
                       : <>Complete: {nodeName} →</>}
@@ -461,36 +463,34 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
             )}
           </div>
 
-          {/* Feature Details */}
           <div className="py-5">
             <SectionHeader title="Feature Details" />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-              <InfoField label="Priority"        value={feature?.priority} />
-              <InfoField label="Business Line"   value={feature?.businessLine} />
+              <InfoField label="Priority"         value={feature?.priority} />
+              <InfoField label="Business Line"    value={feature?.businessLine} />
               <InfoField label="Social Component" value={feature?.socialComponent} />
             </div>
           </div>
 
-          {/* POC Details */}
           <div className="pt-5">
             <SectionHeader title="POC Details" />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-              <InfoField label="Tech Owner"       value={feature?.techOwner} />
-              <InfoField label="iOS"              value={feature?.iosOwner} />
-              <InfoField label="Android"          value={feature?.androidOwner} />
-              <InfoField label="Server"           value={feature?.serverOwner} />
-              <InfoField label="QA"               value={feature?.qaOwner} />
-              <InfoField label="DA"               value={feature?.daOwner} />
-              <InfoField label="UI&UX"            value={feature?.uiuxOwner} />
-              <InfoField label="Content Designer" value={feature?.contentDesigner} />
+              <AvatarInfoField label="Tech Owner"       value={feature?.techOwner} />
+              <AvatarInfoField label="iOS"              value={feature?.iosOwner} />
+              <AvatarInfoField label="Android"          value={feature?.androidOwner} />
+              <AvatarInfoField label="Server"           value={feature?.serverOwner} />
+              <AvatarInfoField label="QA"               value={feature?.qaOwner} />
+              <AvatarInfoField label="DA"               value={feature?.daOwner} />
+              <AvatarInfoField label="UI&UX"            value={feature?.uiuxOwner} />
+              <AvatarInfoField label="Content Designer" value={feature?.contentDesigner} />
             </div>
           </div>
 
         </div>
 
-        {/* Footer */}
         <div className="flex justify-end px-6 py-4 border-t border-[#1e2240] shrink-0">
-          <button onClick={onClose} className="px-5 py-2 bg-[#1e2240] text-gray-300 hover:text-white text-sm font-semibold rounded-lg transition-colors">
+          <button onClick={onClose}
+            className="px-5 py-2 bg-[#1e2240] text-gray-300 hover:text-white text-sm font-semibold rounded-lg transition-colors">
             Close
           </button>
         </div>
