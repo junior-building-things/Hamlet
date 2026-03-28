@@ -65,7 +65,7 @@ async function getWikiObjToken(accessToken: string): Promise<string> {
   // Cache for 1 hour — template never changes
   if (cachedObjToken && Date.now() - objTokenFetchedAt < 3_600_000) return cachedObjToken;
 
-  const res  = await fetch(`${LARK_BASE_URL}/open-apis/wiki/v2/nodes?token=${WIKI_NODE_TOKEN}`, {
+  const res  = await fetch(`${LARK_BASE_URL}/open-apis/wiki/v2/spaces/get_node?token=${WIKI_NODE_TOKEN}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const data = await parseJson(res, 'wiki_node') as {
