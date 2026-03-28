@@ -15,7 +15,7 @@ interface Props {
 function SectionHeader({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-3 mb-4">
-      <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 whitespace-nowrap">{title}</h3>
+      <h3 className="text-xs font-bold tracking-wide text-gray-400 whitespace-nowrap">{title}</h3>
       <div className="flex-1 h-px bg-[#1e2240]" />
     </div>
   );
@@ -24,7 +24,7 @@ function SectionHeader({ title }: { title: string }) {
 function InfoField({ label, value }: { label: string; value?: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">{label}</span>
+      <span className="text-[11px] text-gray-500 font-medium">{label}</span>
       <span className="text-sm text-gray-200">{value || '—'}</span>
     </div>
   );
