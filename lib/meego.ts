@@ -133,7 +133,12 @@ async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; 
       : { project_key: TIKTOK_PROJECT_KEY, mql: MQL };
 
     const raw = await callMeegoMcp('search_by_mql', args);
-    const data = JSON.parse(raw) as MqlResponse;
+    let data: MqlResponse;
+    try {
+      data = JSON.parse(raw) as MqlResponse;
+    } catch {
+      throw new Error(`search_by_mql returned non-JSON: ${raw}`);
+    }
     if (!sessionId) sessionId = data.session_id;
 
     const total = data.list?.[0]?.count ?? 0;
@@ -184,7 +189,9 @@ interface MeegoTodoResponse {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
-  // Fetch todo items and extended fields (priority, PRD, compliance) in parallel
+  // Fetch todo items and extended fields (priority, PRD, compliance) in parallel.
+  // fetchExtendedFields uses search_by_mql which may not be available on all
+  // MCP server versions — fall back to an empty map if it fails.
   const [allItems, extendedFields] = await Promise.all([
     (async () => {
       const items: MeegoTodoItem[] = [];
@@ -203,7 +210,9 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       }
       return items;
     })(),
-    fetchExtendedFields(),
+    fetchExtendedFields().catch(() =>
+      new Map<string, { priority: Priority; prd: string; complianceUrl: string }>()
+    ),
   ]);
 
   return allItems
