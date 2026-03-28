@@ -77,7 +77,7 @@ export function AvatarSelect({ options, value, onChange, placeholder = '—', lo
         <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-[#13162a] border border-[#2e3460] rounded-lg shadow-2xl overflow-hidden">
           {!locked && (
             <div
-              className="px-3 py-2 text-sm text-gray-500 hover:bg-[#1e2240] cursor-pointer"
+              className="px-3 py-2 text-sm text-gray-600 italic hover:bg-[#1e2240] cursor-pointer"
               onClick={() => { onChange(''); setOpen(false); }}
             >
               {placeholder}

@@ -321,7 +321,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>Quarterly Cycle</FormLabel>
                   <select className={selectCls} value={form.quarterlyCycle} onChange={e => setField('quarterlyCycle', e.target.value)}>
-                    <option value="">—</option>
                     {QUARTERLY_CYCLES.map(q => <option key={q.id} value={q.id}>{q.label}</option>)}
                   </select>
                 </div>
@@ -330,7 +329,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               <div className="flex flex-col gap-1.5">
                 <FormLabel>Business Line</FormLabel>
                 <select className={selectCls} value={form.businessLine} onChange={e => setField('businessLine', e.target.value)}>
-                  <option value="">—</option>
                   {BUSINESS_LINES.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
                 </select>
               </div>
@@ -338,7 +336,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               <div className="flex flex-col gap-1.5">
                 <FormLabel>Social Component</FormLabel>
                 <select className={selectCls} value={form.socialComponent} onChange={e => setField('socialComponent', e.target.value)}>
-                  <option value="">—</option>
                   {SOCIAL_COMPONENTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
               </div>
@@ -346,19 +343,19 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>Tech Owner</FormLabel>
-                  <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} />
+                  <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>Android</FormLabel>
-                  <AvatarSelect options={ANDROID_OWNERS} value={form.android} onChange={v => setField('android', v)} />
+                  <AvatarSelect options={ANDROID_OWNERS} value={form.android} onChange={v => setField('android', v)} placeholder="Optional" />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>iOS</FormLabel>
-                  <AvatarSelect options={IOS_OWNERS} value={form.ios} onChange={v => setField('ios', v)} />
+                  <AvatarSelect options={IOS_OWNERS} value={form.ios} onChange={v => setField('ios', v)} placeholder="Optional" />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>UI&amp;UX</FormLabel>
-                  <AvatarSelect options={UIUX_OWNERS} value={form.uiux} onChange={v => setField('uiux', v)} />
+                  <AvatarSelect options={UIUX_OWNERS} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
                 </div>
               </div>
 
