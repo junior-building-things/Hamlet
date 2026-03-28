@@ -16,7 +16,7 @@ export default function Home() {
   const [features, setFeatures]           = useState<Feature[]>([]);
   const [hydrated, setHydrated]           = useState(false);
   const [loading, setLoading]             = useState(true);
-  const [view, setView]                   = useState<'grid' | 'list'>('grid');
+  const [view, setView]                   = useState<'grid' | 'list'>('list');
   const [search, setSearch]               = useState('');
   const [statusFilter, setStatusFilter]   = useState<string>('All');
   const [priorityFilter, setPriority]     = useState<Priority | 'All'>('All');

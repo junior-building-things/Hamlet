@@ -53,7 +53,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
       </div>
 
       {/* Desktop layout */}
-      <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 items-center">
+      <div className="hidden sm:grid grid-cols-[2fr_1fr_auto_1fr_1fr] gap-4 items-center justify-items-start">
         <button
           onClick={() => onEdit(feature)}
           className="text-white text-sm font-semibold truncate text-left hover:text-purple-300 transition-colors"
