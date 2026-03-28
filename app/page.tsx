@@ -76,8 +76,7 @@ export default function Home() {
     setDetailSyncCount(0);
   }, []);
 
-  // Load features then block until all detail syncs are complete,
-  // so features never appear with stale/missing status.
+  // Fetch feature list, show it immediately, then sync details in the background.
   useEffect(() => {
     async function init() {
       let featureList: Feature[] | null = null;
@@ -97,12 +96,12 @@ export default function Home() {
         featureList = await fetchFromMeego();
       }
 
-      if (featureList) {
-        await syncAllDetails(featureList);
-      }
-
       setHydrated(true);
       setLoading(false);
+
+      if (featureList) {
+        syncAllDetails(featureList);
+      }
     }
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -254,11 +253,7 @@ export default function Home() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
               <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
-              <p className="text-sm">
-                {detailSyncTotal > 0
-                  ? `Syncing details… ${detailSyncCount}/${detailSyncTotal}`
-                  : 'Loading features from Meego…'}
-              </p>
+              <p className="text-sm">Loading features from Meego…</p>
             </div>
           ) : fetchError ? (
             <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
@@ -300,6 +295,13 @@ export default function Home() {
                   onSync={syncOne}
                 />
               ))}
+            </div>
+          )}
+
+          {detailSyncTotal > 0 && (
+            <div className="flex items-center justify-center gap-2 mt-6 text-gray-500">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
+              <p className="text-xs">Syncing details… {detailSyncCount}/{detailSyncTotal}</p>
             </div>
           )}
         </div>
