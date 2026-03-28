@@ -179,7 +179,7 @@ export async function getNodeInfo(meegoUrl: string): Promise<{
   canComplete: boolean;
   prd: string;
 }> {
-  const raw = await callMeegoMcp('get_workitem_brief', { url: meegoUrl });
+  const raw = await callMeegoMcp('get_workitem_brief', { url: meegoUrl, fields: ['wiki'] });
 
   // Extract PRD link from fields section
   let prd = '';
