@@ -50,19 +50,34 @@ export default function Home() {
             status: string; name: string; owner: string;
             meegoNodeKey: string; prd: string; complianceUrl: string;
             priority: string | null; canCompleteNode: boolean;
+            quarterlyCycle: string; businessLine: string; socialComponent: string;
+            techOwner: string; iosOwner: string; androidOwner: string;
+            serverOwner: string; qaOwner: string; daOwner: string;
+            uiuxOwner: string; contentDesigner: string;
           };
           setFeatures(prev => prev.map(f =>
             f.id === feature.id
               ? {
                   ...f,
-                  status:          data.status                || f.status,
-                  name:            data.name                  || f.name,
-                  owner:           data.owner                 || f.owner,
-                  meegoNodeKey:    data.meegoNodeKey          || f.meegoNodeKey,
-                  prd:             data.prd                   || f.prd,
-                  complianceUrl:   data.complianceUrl         || f.complianceUrl,
+                  status:          data.status          || f.status,
+                  name:            data.name             || f.name,
+                  owner:           data.owner            || f.owner,
+                  meegoNodeKey:    data.meegoNodeKey     || f.meegoNodeKey,
+                  prd:             data.prd              || f.prd,
+                  complianceUrl:   data.complianceUrl    || f.complianceUrl,
                   priority:        (data.priority as Priority) ?? f.priority,
                   canCompleteNode: data.canCompleteNode,
+                  quarterlyCycle:  data.quarterlyCycle   || f.quarterlyCycle,
+                  businessLine:    data.businessLine     || f.businessLine,
+                  socialComponent: data.socialComponent  || f.socialComponent,
+                  techOwner:       data.techOwner        || f.techOwner,
+                  iosOwner:        data.iosOwner         || f.iosOwner,
+                  androidOwner:    data.androidOwner     || f.androidOwner,
+                  serverOwner:     data.serverOwner      || f.serverOwner,
+                  qaOwner:         data.qaOwner          || f.qaOwner,
+                  daOwner:         data.daOwner          || f.daOwner,
+                  uiuxOwner:       data.uiuxOwner        || f.uiuxOwner,
+                  contentDesigner: data.contentDesigner  || f.contentDesigner,
                   lastUpdated:     new Date().toISOString().split('T')[0],
                 }
               : f
@@ -151,19 +166,34 @@ export default function Home() {
         status: string; name: string; owner: string;
         meegoNodeKey: string; prd: string; complianceUrl: string;
         priority: string | null; canCompleteNode: boolean;
+        quarterlyCycle: string; businessLine: string; socialComponent: string;
+        techOwner: string; iosOwner: string; androidOwner: string;
+        serverOwner: string; qaOwner: string; daOwner: string;
+        uiuxOwner: string; contentDesigner: string;
       };
       setFeatures(prev => prev.map(f =>
         f.id === feature.id
           ? {
               ...f,
-              status:          data.status                || f.status,
-              name:            data.name                  || f.name,
-              owner:           data.owner                 || f.owner,
-              meegoNodeKey:    data.meegoNodeKey          || f.meegoNodeKey,
-              prd:             data.prd                   || f.prd,
-              complianceUrl:   data.complianceUrl         || f.complianceUrl,
+              status:          data.status          || f.status,
+              name:            data.name             || f.name,
+              owner:           data.owner            || f.owner,
+              meegoNodeKey:    data.meegoNodeKey     || f.meegoNodeKey,
+              prd:             data.prd              || f.prd,
+              complianceUrl:   data.complianceUrl    || f.complianceUrl,
               priority:        (data.priority as Priority) ?? f.priority,
               canCompleteNode: data.canCompleteNode,
+              quarterlyCycle:  data.quarterlyCycle   || f.quarterlyCycle,
+              businessLine:    data.businessLine     || f.businessLine,
+              socialComponent: data.socialComponent  || f.socialComponent,
+              techOwner:       data.techOwner        || f.techOwner,
+              iosOwner:        data.iosOwner         || f.iosOwner,
+              androidOwner:    data.androidOwner     || f.androidOwner,
+              serverOwner:     data.serverOwner      || f.serverOwner,
+              qaOwner:         data.qaOwner          || f.qaOwner,
+              daOwner:         data.daOwner          || f.daOwner,
+              uiuxOwner:       data.uiuxOwner        || f.uiuxOwner,
+              contentDesigner: data.contentDesigner  || f.contentDesigner,
               lastUpdated:     new Date().toISOString().split('T')[0],
             }
           : f
@@ -200,7 +230,7 @@ export default function Home() {
     } else {
       setFeatures(prev => prev.map(f => f.id === saved.id ? saved : f));
 
-      // Write back to Meego if this feature is linked
+      // Write priority back to Meego if this feature is linked
       if (saved.meegoIssueId && saved.meegoProjectKey) {
         try {
           await fetch('/api/meego/update', {
@@ -209,7 +239,7 @@ export default function Home() {
             body: JSON.stringify({
               projectKey: saved.meegoProjectKey,
               workItemId: saved.meegoIssueId,
-              fields: { name: saved.name, prd: saved.prd, priority: saved.priority },
+              fields: { priority: saved.priority },
             }),
           });
         } catch (err) {

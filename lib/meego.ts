@@ -101,6 +101,27 @@ function parseWorkItemField(raw: string, fieldName: string): string {
   return match ? match[1].trim() : '';
 }
 
+// Extract display names from role member value "Name1(email1),Name2(email2)"
+function extractNames(value: string): string {
+  if (!value || value === '未填写') return '';
+  const names: string[] = [];
+  const regex = /([^,(]+)\([^)]*\)/g;
+  let m;
+  while ((m = regex.exec(value)) !== null) {
+    const name = m[1].trim();
+    if (name) names.push(name);
+  }
+  return names.length > 0 ? names.join(', ') : value;
+}
+
+// Parse a role member from the 角色成员 JSON in the workitem attributes table
+function parseRoleMember(raw: string, roleName: string): string {
+  const escapedRole = roleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`"${escapedRole}":"([^"]+)"`);
+  const match = raw.match(regex);
+  return match ? extractNames(match[1]) : '';
+}
+
 // ─── MQL types ────────────────────────────────────────────────────────────────
 
 interface MqlFieldValue {
@@ -250,10 +271,21 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   complianceUrl: string;
   priority: Priority | null;
   canCompleteNode: boolean;
+  quarterlyCycle: string;
+  businessLine: string;
+  socialComponent: string;
+  techOwner: string;
+  iosOwner: string;
+  androidOwner: string;
+  serverOwner: string;
+  qaOwner: string;
+  daOwner: string;
+  uiuxOwner: string;
+  contentDesigner: string;
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
-    fields: ['wiki', 'priority', 'field_due3fb'],
+    fields: ['wiki', 'priority', 'field_due3fb', 'field_f6a9a0', 'field_a4c558', 'field_2e7909'],
   });
 
   const lines = raw.split('\n');
@@ -283,6 +315,19 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const bestWithOwners = activeNodes.find(n => n.key === best?.key);
   const canCompleteNode = bestWithOwners?.owners.includes(MY_EMAIL) ?? false;
 
+  const quarterlyCycle = parseWorkItemField(raw, 'Social Commitment\\s*');
+  const businessLine   = parseWorkItemField(raw, 'DM Business Line');
+  const socialComponent = parseWorkItemField(raw, 'Social模块');
+
+  const techOwner      = parseRoleMember(raw, 'Tech owner');
+  const iosOwner       = parseRoleMember(raw, 'iOS');
+  const androidOwner   = parseRoleMember(raw, 'Android');
+  const serverOwner    = parseRoleMember(raw, 'Server');
+  const qaOwner        = parseRoleMember(raw, 'QA');
+  const daOwner        = parseRoleMember(raw, 'DA');
+  const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
+  const contentDesigner = parseRoleMember(raw, 'Content Designer');
+
   return {
     status: best ? translateNode(best.name) : 'Unknown',
     name: workItemName,
@@ -292,6 +337,17 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
     complianceUrl,
     priority,
     canCompleteNode,
+    quarterlyCycle,
+    businessLine,
+    socialComponent,
+    techOwner,
+    iosOwner,
+    androidOwner,
+    serverOwner,
+    qaOwner,
+    daOwner,
+    uiuxOwner,
+    contentDesigner,
   };
 }
 

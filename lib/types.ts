@@ -25,4 +25,16 @@ export interface Feature {
   meegoProjectKey?: string;
   meegoIssueId?: string;
   meegoNodeKey?: string;
+  // Detail fields (populated by per-card sync)
+  quarterlyCycle?: string;
+  businessLine?: string;
+  socialComponent?: string;
+  techOwner?: string;
+  iosOwner?: string;
+  androidOwner?: string;
+  serverOwner?: string;
+  qaOwner?: string;
+  daOwner?: string;
+  uiuxOwner?: string;
+  contentDesigner?: string;
 }

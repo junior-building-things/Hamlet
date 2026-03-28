@@ -13,9 +13,16 @@ interface Props {
   onNodeCompleted?: (featureId: string) => void;
 }
 
+function InfoField({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">{label}</span>
+      <span className="text-sm text-gray-200">{value || '—'}</span>
+    </div>
+  );
+}
+
 export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }: Props) {
-  const [name, setName]         = useState(feature?.name ?? '');
-  const [prd, setPrd]           = useState(feature?.prd ?? '');
   const [priority, setPriority] = useState<Priority>(feature?.priority ?? 'P2');
 
   const [completing, setCompleting]       = useState(false);
@@ -33,18 +40,16 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
   }, [onClose]);
 
   function handleSave() {
-    if (!name.trim()) return;
     onSave({
       ...(feature ?? {
         id: `local-${Date.now()}`,
+        name: '',
         description: '',
         status: '',
         owner: '',
         tasks: [],
         lastUpdated: new Date().toISOString().split('T')[0],
       }),
-      name: name.trim(),
-      prd: prd.trim() || undefined,
       priority,
       lastUpdated: new Date().toISOString().split('T')[0],
     } as Feature);
@@ -80,68 +85,42 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-[#0e1120] border border-[#1e2240] rounded-2xl w-full max-w-md shadow-2xl">
+      <div className="relative bg-[#0e1120] border border-[#1e2240] rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1e2240]">
-          <div>
-            <h2 className="text-white font-semibold text-lg">
-              {mode === 'add' ? 'New Feature' : 'Edit Feature'}
+        <div className="px-6 py-4 border-b border-[#1e2240] shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-white font-semibold text-lg leading-snug">
+              {mode === 'add' ? 'New Feature' : (feature?.name ?? 'Edit Feature')}
             </h2>
-            {isMeego && (
-              <div className="flex items-center gap-4 mt-1">
-                <a href={feature?.meegoUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
-                  Meego <ExternalLink className="w-3 h-3" />
-                </a>
-                {prd && (
-                  <a href={prd} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                    PRD <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
-                {feature?.complianceUrl && (
-                  <a href={feature.complianceUrl} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
-                    Compliance <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
-              </div>
-            )}
+            <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors shrink-0 mt-0.5">
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          {isMeego && (
+            <div className="flex items-center gap-4 mt-1.5">
+              <a href={feature?.meegoUrl} target="_blank" rel="noopener noreferrer"
+                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                Meego <ExternalLink className="w-3 h-3" />
+              </a>
+              {feature?.prd && (
+                <a href={feature.prd} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                  PRD <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+              {feature?.complianceUrl && (
+                <a href={feature.complianceUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
+                  Compliance <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="px-6 py-5 flex flex-col gap-5">
-
-          {/* Name */}
-          <div>
-            <label className="text-xs text-gray-400 font-medium block mb-1.5">Feature Name *</label>
-            <input
-              autoFocus
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Enter feature name"
-              className="w-full bg-[#13162a] border border-[#1e2240] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-purple-600 transition-colors"
-            />
-          </div>
-
-          {/* PRD Link */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-gray-400 font-medium">PRD Link</label>
-            </div>
-            <input
-              type="url"
-              value={prd}
-              onChange={e => setPrd(e.target.value)}
-              placeholder="https://..."
-              className="w-full bg-[#13162a] border border-[#1e2240] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-purple-600 transition-colors"
-            />
-          </div>
+        {/* Scrollable body */}
+        <div className="px-6 py-5 flex flex-col gap-5 overflow-y-auto">
 
           {/* Priority */}
           <div>
@@ -165,6 +144,24 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               ))}
             </div>
           </div>
+
+          {/* Info fields */}
+          {mode === 'edit' && isMeego && (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-[#1e2240] pt-4">
+              <InfoField label="Quarterly Cycle"   value={feature?.quarterlyCycle} />
+              <InfoField label="Business Line"     value={feature?.businessLine} />
+              <InfoField label="Social Component"  value={feature?.socialComponent} />
+              <div /> {/* spacer */}
+              <InfoField label="Tech Owner"        value={feature?.techOwner} />
+              <InfoField label="iOS"               value={feature?.iosOwner} />
+              <InfoField label="Android"           value={feature?.androidOwner} />
+              <InfoField label="Server"            value={feature?.serverOwner} />
+              <InfoField label="QA"                value={feature?.qaOwner} />
+              <InfoField label="DA"                value={feature?.daOwner} />
+              <InfoField label="UI&UX"             value={feature?.uiuxOwner} />
+              <InfoField label="Content Designer"  value={feature?.contentDesigner} />
+            </div>
+          )}
 
           {/* Complete Node */}
           {mode === 'edit' && isMeego && (canComplete || feature?.canCompleteNode === false) && (
@@ -208,14 +205,13 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#1e2240]">
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#1e2240] shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
             Cancel
           </button>
           <button
             onClick={handleSave}
-            disabled={!name.trim()}
-            className="px-5 py-2 bg-white text-black text-sm font-semibold rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-5 py-2 bg-white text-black text-sm font-semibold rounded-lg hover:bg-gray-100 transition-colors"
           >
             {mode === 'add' ? 'Add Feature' : 'Save Changes'}
           </button>
