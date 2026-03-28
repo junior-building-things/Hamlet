@@ -1,9 +1,8 @@
-const LARK_BASE_URL  = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
-const TEMPLATE_TOKEN = 'Z5qldS3kEoC1WAxPyMucR9RpneX';
+const LARK_BASE_URL = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 
 // ─── Token cache (server-side in-memory, refreshes before expiry) ─────────────
 
-let cachedToken = '';
+let cachedToken    = '';
 let tokenExpiresAt = 0;
 
 async function getAccessToken(): Promise<string> {
@@ -21,39 +20,36 @@ async function getAccessToken(): Promise<string> {
   const data = await res.json() as { code: number; msg?: string; tenant_access_token?: string; expire?: number };
   if (data.code !== 0) throw new Error(`Lark auth error ${data.code}: ${data.msg}`);
 
-  cachedToken      = data.tenant_access_token!;
-  tokenExpiresAt   = Date.now() + (data.expire ?? 7200) * 1000;
+  cachedToken    = data.tenant_access_token!;
+  tokenExpiresAt = Date.now() + (data.expire ?? 7200) * 1000;
   return cachedToken;
 }
 
-// ─── Document copy ────────────────────────────────────────────────────────────
+// ─── Document creation ────────────────────────────────────────────────────────
 
-interface CopyResponse {
+interface CreateDocResponse {
   code: number;
   msg?: string;
-  data?: { file?: { token?: string; url?: string } };
+  data?: { document?: { document_id?: string } };
 }
 
 /**
- * Copies the PRD template and names the new document after the feature.
+ * Creates a new Lark document named after the feature.
  * Returns the URL of the newly created document.
  */
 export async function copyPrdTemplate(featureName: string): Promise<string> {
   const token = await getAccessToken();
 
-  const res  = await fetch(
-    `${LARK_BASE_URL}/open-apis/drive/v1/files/${TEMPLATE_TOKEN}/copy`,
-    {
-      method:  'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ name: featureName, type: 'docx' }),
-    },
-  );
-  const data = await res.json() as CopyResponse;
-  if (data.code !== 0) throw new Error(`Lark copy error ${data.code}: ${data.msg ?? 'unknown'}`);
+  const res  = await fetch(`${LARK_BASE_URL}/open-apis/docx/v1/documents`, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ title: featureName }),
+  });
+  const data = await res.json() as CreateDocResponse;
+  if (data.code !== 0) throw new Error(`Lark create doc error ${data.code}: ${data.msg ?? 'unknown'}`);
 
-  const fileToken = data.data?.file?.token;
-  if (!fileToken) throw new Error('Lark response missing file token');
+  const docId = data.data?.document?.document_id;
+  if (!docId) throw new Error('Lark response missing document_id');
 
-  return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;
+  return `https://bytedance.sg.larkoffice.com/docx/${docId}`;
 }

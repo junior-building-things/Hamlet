@@ -14,18 +14,19 @@ export async function POST(req: NextRequest) {
     // 1. Create the Meego story
     const result = await createFeature(body);
 
-    // 2. Try to create PRD doc from template (requires LARK_ACCESS_TOKEN)
+    // 2. Try to create PRD doc from template
     let prd: string | undefined;
+    let prdError: string | undefined;
     try {
       prd = await copyPrdTemplate(body.name.trim());
       // 3. Write the PRD URL back to the Meego wiki field
       await updateFeatureFields(TIKTOK_PROJECT_KEY, result.id, { prd });
     } catch (larkErr) {
-      // Non-fatal: feature is still created, just without a PRD link
-      console.warn('PRD creation skipped:', larkErr instanceof Error ? larkErr.message : larkErr);
+      prdError = larkErr instanceof Error ? larkErr.message : String(larkErr);
+      console.warn('PRD creation skipped:', prdError);
     }
 
-    return NextResponse.json({ ...result, prd });
+    return NextResponse.json({ ...result, prd, prdError });
   } catch (err) {
     console.error('Meego create error:', err);
     return NextResponse.json(
