@@ -1,6 +1,6 @@
-const LARK_BASE_URL    = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
-const WIKI_NODE_TOKEN  = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
-const OWNER_EMAIL      = 'thomas.oefverstroem@bytedance.com';
+const LARK_BASE_URL   = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
+const WIKI_NODE_TOKEN = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
+const OWNER_EMAIL     = 'thomas.oefverstroem@bytedance.com';
 
 async function parseJson(res: Response, label: string): Promise<unknown> {
   const text = await res.text();
@@ -42,7 +42,6 @@ let cachedRootFolder    = '';
 let rootFolderFetchedAt = 0;
 
 async function getRootFolderToken(accessToken: string): Promise<string> {
-  // Cache for 1 hour — it never changes
   if (cachedRootFolder && Date.now() - rootFolderFetchedAt < 3_600_000) return cachedRootFolder;
 
   const res  = await fetch(`${LARK_BASE_URL}/open-apis/drive/explorer/v2/root_folder/meta`, {
@@ -62,7 +61,6 @@ let cachedObjToken    = '';
 let objTokenFetchedAt = 0;
 
 async function getWikiObjToken(accessToken: string): Promise<string> {
-  // Cache for 1 hour — template never changes
   if (cachedObjToken && Date.now() - objTokenFetchedAt < 3_600_000) return cachedObjToken;
 
   const res  = await fetch(`${LARK_BASE_URL}/open-apis/wiki/v2/spaces/get_node?token=${WIKI_NODE_TOKEN}`, {
@@ -82,23 +80,128 @@ async function getWikiObjToken(accessToken: string): Promise<string> {
   return cachedObjToken;
 }
 
+// ─── Doc block types ──────────────────────────────────────────────────────────
+
+interface TextRun     { content: string; text_element_style?: Record<string, unknown> }
+interface TextElement { text_run?: TextRun }
+interface LarkBlock {
+  block_id:   string;
+  block_type: number;
+  children?:  string[];
+  text?:      { elements: TextElement[] };
+  table_cell?: { row_index: number; col_index: number };
+  table?:     unknown;
+}
+
+function blockText(b: LarkBlock): string {
+  return (b.text?.elements ?? []).map(e => e.text_run?.content ?? '').join('');
+}
+
+// ─── Update "Initial version" date in the freshly copied doc ─────────────────
+
+async function updateInitialVersionDate(docId: string, date: string, token: string): Promise<void> {
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks?page_size=500&document_revision_id=-1`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const data = await parseJson(res, 'get_blocks') as {
+    code: number; msg?: string;
+    data?: { items?: LarkBlock[] };
+  };
+  if (data.code !== 0) throw new Error(`get_blocks error ${data.code}: ${data.msg}`);
+
+  const blocks = data.data?.items ?? [];
+  const byId   = new Map(blocks.map(b => [b.block_id, b]));
+
+  // Build parent map from children arrays
+  const parentOf = new Map<string, string>();
+  for (const b of blocks) {
+    for (const childId of b.children ?? []) parentOf.set(childId, b.block_id);
+  }
+
+  // Walk up ancestors looking for a block with a given property
+  function findAncestorWithProp(blockId: string, prop: keyof LarkBlock): LarkBlock | undefined {
+    let id = parentOf.get(blockId);
+    while (id) {
+      const b = byId.get(id);
+      if (!b) break;
+      if (b[prop] !== undefined) return b;
+      id = parentOf.get(id);
+    }
+    return undefined;
+  }
+
+  // Locate the table_cell (and its parent table) that contains "Initial version"
+  let targetRowIndex = -1;
+  let targetTableId  = '';
+
+  for (const block of blocks) {
+    if (!blockText(block).includes('Initial version')) continue;
+    const cell  = findAncestorWithProp(block.block_id, 'table_cell');
+    const tableId = cell ? parentOf.get(cell.block_id) : undefined;
+    if (cell?.table_cell && tableId) {
+      targetRowIndex = cell.table_cell.row_index;
+      targetTableId  = tableId;
+      break;
+    }
+  }
+
+  if (targetRowIndex === -1) return; // "Initial version" row not found — skip silently
+
+  // Find date-like blocks in the same table row
+  const dateRe   = /\d{4}-\d{2}-\d{2}/;
+  const toUpdate: LarkBlock[] = [];
+
+  for (const block of blocks) {
+    if (!dateRe.test(blockText(block))) continue;
+    const cell    = findAncestorWithProp(block.block_id, 'table_cell');
+    const tableId = cell ? parentOf.get(cell.block_id) : undefined;
+    if (cell?.table_cell?.row_index === targetRowIndex && tableId === targetTableId) {
+      toUpdate.push(block);
+    }
+  }
+
+  if (toUpdate.length === 0) return;
+
+  const requests = toUpdate.map(b => ({
+    block_id:             b.block_id,
+    update_text_elements: {
+      elements: [{ text_run: { content: date, text_element_style: {} } }],
+    },
+  }));
+
+  const upRes  = await fetch(
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/batch_update`,
+    {
+      method:  'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ requests, document_revision_id: -1 }),
+    },
+  );
+  const upData = await parseJson(upRes, 'update_blocks') as { code: number; msg?: string };
+  if (upData.code !== 0) throw new Error(`update_blocks error ${upData.code}: ${upData.msg}`);
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Copies the PRD wiki template into the bot's root folder, naming it after the feature.
- * Returns the URL of the newly created document.
+ * Copies the PRD wiki template into the bot's root folder, names it
+ * "[PRD] {featureName}", updates the "Initial version" date, adds Thomas
+ * as full-access collaborator, and returns the document URL.
  */
 export async function copyPrdTemplate(featureName: string): Promise<string> {
-  const token       = await getAccessToken();
+  const token = await getAccessToken();
   const [folderToken, objToken] = await Promise.all([
     getRootFolderToken(token),
     getWikiObjToken(token),
   ]);
 
+  const prdName = `[PRD] ${featureName}`;
+
   const res  = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${objToken}/copy`, {
     method:  'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ name: featureName, type: 'docx', folder_token: folderToken }),
+    body:    JSON.stringify({ name: prdName, type: 'docx', folder_token: folderToken }),
   });
   const data = await parseJson(res, 'drive_copy') as {
     code: number; msg?: string;
@@ -109,12 +212,20 @@ export async function copyPrdTemplate(featureName: string): Promise<string> {
   const fileToken = data.data?.file?.token;
   if (!fileToken) throw new Error('Lark response missing file token');
 
-  // Add owner as full-access collaborator so they can access the doc
-  await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/permissions/${fileToken}/members?type=docx&need_notification=false`, {
-    method:  'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ member_type: 'email', member_id: OWNER_EMAIL, perm: 'full_access', type: 'user' }),
-  });
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // Update date + add collaborator in parallel
+  await Promise.all([
+    updateInitialVersionDate(fileToken, today, token),
+    fetch(
+      `${LARK_BASE_URL}/open-apis/drive/v1/permissions/${fileToken}/members?type=docx&need_notification=false`,
+      {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ member_type: 'email', member_id: OWNER_EMAIL, perm: 'full_access', type: 'user' }),
+      },
+    ),
+  ]);
 
   return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;
 }
