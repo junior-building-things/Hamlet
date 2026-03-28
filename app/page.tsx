@@ -10,7 +10,7 @@ import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
 import { Loader2 } from 'lucide-react';
 
-const STORAGE_KEY = 'momentum_features_v2';
+const STORAGE_KEY = 'hamlet_features_v1';
 
 export default function Home() {
   const [features, setFeatures]           = useState<Feature[]>([]);

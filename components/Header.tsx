@@ -17,7 +17,7 @@ export function Header({ syncing, onSyncAll }: Props) {
           <Zap className="w-5 h-5 fill-white" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">Momentum</h1>
+          <h1 className="text-xl font-bold text-white">Hamlet</h1>
           <p className="text-xs text-gray-400">Product Management Dashboard</p>
         </div>
       </div>
