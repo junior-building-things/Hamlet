@@ -1,23 +1,23 @@
 'use client';
-import { Status, Priority } from '@/lib/types';
+import { Priority } from '@/lib/types';
 import { Search, Filter, LayoutGrid, List, Plus } from 'lucide-react';
 
 interface Props {
   search: string;
-  statusFilter: Status | 'All';
+  statusFilter: string;
+  statuses: string[];
   priorityFilter: Priority | 'All';
   view: 'grid' | 'list';
   onSearchChange: (v: string) => void;
-  onStatusChange: (v: Status | 'All') => void;
+  onStatusChange: (v: string) => void;
   onPriorityChange: (v: Priority | 'All') => void;
   onViewChange: (v: 'grid' | 'list') => void;
   onAddFeature: () => void;
 }
 
-const statuses: (Status | 'All')[] = ['All', 'Discovery', 'Design', 'Development', 'AB Testing', 'Launched', 'On Hold'];
 const priorities: (Priority | 'All')[] = ['All', 'Critical', 'High', 'Medium', 'Low'];
 
-export function FilterBar({ search, statusFilter, priorityFilter, view, onSearchChange, onStatusChange, onPriorityChange, onViewChange, onAddFeature }: Props) {
+export function FilterBar({ search, statusFilter, statuses, priorityFilter, view, onSearchChange, onStatusChange, onPriorityChange, onViewChange, onAddFeature }: Props) {
   return (
     <div className="flex items-center gap-3 px-6 mt-5 flex-wrap">
       {/* Search */}
@@ -37,13 +37,12 @@ export function FilterBar({ search, statusFilter, priorityFilter, view, onSearch
         <Filter className="w-4 h-4 text-gray-500 shrink-0" />
         <select
           value={statusFilter}
-          onChange={e => onStatusChange(e.target.value as Status | 'All')}
+          onChange={e => onStatusChange(e.target.value)}
           className="bg-transparent text-sm text-white outline-none cursor-pointer"
         >
+          <option value="All" className="bg-[#13162a]">All Status</option>
           {statuses.map(s => (
-            <option key={s} value={s} className="bg-[#13162a]">
-              {s === 'All' ? 'All Status' : s}
-            </option>
+            <option key={s} value={s} className="bg-[#13162a]">{s}</option>
           ))}
         </select>
       </div>

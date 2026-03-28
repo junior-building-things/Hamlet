@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Feature, Status, Priority } from '@/lib/types';
+import { Feature, Priority } from '@/lib/types';
 import { Header } from '@/components/Header';
 import { StatsCards } from '@/components/StatsCards';
 import { FilterBar } from '@/components/FilterBar';
@@ -18,7 +18,7 @@ export default function Home() {
   const [loading, setLoading]             = useState(true);
   const [view, setView]                   = useState<'grid' | 'list'>('grid');
   const [search, setSearch]               = useState('');
-  const [statusFilter, setStatusFilter]   = useState<Status | 'All'>('All');
+  const [statusFilter, setStatusFilter]   = useState<string>('All');
   const [priorityFilter, setPriority]     = useState<Priority | 'All'>('All');
   const [modalMode, setModalMode]         = useState<'add' | 'edit' | null>(null);
   const [editingFeature, setEditing]      = useState<Feature | undefined>(undefined);
@@ -84,7 +84,7 @@ export default function Home() {
         body: JSON.stringify({ meegoUrl: feature.meegoUrl }),
       });
       if (!res.ok) throw new Error('Sync failed');
-      const data = await res.json() as { status: Status; name: string; owner: string };
+      const data = await res.json() as { status: string; name: string; owner: string };
       setFeatures(prev => prev.map(f =>
         f.id === feature.id
           ? { ...f, status: data.status, name: data.name || f.name, owner: data.owner || f.owner, lastUpdated: new Date().toISOString().split('T')[0] }
@@ -103,6 +103,10 @@ export default function Home() {
     for (const f of linked) await syncOne(f);
     setSyncingAll(false);
   }
+
+  const uniqueStatuses = useMemo(() =>
+    [...new Set(features.map(f => f.status).filter(Boolean))].sort(),
+  [features]);
 
   const filtered = useMemo(() => features.filter(f => {
     const q = search.toLowerCase();
@@ -135,6 +139,7 @@ export default function Home() {
         <FilterBar
           search={search}
           statusFilter={statusFilter}
+          statuses={uniqueStatuses}
           priorityFilter={priorityFilter}
           view={view}
           onSearchChange={setSearch}

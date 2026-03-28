@@ -3,10 +3,18 @@ import { Feature } from '@/lib/types';
 import { Package, Clock, CheckCircle, Flame } from 'lucide-react';
 
 export function StatsCards({ features }: { features: Feature[] }) {
-  const total     = features.length;
-  const inProgress = features.filter(f => ['Development', 'Design', 'AB Testing'].includes(f.status)).length;
-  const launched  = features.filter(f => f.status === 'Launched').length;
-  const critical  = features.filter(f => f.priority === 'Critical').length;
+  const total      = features.length;
+  const inProgress = features.filter(f => {
+    const s = f.status.toLowerCase();
+    return s.includes('开发') || s.includes('dev') || s.includes('设计') || s.includes('design') ||
+           s.includes('ab') || s.includes('测试') || s.includes('testing');
+  }).length;
+  const launched   = features.filter(f => {
+    const s = f.status.toLowerCase();
+    return s.includes('上线') || s.includes('launch') || s.includes('已完成') || s.includes('验收') ||
+           s.includes('灰度') || s.includes('已发布');
+  }).length;
+  const critical   = features.filter(f => f.priority === 'Critical').length;
 
   const cards = [
     { label: 'Total Features',   value: total,      Icon: Package,     iconBg: 'bg-blue-900/50',    iconColor: 'text-blue-400'    },

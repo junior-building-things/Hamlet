@@ -1,10 +1,4 @@
-export type Status =
-  | 'Discovery'
-  | 'Design'
-  | 'Development'
-  | 'AB Testing'
-  | 'Launched'
-  | 'On Hold';
+export type Status = string;
 
 export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
 

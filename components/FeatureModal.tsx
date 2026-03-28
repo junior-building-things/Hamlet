@@ -1,9 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Feature, Status, Priority, Task } from '@/lib/types';
+import { Feature, Priority, Task } from '@/lib/types';
 import { X, Plus, Trash2, Link } from 'lucide-react';
 
-const STATUSES: Status[] = ['Discovery', 'Design', 'Development', 'AB Testing', 'Launched', 'On Hold'];
 const PRIORITIES: Priority[] = ['Critical', 'High', 'Medium', 'Low'];
 
 interface Props {
@@ -16,7 +15,7 @@ interface Props {
 export function FeatureModal({ mode, feature, onSave, onClose }: Props) {
   const [name, setName]             = useState(feature?.name ?? '');
   const [description, setDesc]      = useState(feature?.description ?? '');
-  const [status, setStatus]         = useState<Status>(feature?.status ?? 'Discovery');
+  const [status, setStatus]         = useState(feature?.status ?? '');
   const [priority, setPriority]     = useState<Priority>(feature?.priority ?? 'Medium');
   const [owner, setOwner]           = useState(feature?.owner ?? '');
   const [tasks, setTasks]           = useState<Task[]>(feature?.tasks ?? []);
@@ -117,13 +116,13 @@ export function FeatureModal({ mode, feature, onSave, onClose }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-gray-400 font-medium block mb-1.5">Status</label>
-              <select
+              <input
+                type="text"
                 value={status}
-                onChange={e => setStatus(e.target.value as Status)}
-                className="w-full bg-[#13162a] border border-[#1e2240] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-purple-600 cursor-pointer"
-              >
-                {STATUSES.map(s => <option key={s} value={s} className="bg-[#13162a]">{s}</option>)}
-              </select>
+                onChange={e => setStatus(e.target.value)}
+                placeholder="e.g. 开发中, PM验收..."
+                className="w-full bg-[#13162a] border border-[#1e2240] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-purple-600 transition-colors"
+              />
             </div>
             <div>
               <label className="text-xs text-gray-400 font-medium block mb-1.5">Priority</label>
