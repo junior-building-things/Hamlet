@@ -99,8 +99,7 @@ export default function Home() {
 
   async function syncAll() {
     setSyncingAll(true);
-    const linked = features.filter(f => f.meegoUrl);
-    for (const f of linked) await syncOne(f);
+    await fetchFromMeego();
     setSyncingAll(false);
   }
 
