@@ -161,7 +161,6 @@ export function FeatureModal({ mode, feature, onClose, onNodeCompleted }: Props)
             <SectionHeader title="Feature Details" />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               <InfoField label="Priority"        value={feature?.priority} />
-              <InfoField label="Quarterly Cycle" value={feature?.quarterlyCycle} />
               <InfoField label="Business Line"   value={feature?.businessLine} />
               <InfoField label="Social Component" value={feature?.socialComponent} />
             </div>
