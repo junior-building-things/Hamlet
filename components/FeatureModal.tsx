@@ -147,7 +147,19 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
 
           {/* PRD Link */}
           <div>
-            <label className="text-xs text-gray-400 font-medium block mb-1.5">PRD Link</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-gray-400 font-medium">PRD Link</label>
+              {prd && (
+                <a
+                  href={prd}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                >
+                  Open PRD <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
             <input
               type="url"
               value={prd}
