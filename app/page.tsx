@@ -130,11 +130,7 @@ export default function Home() {
             body: JSON.stringify({
               projectKey: saved.meegoProjectKey,
               workItemId: saved.meegoIssueId,
-              fields: {
-                name:        saved.name,
-                description: saved.description,
-                priority:    saved.priority,
-              },
+              fields: { name: saved.name, prd: saved.prd, priority: saved.priority },
             }),
           });
         } catch (err) {
@@ -144,6 +140,11 @@ export default function Home() {
     }
     setModalMode(null);
     setEditing(undefined);
+  }
+
+  function handleNodeCompleted(featureId: string) {
+    const f = features.find(feat => feat.id === featureId);
+    if (f) syncOne(f);
   }
 
   function openEdit(feature: Feature) {
@@ -226,6 +227,7 @@ export default function Home() {
           feature={editingFeature}
           onSave={handleSave}
           onClose={() => { setModalMode(null); setEditing(undefined); }}
+          onNodeCompleted={handleNodeCompleted}
         />
       )}
     </main>

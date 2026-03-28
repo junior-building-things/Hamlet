@@ -15,7 +15,7 @@ interface Props {
   onAddFeature: () => void;
 }
 
-const priorities: (Priority | 'All')[] = ['All', 'Critical', 'High', 'Medium', 'Low'];
+const priorities: (Priority | 'All')[] = ['All', 'P0', 'P1', 'P2', 'P3'];
 
 export function FilterBar({ search, statusFilter, statuses, priorityFilter, view, onSearchChange, onStatusChange, onPriorityChange, onViewChange, onAddFeature }: Props) {
   return (

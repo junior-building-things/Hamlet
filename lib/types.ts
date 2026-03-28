@@ -1,6 +1,6 @@
 export type Status = string;
 
-export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
+export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
 
 export interface Task {
   id: string;
@@ -17,8 +17,10 @@ export interface Feature {
   owner: string;
   tasks: Task[];
   lastUpdated: string;
+  prd?: string;
   // Meego integration
   meegoUrl?: string;
   meegoProjectKey?: string;
   meegoIssueId?: string;
+  meegoNodeKey?: string;
 }

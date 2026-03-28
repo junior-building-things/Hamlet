@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateFeatureFields } from '@/lib/meego';
+import { Priority } from '@/lib/types';
 
 export async function POST(req: NextRequest) {
   const { projectKey, workItemId, fields } = await req.json() as {
     projectKey?: string;
     workItemId?: string;
-    fields?: { name?: string; description?: string; priority?: string };
+    fields?: { name?: string; prd?: string; priority?: Priority };
   };
 
   if (!projectKey || !workItemId || !fields) {

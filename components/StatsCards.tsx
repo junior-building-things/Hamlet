@@ -14,7 +14,7 @@ export function StatsCards({ features }: { features: Feature[] }) {
     return s.includes('上线') || s.includes('launch') || s.includes('已完成') || s.includes('验收') ||
            s.includes('灰度') || s.includes('已发布');
   }).length;
-  const critical   = features.filter(f => f.priority === 'Critical').length;
+  const critical   = features.filter(f => f.priority === 'P0').length;
 
   const cards = [
     { label: 'Total Features',   value: total,      Icon: Package,     iconBg: 'bg-blue-900/50',    iconColor: 'text-blue-400'    },
