@@ -31,6 +31,8 @@ const AV: Record<string, string> = {
   'Tao Zhu':       'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00fg_2e6b01f3-4700-473a-9ebb-698203fdbahu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
   'Hazel Li':      'https://pan16.larksuitecdn.com/static-resource/v1/v3_00tj_78445933-31f7-4349-adcb-3e11d4e0b64h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
   'Xiaobo Tian':   'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00l5_7ccb4901-d79c-4997-9538-b90bfae341hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Spring Ren':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00tb_ad7c948b-ed8f-4462-83f5-3ffb3783b1hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Yunyi Yang':    'https://pan16.larksuitecdn.com/static-resource/v1/v2_f5fcd3b3-5752-4ab4-ab0f-310ebc15c31h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
 };
 
 function av(name: string): AvatarOption { return { value: name, label: name, avatarUrl: AV[name] }; }
@@ -109,6 +111,10 @@ const CONTENT_OPTIONS: AvatarOption[] = [
 const QA_OPTIONS: AvatarOption[] = [
   { value: '7242202760668643331', label: 'Xiaobo Tian', avatarUrl: AV['Xiaobo Tian'] },
 ];
+const TPM_OPTIONS: AvatarOption[] = [
+  { value: '7330558724446191620', label: 'Spring Ren',  avatarUrl: AV['Spring Ren'] },
+  { value: '7287415984883810308', label: 'Yunyi Yang',  avatarUrl: AV['Yunyi Yang'] },
+];
 
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
@@ -185,6 +191,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     android:         '',
     ios:             '',
     uiux:            '',
+    tpm:             TPM_OPTIONS[0].value,  // Spring Ren default
     da:              DA_OPTIONS[0].value,
     contentDesigner: CONTENT_OPTIONS[0].value,
     qa:              QA_OPTIONS[0].value,
@@ -226,9 +233,10 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
     // Finish the API call in the background
     const roles: Array<{ role: string; owners: string[] }> = [
-      { role: 'DA',        owners: [form.da] },
-      { role: 'UX_Writer', owners: [form.contentDesigner] },
-      { role: 'QA',        owners: [form.qa] },
+      { role: 'DA',          owners: [form.da] },
+      { role: 'UX_Writer',   owners: [form.contentDesigner] },
+      { role: 'QA',          owners: [form.qa] },
+      { role: 'role_e8ce24', owners: [form.tpm] },
     ];
     if (form.techOwner) roles.push({ role: 'Tech_Owner', owners: [form.techOwner] });
     if (form.android)   roles.push({ role: 'Android',    owners: [form.android] });
@@ -360,7 +368,11 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <FormLabel>TPM</FormLabel>
+                  <AvatarSelect options={TPM_OPTIONS} value={form.tpm} onChange={v => setField('tpm', v)} />
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>DA</FormLabel>
                   <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
