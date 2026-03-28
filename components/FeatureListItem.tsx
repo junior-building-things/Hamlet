@@ -2,7 +2,7 @@
 import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
-import { RefreshCw, Calendar } from 'lucide-react';
+import { RefreshCw, Calendar, ExternalLink } from 'lucide-react';
 
 interface Props {
   feature: Feature;
@@ -35,18 +35,18 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {feature.meegoUrl && (
-            <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
-              Meego ↗
+            <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors">
+              Meego <ExternalLink className="w-3 h-3" />
             </a>
           )}
           {feature.prd && (
-            <a href={feature.prd} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
-              PRD ↗
+            <a href={feature.prd} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+              PRD <ExternalLink className="w-3 h-3" />
             </a>
           )}
           {feature.complianceUrl && (
-            <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
-              Compliance ↗
+            <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+              Compliance <ExternalLink className="w-3 h-3" />
             </a>
           )}
         </div>
@@ -64,18 +64,18 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
         <PriorityBadge priority={feature.priority} />
         <div className="flex items-center gap-3 whitespace-nowrap">
           {feature.meegoUrl && (
-            <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="text-xs text-purple-400 hover:text-purple-300 transition-colors whitespace-nowrap">
-              Meego ↗
+            <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors">
+              Meego <ExternalLink className="w-3 h-3" />
             </a>
           )}
           {feature.prd && (
-            <a href={feature.prd} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300 transition-colors whitespace-nowrap">
-              PRD ↗
+            <a href={feature.prd} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+              PRD <ExternalLink className="w-3 h-3" />
             </a>
           )}
           {feature.complianceUrl && (
-            <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors whitespace-nowrap">
-              Compliance ↗
+            <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+              Compliance <ExternalLink className="w-3 h-3" />
             </a>
           )}
         </div>
