@@ -2,6 +2,29 @@ import { Priority, Feature } from './types';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 
+// Ordered priority list — when multiple nodes are active, pick the highest one
+const NODE_PRIORITY = [
+  '产品需求准备',
+  '产品线内初评',
+  '技术评估&排优',
+  '需求详评',
+  '技术方案设计',
+  'iOS 开发',
+  'UI&UX验收',
+  'Server上线',
+  'AB实验',
+  '结束',
+];
+
+function pickNode(nodes: string[]): string {
+  if (nodes.length === 0) return '';
+  return nodes.slice().sort((a, b) => {
+    const ia = NODE_PRIORITY.indexOf(a);
+    const ib = NODE_PRIORITY.indexOf(b);
+    return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+  })[0];
+}
+
 function mapMeegoPriority(priority?: string): Priority {
   if (!priority) return 'Medium';
   const p = priority.toLowerCase();
@@ -101,13 +124,15 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{ status: str
     }
   }
 
-  // Extract the current active node name
+  // Extract all active node names and pick the highest-priority one
   const nodeSection = raw.split('# 进行中的节点')[1] ?? '';
   const nodeLines = nodeSection.split('\n').filter((l: string) => l.startsWith('|') && !l.includes('---') && !l.includes('节点 ID'));
-  if (nodeLines.length > 0) {
-    const firstNodeMatch = nodeLines[0].match(/\|\s*\S+\s*\|\s*(.+?)\s*\|/);
-    if (firstNodeMatch) currentNode = firstNodeMatch[1].trim();
+  const activeNodes: string[] = [];
+  for (const line of nodeLines) {
+    const match = line.match(/\|\s*\S+\s*\|\s*(.+?)\s*\|/);
+    if (match) activeNodes.push(match[1].trim());
   }
+  currentNode = pickNode(activeNodes);
 
   return { status: currentNode || 'Unknown', name: workItemName, owner };
 }
