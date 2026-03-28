@@ -89,10 +89,24 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               {mode === 'add' ? 'New Feature' : 'Edit Feature'}
             </h2>
             {isMeego && (
-              <a href={feature?.meegoUrl} target="_blank" rel="noopener noreferrer"
-                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 mt-0.5">
-                Open in Meego <ExternalLink className="w-3 h-3" />
-              </a>
+              <div className="flex items-center gap-4 mt-1">
+                <a href={feature?.meegoUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                  Meego <ExternalLink className="w-3 h-3" />
+                </a>
+                {prd && (
+                  <a href={prd} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                    PRD <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+                {feature?.complianceUrl && (
+                  <a href={feature.complianceUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
+                    Compliance <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
             )}
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
@@ -119,12 +133,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs text-gray-400 font-medium">PRD Link</label>
-              {prd && (
-                <a href={prd} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
-                  Open PRD <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
             </div>
             <input
               type="url"
@@ -134,17 +142,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               className="w-full bg-[#13162a] border border-[#1e2240] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-purple-600 transition-colors"
             />
           </div>
-
-          {/* Compliance Review Link — read-only */}
-          {isMeego && feature?.complianceUrl && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400 font-medium">Compliance Review</span>
-              <a href={feature.complianceUrl} target="_blank" rel="noopener noreferrer"
-                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
-                Open ticket <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          )}
 
           {/* Priority */}
           <div>
