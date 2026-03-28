@@ -1,6 +1,6 @@
-const LARK_BASE_URL   = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
-const TEMPLATE_TOKEN  = 'Z5qldS3kEoC1WAxPyMucR9RpneX';
-const OWNER_EMAIL     = 'thomas.oefverstroem@bytedance.com';
+const LARK_BASE_URL    = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
+const WIKI_NODE_TOKEN  = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
+const OWNER_EMAIL      = 'thomas.oefverstroem@bytedance.com';
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
 
@@ -47,17 +47,46 @@ async function getRootFolderToken(accessToken: string): Promise<string> {
   return cachedRootFolder;
 }
 
+// ─── Wiki node → drive obj_token ──────────────────────────────────────────────
+
+let cachedObjToken    = '';
+let objTokenFetchedAt = 0;
+
+async function getWikiObjToken(accessToken: string): Promise<string> {
+  // Cache for 1 hour — template never changes
+  if (cachedObjToken && Date.now() - objTokenFetchedAt < 3_600_000) return cachedObjToken;
+
+  const res  = await fetch(`${LARK_BASE_URL}/open-apis/wiki/v2/nodes?token=${WIKI_NODE_TOKEN}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json() as {
+    code: number; msg?: string;
+    data?: { node?: { obj_token?: string } };
+  };
+  if (data.code !== 0) throw new Error(`Lark wiki node error ${data.code}: ${data.msg}`);
+
+  const objToken = data.data?.node?.obj_token;
+  if (!objToken) throw new Error('Lark wiki node missing obj_token');
+
+  cachedObjToken    = objToken;
+  objTokenFetchedAt = Date.now();
+  return cachedObjToken;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Copies the PRD template into the bot's root folder, naming it after the feature.
+ * Copies the PRD wiki template into the bot's root folder, naming it after the feature.
  * Returns the URL of the newly created document.
  */
 export async function copyPrdTemplate(featureName: string): Promise<string> {
   const token       = await getAccessToken();
-  const folderToken = await getRootFolderToken(token);
+  const [folderToken, objToken] = await Promise.all([
+    getRootFolderToken(token),
+    getWikiObjToken(token),
+  ]);
 
-  const res  = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${TEMPLATE_TOKEN}/copy`, {
+  const res  = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${objToken}/copy`, {
     method:  'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body:    JSON.stringify({ name: featureName, type: 'docx', folder_token: folderToken }),
