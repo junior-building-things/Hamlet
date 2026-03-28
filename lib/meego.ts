@@ -315,7 +315,12 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const bestWithOwners = activeNodes.find(n => n.key === best?.key);
   const canCompleteNode = bestWithOwners?.owners.includes(MY_EMAIL) ?? false;
 
-  const quarterlyCycle = parseWorkItemField(raw, '季度规划');
+  const quarterlyCycleRaw = parseWorkItemField(raw, '季度规划');
+  let quarterlyCycle = quarterlyCycleRaw;
+  try {
+    const parsed = JSON.parse(quarterlyCycleRaw);
+    if (Array.isArray(parsed)) quarterlyCycle = parsed.join(', ');
+  } catch { /* keep raw value */ }
   const businessLine   = parseWorkItemField(raw, 'DM Business Line');
   const socialComponent = parseWorkItemField(raw, 'Social模块');
 
