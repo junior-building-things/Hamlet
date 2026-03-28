@@ -394,6 +394,13 @@ export async function createFeature(params: CreateFeatureParams): Promise<{ id: 
   if (params.roles.length > 0)
     fields.push({ field_key: 'role_owners', field_value: JSON.stringify(params.roles) });
 
+  // Fixed defaults
+  fields.push({ field_key: 'field_40694f', field_value: JSON.stringify([{ option_id: 'mn088uae2' }]) }); // User Experience Type = Functional Iteration
+  fields.push({ field_key: 'field_2177d5', field_value: 'true' }); // Need Event Tracking
+  fields.push({ field_key: 'field_894cbf', field_value: 'true' }); // Need Content Design
+  fields.push({ field_key: 'need_ab',      field_value: 'true' }); // Need AB Experiment
+  fields.push({ field_key: 'field_391771', field_value: 'true' }); // Need UI/UX
+
   const raw = await callMeegoMcp('create_workitem', {
     project_key: TIKTOK_PROJECT_KEY,
     work_item_type: 'story',

@@ -87,7 +87,7 @@ export function FilterBar({ search, statusFilter, statuses, priorityFilter, view
         className="flex items-center gap-1.5 bg-white text-black text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors whitespace-nowrap ml-auto"
       >
         <Plus className="w-4 h-4" />
-        Add Feature
+        Create Feature
       </button>
     </div>
   );

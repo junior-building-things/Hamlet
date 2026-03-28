@@ -10,6 +10,8 @@ interface Props {
   onSave: (feature: Feature) => void;
   onClose: () => void;
   onNodeCompleted?: (featureId: string) => void;
+  /** Called after background creation completes. null = failed (temp entry should be removed). */
+  onFeatureCreated?: (tempId: string, feature: Feature | null) => void;
 }
 
 // ─── Avatar URLs ──────────────────────────────────────────────────────────────
@@ -165,7 +167,7 @@ const inputCls = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }: Props) {
+export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, onFeatureCreated }: Props) {
 
   // ── Edit-mode state ──
   const [completing, setCompleting]       = useState(false);
@@ -187,8 +189,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
     contentDesigner: CONTENT_OPTIONS[0].value,
     qa:              QA_OPTIONS[0].value,
   });
-  const [submitting, setSubmitting]   = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const isMeego     = !!(feature?.meegoUrl);
   const canComplete = feature?.canCompleteNode === true;
@@ -204,12 +204,27 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
-    setSubmitting(true);
-    setSubmitError(null);
 
+    const tempId   = `temp_${Date.now()}`;
+    const priority = (PRIORITIES.find(p => p.id === form.priority)?.label ?? 'P1') as Priority;
+
+    // Immediately close the modal and add the feature with a "Creating…" status
+    onSave({
+      id:              tempId,
+      name:            form.name.trim(),
+      description:     '',
+      status:          'Creating…',
+      priority,
+      owner:           'Thomas',
+      tasks:           [],
+      lastUpdated:     new Date().toISOString().split('T')[0],
+      meegoProjectKey: TIKTOK_PROJECT_KEY,
+    });
+
+    // Finish the API call in the background
     const roles: Array<{ role: string; owners: string[] }> = [
       { role: 'DA',        owners: [form.da] },
       { role: 'UX_Writer', owners: [form.contentDesigner] },
@@ -220,42 +235,37 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
     if (form.ios)       roles.push({ role: 'iOS',        owners: [form.ios] });
     if (form.uiux)      roles.push({ role: 'UI',         owners: [form.uiux] });
 
-    const priority = (PRIORITIES.find(p => p.id === form.priority)?.label ?? 'P1') as Priority;
-
-    try {
-      const res = await fetch('/api/meego/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name:                    form.name.trim(),
-          priority,
-          quarterlyCycleOptionId:  form.quarterlyCycle  || undefined,
-          businessLineOptionId:    form.businessLine    || undefined,
-          socialComponentOptionId: form.socialComponent || undefined,
-          roles,
-        }),
-      });
-      const data = await res.json() as { id?: string; meegoUrl?: string; prd?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Create failed');
-
-      onSave({
-        id:              data.id ?? String(Date.now()),
-        name:            form.name.trim(),
-        description:     '',
-        status:          'Requirements Prep',
+    fetch('/api/meego/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name:                    form.name.trim(),
         priority,
-        owner:           'Thomas',
-        tasks:           [],
-        lastUpdated:     new Date().toISOString().split('T')[0],
-        meegoUrl:        data.meegoUrl,
-        meegoIssueId:    data.id,
-        meegoProjectKey: TIKTOK_PROJECT_KEY,
-        prd:             data.prd,
-      });
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Failed to create feature');
-      setSubmitting(false);
-    }
+        quarterlyCycleOptionId:  form.quarterlyCycle  || undefined,
+        businessLineOptionId:    form.businessLine    || undefined,
+        socialComponentOptionId: form.socialComponent || undefined,
+        roles,
+      }),
+    })
+      .then(res => res.json().then(data => ({ ok: res.ok, data })))
+      .then(({ ok, data }: { ok: boolean; data: { id?: string; meegoUrl?: string; prd?: string; error?: string } }) => {
+        if (!ok) throw new Error(data.error ?? 'Create failed');
+        onFeatureCreated?.(tempId, {
+          id:              data.id ?? tempId,
+          name:            form.name.trim(),
+          description:     '',
+          status:          'Requirements Prep',
+          priority,
+          owner:           'Thomas',
+          tasks:           [],
+          lastUpdated:     new Date().toISOString().split('T')[0],
+          meegoUrl:        data.meegoUrl,
+          meegoIssueId:    data.id,
+          meegoProjectKey: TIKTOK_PROJECT_KEY,
+          prd:             data.prd,
+        });
+      })
+      .catch(() => onFeatureCreated?.(tempId, null));
   }
 
   async function handleCompleteNode() {
@@ -365,7 +375,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
                 </div>
               </div>
 
-              {submitError && <p className="text-xs text-red-400">{submitError}</p>}
             </div>
 
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#1e2240] shrink-0">
@@ -373,11 +382,9 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
                 className="px-5 py-2 bg-[#1e2240] text-gray-300 hover:text-white text-sm font-semibold rounded-lg transition-colors">
                 Cancel
               </button>
-              <button type="submit" disabled={submitting || !form.name.trim()}
-                className="flex items-center gap-2 px-5 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
-                {submitting
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</>
-                  : 'Create in Meego'}
+              <button type="submit" disabled={!form.name.trim()}
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
+                Create Feature
               </button>
             </div>
           </form>

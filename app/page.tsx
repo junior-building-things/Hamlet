@@ -232,6 +232,14 @@ export default function Home() {
     setEditing(undefined);
   }
 
+  function handleFeatureCreated(tempId: string, feature: Feature | null) {
+    if (feature) {
+      setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
+    } else {
+      setFeatures(prev => prev.filter(f => f.id !== tempId));
+    }
+  }
+
   function handleNodeCompleted(featureId: string) {
     const f = features.find(feat => feat.id === featureId);
     if (f) syncOne(f);
@@ -325,6 +333,7 @@ export default function Home() {
           onSave={handleSave}
           onClose={() => { setModalMode(null); setEditing(undefined); }}
           onNodeCompleted={handleNodeCompleted}
+          onFeatureCreated={handleFeatureCreated}
         />
       )}
     </main>

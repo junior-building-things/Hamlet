@@ -4,9 +4,32 @@ import { ChevronDown, Check } from 'lucide-react';
 
 // ─── Shared dropdown hook ─────────────────────────────────────────────────────
 
+/** Walk up the DOM to find the nearest scroll container's bottom edge. */
+function getMaxHeight(triggerEl: Element): number {
+  let el = triggerEl.parentElement;
+  while (el) {
+    const { overflowY } = window.getComputedStyle(el);
+    if (overflowY === 'auto' || overflowY === 'scroll') {
+      return el.getBoundingClientRect().bottom - triggerEl.getBoundingClientRect().bottom - 8;
+    }
+    el = el.parentElement;
+  }
+  return window.innerHeight - triggerEl.getBoundingClientRect().bottom - 8;
+}
+
 function useDropdown() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]       = useState(false);
+  const [maxHeight, setMaxHeight] = useState(300);
   const ref = useRef<HTMLDivElement>(null);
+
+  function openDropdown() {
+    if (ref.current) {
+      const trigger = ref.current.firstElementChild;
+      if (trigger) setMaxHeight(Math.max(getMaxHeight(trigger), 80));
+    }
+    setOpen(true);
+  }
+
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -14,11 +37,12 @@ function useDropdown() {
     document.addEventListener('mousedown', onClickOutside);
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
-  return { open, setOpen, ref };
+
+  return { open, setOpen, openDropdown, maxHeight, ref };
 }
 
-const triggerCls = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500 flex items-center gap-2 min-w-0';
-const listCls    = 'absolute z-20 top-full left-0 right-0 mt-1 bg-[#13162a] border border-[#2e3460] rounded-lg shadow-2xl overflow-hidden';
+const triggerCls  = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500 flex items-center gap-2 min-w-0';
+const listBaseCls = 'absolute z-20 top-full left-0 right-0 mt-1 bg-[#13162a] border border-[#2e3460] rounded-lg shadow-2xl overflow-y-auto';
 const itemBaseCls = 'px-3 py-2 flex items-center gap-2.5 cursor-pointer hover:bg-[#1e2240]';
 
 // ─── UserAvatar ───────────────────────────────────────────────────────────────
@@ -54,12 +78,12 @@ interface AvatarSelectProps {
 }
 
 export function AvatarSelect({ options, value, onChange, placeholder = '—', locked = false }: AvatarSelectProps) {
-  const { open, setOpen, ref } = useDropdown();
+  const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
   const selected = options.find(o => o.value === value);
 
   return (
     <div ref={ref} className="relative w-full">
-      <button type="button" onClick={() => { if (!locked) setOpen(o => !o); }}
+      <button type="button" onClick={() => { if (!locked) { open ? setOpen(false) : openDropdown(); } }}
         className={triggerCls}>
         {selected ? (
           <>
@@ -73,7 +97,7 @@ export function AvatarSelect({ options, value, onChange, placeholder = '—', lo
       </button>
 
       {open && (
-        <div className={listCls}>
+        <div className={listBaseCls} style={{ maxHeight }}>
           {options.map(opt => (
             <div key={opt.value}
               className={`${itemBaseCls} ${value === opt.value ? 'bg-[#1e2240]' : ''}`}
@@ -103,18 +127,18 @@ interface CustomSelectProps {
 }
 
 export function CustomSelect({ options, value, onChange }: CustomSelectProps) {
-  const { open, setOpen, ref } = useDropdown();
+  const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
   const selected = options.find(o => o.value === value);
 
   return (
     <div ref={ref} className="relative w-full">
-      <button type="button" onClick={() => setOpen(o => !o)} className={triggerCls}>
+      <button type="button" onClick={() => open ? setOpen(false) : openDropdown()} className={triggerCls}>
         <span className="flex-1 text-left truncate">{selected?.label ?? '—'}</span>
         <ChevronDown className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
       </button>
 
       {open && (
-        <div className={listCls}>
+        <div className={listBaseCls} style={{ maxHeight }}>
           {options.map(opt => (
             <div key={opt.value}
               className={`${itemBaseCls} ${value === opt.value ? 'bg-[#1e2240]' : ''}`}
