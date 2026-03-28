@@ -18,6 +18,8 @@ export interface Feature {
   tasks: Task[];
   lastUpdated: string;
   prd?: string;
+  complianceUrl?: string;
+  canCompleteNode?: boolean;
   // Meego integration
   meegoUrl?: string;
   meegoProjectKey?: string;

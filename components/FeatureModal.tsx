@@ -5,13 +5,6 @@ import { X, ExternalLink, Loader2, CheckCircle2 } from 'lucide-react';
 
 const PRIORITIES: Priority[] = ['P0', 'P1', 'P2', 'P3'];
 
-interface NodeInfo {
-  nodeKey: string;
-  nodeName: string;
-  canComplete: boolean;
-  prd: string;
-}
-
 interface Props {
   mode: 'add' | 'edit';
   feature?: Feature;
@@ -25,32 +18,13 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
   const [prd, setPrd]           = useState(feature?.prd ?? '');
   const [priority, setPriority] = useState<Priority>(feature?.priority ?? 'P2');
 
-  const [nodeInfo, setNodeInfo]         = useState<NodeInfo | null>(null);
-  const [loadingNode, setLoadingNode]   = useState(false);
-  const [completing, setCompleting]     = useState(false);
-  const [completed, setCompleted]       = useState(false);
+  const [completing, setCompleting]       = useState(false);
+  const [completed, setCompleted]         = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
 
   const isMeego = !!(feature?.meegoUrl);
-
-  // Fetch node info when editing a Meego-linked feature
-  useEffect(() => {
-    if (mode !== 'edit' || !feature?.meegoUrl) return;
-    setLoadingNode(true);
-    fetch('/api/meego/node-info', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meegoUrl: feature.meegoUrl }),
-    })
-      .then(r => r.json())
-      .then((data: NodeInfo) => {
-        setNodeInfo(data);
-        if (data.prd && !prd) setPrd(data.prd);
-      })
-      .catch(console.error)
-      .finally(() => setLoadingNode(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const canComplete = feature?.canCompleteNode === true;
+  const nodeName = feature?.status ?? '';
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -77,7 +51,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
   }
 
   async function handleCompleteNode() {
-    if (!feature?.meegoProjectKey || !feature?.meegoIssueId || !nodeInfo?.nodeKey) return;
+    if (!feature?.meegoProjectKey || !feature?.meegoIssueId || !feature?.meegoNodeKey) return;
     setCompleting(true);
     setCompleteError(null);
     try {
@@ -87,7 +61,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
         body: JSON.stringify({
           projectKey: feature.meegoProjectKey,
           workItemId: feature.meegoIssueId,
-          nodeKey: nodeInfo.nodeKey,
+          nodeKey:    feature.meegoNodeKey,
         }),
       });
       if (!res.ok) {
@@ -115,12 +89,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               {mode === 'add' ? 'New Feature' : 'Edit Feature'}
             </h2>
             {isMeego && (
-              <a
-                href={feature?.meegoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 mt-0.5"
-              >
+              <a href={feature?.meegoUrl} target="_blank" rel="noopener noreferrer"
+                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 mt-0.5">
                 Open in Meego <ExternalLink className="w-3 h-3" />
               </a>
             )}
@@ -150,12 +120,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs text-gray-400 font-medium">PRD Link</label>
               {prd && (
-                <a
-                  href={prd}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
-                >
+                <a href={prd} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
                   Open PRD <ExternalLink className="w-3 h-3" />
                 </a>
               )}
@@ -168,6 +134,17 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               className="w-full bg-[#13162a] border border-[#1e2240] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-purple-600 transition-colors"
             />
           </div>
+
+          {/* Compliance Review Link — read-only */}
+          {isMeego && feature?.complianceUrl && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400 font-medium">Compliance Review</span>
+              <a href={feature.complianceUrl} target="_blank" rel="noopener noreferrer"
+                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                Open ticket <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )}
 
           {/* Priority */}
           <div>
@@ -182,7 +159,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
                       ? p === 'P0' ? 'bg-red-900/50 border-red-700 text-red-300'
                       : p === 'P1' ? 'bg-orange-900/50 border-orange-700 text-orange-300'
                       : p === 'P2' ? 'bg-blue-900/50 border-blue-700 text-blue-300'
-                      : 'bg-[#1e2240] border-[#2a3060] text-gray-300'
+                                   : 'bg-[#1e2240] border-[#2a3060] text-gray-300'
                       : 'bg-transparent border-[#1e2240] text-gray-500 hover:text-gray-300 hover:border-gray-600'
                   }`}
                 >
@@ -192,23 +169,17 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
             </div>
           </div>
 
-          {/* Complete Node — only for Meego features where user is assigned */}
-          {mode === 'edit' && isMeego && (
+          {/* Complete Node */}
+          {mode === 'edit' && isMeego && (canComplete || feature?.canCompleteNode === false) && (
             <div className="border-t border-[#1e2240] pt-4">
-              {loadingNode ? (
-                <div className="flex items-center gap-2 text-gray-500 text-sm">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Checking node…
-                </div>
-              ) : nodeInfo?.canComplete ? (
+              {canComplete ? (
                 <div className="flex flex-col gap-2">
                   <p className="text-xs text-gray-400">
-                    Current node: <span className="text-white font-medium">{nodeInfo.nodeName}</span>
+                    Current node: <span className="text-white font-medium">{nodeName}</span>
                   </p>
                   {completed ? (
                     <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Node completed!
+                      <CheckCircle2 className="w-4 h-4" /> Node completed!
                     </div>
                   ) : (
                     <button
@@ -218,21 +189,24 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
                     >
                       {completing
                         ? <><Loader2 className="w-4 h-4 animate-spin" /> Completing…</>
-                        : <>Complete: {nodeInfo.nodeName} →</>
-                      }
+                        : <>Complete: {nodeName} →</>}
                     </button>
                   )}
-                  {completeError && (
-                    <p className="text-xs text-red-400">{completeError}</p>
-                  )}
+                  {completeError && <p className="text-xs text-red-400">{completeError}</p>}
                 </div>
-              ) : nodeInfo && !nodeInfo.canComplete ? (
+              ) : (
                 <p className="text-xs text-gray-600">
-                  Current node: <span className="text-gray-500">{nodeInfo.nodeName}</span>
-                  {' '}— not assigned to you
+                  Current node: <span className="text-gray-500">{nodeName}</span> — not assigned to you
                 </p>
-              ) : null}
+              )}
             </div>
+          )}
+
+          {/* Sync prompt if canCompleteNode not yet known */}
+          {mode === 'edit' && isMeego && feature?.canCompleteNode === undefined && (
+            <p className="text-xs text-gray-600 border-t border-[#1e2240] pt-4">
+              Sync this ticket to check if you can complete the current node.
+            </p>
           )}
         </div>
 

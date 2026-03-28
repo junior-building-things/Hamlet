@@ -84,10 +84,25 @@ export default function Home() {
         body: JSON.stringify({ meegoUrl: feature.meegoUrl }),
       });
       if (!res.ok) throw new Error('Sync failed');
-      const data = await res.json() as { status: string; name: string; owner: string };
+      const data = await res.json() as {
+        status: string; name: string; owner: string;
+        meegoNodeKey: string; prd: string; complianceUrl: string;
+        priority: string | null; canCompleteNode: boolean;
+      };
       setFeatures(prev => prev.map(f =>
         f.id === feature.id
-          ? { ...f, status: data.status, name: data.name || f.name, owner: data.owner || f.owner, lastUpdated: new Date().toISOString().split('T')[0] }
+          ? {
+              ...f,
+              status:          data.status                || f.status,
+              name:            data.name                  || f.name,
+              owner:           data.owner                 || f.owner,
+              meegoNodeKey:    data.meegoNodeKey          || f.meegoNodeKey,
+              prd:             data.prd                   || f.prd,
+              complianceUrl:   data.complianceUrl         || f.complianceUrl,
+              priority:        (data.priority as Priority) ?? f.priority,
+              canCompleteNode: data.canCompleteNode,
+              lastUpdated:     new Date().toISOString().split('T')[0],
+            }
           : f
       ));
     } catch (err) {

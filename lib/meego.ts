@@ -2,6 +2,7 @@ import { Priority, Feature } from './types';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const MY_EMAIL = 'thomas.oefverstroem@bytedance.com';
+const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
 // Ordered priority list — when multiple nodes are active, pick the highest one
 const NODE_PRIORITY = [
@@ -83,22 +84,95 @@ async function callMeegoMcp(toolName: string, args: Record<string, unknown>) {
 // Parse active nodes from get_workitem_brief markdown response
 function parseActiveNodes(raw: string): Array<{ key: string; name: string; owners: string }> {
   const nodeSection = raw.split('# 进行中的节点')[1] ?? '';
-  const nodeLines = nodeSection
+  return nodeSection
     .split('\n')
-    .filter(l => l.startsWith('|') && !l.includes('---') && !l.includes('节点 ID'));
-
-  return nodeLines.flatMap(line => {
-    const parts = line.split('|').map(p => p.trim()).filter(Boolean);
-    if (parts.length >= 3) return [{ key: parts[0], name: parts[1], owners: parts[2] }];
-    return [];
-  });
+    .filter(l => l.startsWith('|') && !l.includes('---') && !l.includes('节点 ID'))
+    .flatMap(line => {
+      const parts = line.split('|').map(p => p.trim()).filter(Boolean);
+      if (parts.length >= 3) return [{ key: parts[0], name: parts[1], owners: parts[2] }];
+      return [];
+    });
 }
+
+// Parse a named field from the # 工作项字段 table
+function parseWorkItemField(raw: string, fieldName: string): string {
+  const regex = new RegExp(`\\|\\s*${fieldName}\\s*\\|\\s*([^|\\n]+?)\\s*\\|`);
+  const match = raw.match(regex);
+  return match ? match[1].trim() : '';
+}
+
+// ─── MQL types ────────────────────────────────────────────────────────────────
+
+interface MqlFieldValue {
+  long_value?: number;
+  varchar_value?: string;
+  key_label_value?: { key: string; label: string };
+}
+
+interface MqlItem {
+  moql_field_list: Array<{ key: string; value: MqlFieldValue }>;
+}
+
+interface MqlResponse {
+  session_id: string;
+  list: Array<{ count: number }>;
+  data: Record<string, MqlItem[]>;
+}
+
+// Fetch priority, PRD and compliance URL for all of Thomas's TikTok stories in one MQL sweep
+async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; prd: string; complianceUrl: string }>> {
+  const map = new Map<string, { priority: Priority; prd: string; complianceUrl: string }>();
+  const MQL = 'SELECT `work_item_id`, `priority`, `wiki`, `field_due3fb` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
+  const GROUP_ID = '1';
+  let sessionId: string | undefined;
+  let page = 1;
+
+  while (true) {
+    const args: Record<string, unknown> = sessionId
+      ? { session_id: sessionId, group_pagination_list: [{ group_id: GROUP_ID, page_num: page }] }
+      : { project_key: TIKTOK_PROJECT_KEY, mql: MQL };
+
+    const raw = await callMeegoMcp('search_by_mql', args);
+    const data = JSON.parse(raw) as MqlResponse;
+    if (!sessionId) sessionId = data.session_id;
+
+    const total = data.list?.[0]?.count ?? 0;
+    const items = data.data?.[GROUP_ID] ?? [];
+
+    for (const item of items) {
+      let id = '';
+      let priority: Priority = 'P2';
+      let prd = '';
+      let complianceUrl = '';
+
+      for (const f of item.moql_field_list ?? []) {
+        if (f.key === 'work_item_id') {
+          id = String(f.value.long_value ?? '');
+        } else if (f.key === 'priority') {
+          const label = f.value.key_label_value?.label ?? '';
+          if (/^P[0-3]$/.test(label)) priority = label as Priority;
+        } else if (f.key === 'wiki') {
+          prd = f.value.varchar_value ?? '';
+        } else if (f.key === 'field_due3fb') {
+          complianceUrl = f.value.varchar_value ?? '';
+        }
+      }
+
+      if (id) map.set(id, { priority, prd, complianceUrl });
+    }
+
+    if (map.size >= total || items.length === 0) break;
+    page++;
+  }
+
+  return map;
+}
+
+// ─── list_todo types ──────────────────────────────────────────────────────────
 
 interface MeegoTodoItem {
   work_item_info: { work_item_id: number; work_item_type_key: string; work_item_name: string };
   project_key: string;
-  project_name: string;
-  schedule: { start_time: string; end_time: string };
   node_info: { node_name: string; node_state_key: string };
 }
 
@@ -107,45 +181,71 @@ interface MeegoTodoResponse {
   list: MeegoTodoItem[];
 }
 
+// ─── Public API ───────────────────────────────────────────────────────────────
+
 export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
-  const allItems: MeegoTodoItem[] = [];
-  let page = 1;
-  while (true) {
-    let data: MeegoTodoResponse;
-    try {
-      const raw = await callMeegoMcp('list_todo', { action: 'todo', page_num: page });
-      data = JSON.parse(raw) as MeegoTodoResponse;
-    } catch {
-      throw new Error(`Failed to parse Meego list_todo response (page ${page})`);
-    }
-    allItems.push(...(data.list ?? []));
-    if (allItems.length >= data.total) break;
-    page++;
-  }
+  // Fetch todo items and extended fields (priority, PRD, compliance) in parallel
+  const [allItems, extendedFields] = await Promise.all([
+    (async () => {
+      const items: MeegoTodoItem[] = [];
+      let page = 1;
+      while (true) {
+        let data: MeegoTodoResponse;
+        try {
+          const raw = await callMeegoMcp('list_todo', { action: 'todo', page_num: page });
+          data = JSON.parse(raw) as MeegoTodoResponse;
+        } catch {
+          throw new Error(`Failed to parse Meego list_todo response (page ${page})`);
+        }
+        items.push(...(data.list ?? []));
+        if (items.length >= data.total) break;
+        page++;
+      }
+      return items;
+    })(),
+    fetchExtendedFields(),
+  ]);
 
   return allItems
     .filter(item =>
       item.project_key === projectKey &&
       item.work_item_info.work_item_type_key === 'story'
     )
-    .map((item): Feature => ({
-      id: String(item.work_item_info.work_item_id),
-      name: item.work_item_info.work_item_name,
-      description: '',
-      status: translateNode(item.node_info?.node_name ?? 'Unknown'),
-      priority: 'P2',
-      owner: 'Thomas',
-      tasks: [],
-      lastUpdated: new Date().toISOString().split('T')[0],
-      meegoProjectKey: item.project_key,
-      meegoIssueId: String(item.work_item_info.work_item_id),
-      meegoNodeKey: item.node_info?.node_state_key ?? '',
-      meegoUrl: `https://meego.larkoffice.com/${item.project_key}/story/detail/${item.work_item_info.work_item_id}`,
-    }));
+    .map((item): Feature => {
+      const ext = extendedFields.get(String(item.work_item_info.work_item_id));
+      return {
+        id: String(item.work_item_info.work_item_id),
+        name: item.work_item_info.work_item_name,
+        description: '',
+        status: translateNode(item.node_info?.node_name ?? 'Unknown'),
+        priority: ext?.priority ?? 'P2',
+        owner: 'Thomas',
+        tasks: [],
+        lastUpdated: new Date().toISOString().split('T')[0],
+        prd: ext?.prd || undefined,
+        complianceUrl: ext?.complianceUrl || undefined,
+        meegoProjectKey: item.project_key,
+        meegoIssueId: String(item.work_item_info.work_item_id),
+        meegoNodeKey: item.node_info?.node_state_key ?? '',
+        meegoUrl: `https://meego.larkoffice.com/${item.project_key}/story/detail/${item.work_item_info.work_item_id}`,
+      };
+    });
 }
 
-export async function syncFeatureStatus(meegoUrl: string): Promise<{ status: string; name: string; owner: string; meegoNodeKey: string }> {
-  const raw = await callMeegoMcp('get_workitem_brief', { url: meegoUrl });
+export async function syncFeatureStatus(meegoUrl: string): Promise<{
+  status: string;
+  name: string;
+  owner: string;
+  meegoNodeKey: string;
+  prd: string;
+  complianceUrl: string;
+  priority: Priority | null;
+  canCompleteNode: boolean;
+}> {
+  const raw = await callMeegoMcp('get_workitem_brief', {
+    url: meegoUrl,
+    fields: ['wiki', 'priority', 'field_due3fb'],
+  });
 
   const lines = raw.split('\n');
   let workItemName = '';
@@ -162,44 +262,27 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{ status: str
     }
   }
 
+  const prd = parseWorkItemField(raw, 'PRD');
+  const complianceUrl = parseWorkItemField(raw, '合规评估工单链接');
+
+  // Parse priority option name (P0–P3)
+  const priorityRaw = parseWorkItemField(raw, '优先级');
+  const priority: Priority | null = /^P[0-3]$/.test(priorityRaw) ? priorityRaw as Priority : null;
+
   const activeNodes = parseActiveNodes(raw);
   const best = pickNode(activeNodes.map(n => ({ key: n.key, name: n.name })));
+  const bestWithOwners = activeNodes.find(n => n.key === best?.key);
+  const canCompleteNode = bestWithOwners?.owners.includes(MY_EMAIL) ?? false;
 
   return {
     status: best ? translateNode(best.name) : 'Unknown',
     name: workItemName,
     owner,
     meegoNodeKey: best?.key ?? '',
-  };
-}
-
-export async function getNodeInfo(meegoUrl: string): Promise<{
-  nodeKey: string;
-  nodeName: string;
-  canComplete: boolean;
-  prd: string;
-}> {
-  const raw = await callMeegoMcp('get_workitem_brief', { url: meegoUrl, fields: ['wiki'] });
-
-  // Extract PRD link from fields section
-  let prd = '';
-  for (const line of raw.split('\n')) {
-    const match = line.match(/\|\s*PRD\s*\|\s*(https?:\/\/[^\s|]+)/);
-    if (match) { prd = match[1].trim(); break; }
-  }
-
-  const activeNodes = parseActiveNodes(raw);
-  const best = pickNode(activeNodes.map(n => ({ key: n.key, name: n.name })));
-  if (!best) return { nodeKey: '', nodeName: '', canComplete: false, prd };
-
-  const bestWithOwners = activeNodes.find(n => n.key === best.key);
-  const canComplete = bestWithOwners?.owners.includes(MY_EMAIL) ?? false;
-
-  return {
-    nodeKey: best.key,
-    nodeName: translateNode(best.name),
-    canComplete,
     prd,
+    complianceUrl,
+    priority,
+    canCompleteNode,
   };
 }
 
