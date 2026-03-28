@@ -14,7 +14,10 @@ interface Props {
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 mb-3">{title}</h3>
+    <div className="flex items-center gap-3 mb-4">
+      <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 whitespace-nowrap">{title}</h3>
+      <div className="flex-1 h-px bg-[#1e2240]" />
+    </div>
   );
 }
 
@@ -122,10 +125,10 @@ export function FeatureModal({ mode, feature, onClose, onNodeCompleted }: Props)
         </div>
 
         {/* Scrollable body */}
-        <div className="px-6 py-5 flex flex-col gap-6 overflow-y-auto">
+        <div className="px-6 py-5 flex flex-col gap-0 overflow-y-auto divide-y divide-[#1e2240]">
 
           {/* Current Status */}
-          <div>
+          <div className="pb-5">
             <SectionHeader title="Current Status" />
             <InfoField label="Node" value={nodeName} />
             {isMeego && canComplete && (
@@ -154,7 +157,7 @@ export function FeatureModal({ mode, feature, onClose, onNodeCompleted }: Props)
           </div>
 
           {/* Feature Details */}
-          <div>
+          <div className="py-5">
             <SectionHeader title="Feature Details" />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               <InfoField label="Priority"        value={feature?.priority} />
@@ -165,7 +168,7 @@ export function FeatureModal({ mode, feature, onClose, onNodeCompleted }: Props)
           </div>
 
           {/* POC Details */}
-          <div>
+          <div className="pt-5">
             <SectionHeader title="POC Details" />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               <InfoField label="Tech Owner"       value={feature?.techOwner} />
