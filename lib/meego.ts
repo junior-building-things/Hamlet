@@ -96,7 +96,7 @@ interface MeegoTodoResponse {
 
 export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
   const raw = await callMeegoMcp('list_todo', {
-    project_key: projectKey,
+    // No project_key filter — list_todo returns all; we filter below
     work_item_type_key: 'story',
     action_type: 'created',
   });
@@ -108,7 +108,13 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
     throw new Error('Failed to parse Meego list_todo response');
   }
 
-  return (data.list ?? []).map((item): Feature => {
+  return (data.list ?? [])
+    // Only TikTok stories (exclude IC to C and any bug issues)
+    .filter(item =>
+      item.project_key === projectKey &&
+      item.work_item_info.work_item_type_key === 'story'
+    )
+    .map((item): Feature => {
     const status = mapMeegoStatus(item.node_info?.node_name ?? '', '');
     return {
       id: String(item.work_item_info.work_item_id),
@@ -116,7 +122,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       description: '',
       status,
       priority: 'Medium',
-      owner: '',
+      owner: 'Thomas',
       tasks: [],
       lastUpdated: new Date().toISOString().split('T')[0],
       meegoProjectKey: item.project_key,
