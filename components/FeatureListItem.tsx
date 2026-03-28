@@ -53,7 +53,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
       </div>
 
       {/* Desktop layout */}
-      <div className="hidden sm:grid grid-cols-[2fr_auto_auto_1fr_1fr] gap-4 items-center">
+      <div className="hidden sm:grid grid-cols-[2fr_auto_auto_auto_1fr] gap-4 items-center">
         <button
           onClick={() => onEdit(feature)}
           className="w-full min-w-0 text-white text-sm font-semibold truncate text-left hover:text-purple-300 transition-colors cursor-pointer"
@@ -62,7 +62,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
         </button>
         <StatusBadge status={feature.status} />
         <PriorityBadge priority={feature.priority} />
-        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-3 whitespace-nowrap">
           {feature.meegoUrl && (
             <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="text-xs text-purple-400 hover:text-purple-300 transition-colors whitespace-nowrap">
               Meego ↗
