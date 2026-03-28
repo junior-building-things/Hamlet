@@ -24,26 +24,87 @@ export default function Home() {
   const [editingFeature, setEditing]      = useState<Feature | undefined>(undefined);
   const [syncingId, setSyncingId]         = useState<string | null>(null);
   const [syncingAll, setSyncingAll]       = useState(false);
+  const [detailSyncCount, setDetailSyncCount] = useState(0);
+  const [detailSyncTotal, setDetailSyncTotal] = useState(0);
 
-  // Load from localStorage if non-empty, otherwise always fetch from Meego
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as Feature[];
-        if (parsed.length > 0) {
-          setFeatures(parsed);
-          setHydrated(true);
-          setLoading(false);
-          return;
-        }
-      } catch { /* fall through */ }
+  // Background-sync full details (status, PRD, compliance, priority) for all features
+  // in parallel batches of 5 so the UI populates immediately after load.
+  const syncAllDetails = useCallback(async (featureList: Feature[]) => {
+    const withUrl = featureList.filter(f => f.meegoUrl);
+    if (withUrl.length === 0) return;
+    setDetailSyncTotal(withUrl.length);
+    setDetailSyncCount(0);
+
+    const BATCH = 5;
+    for (let i = 0; i < withUrl.length; i += BATCH) {
+      const batch = withUrl.slice(i, i + BATCH);
+      await Promise.all(batch.map(async (feature) => {
+        try {
+          const res = await fetch('/api/meego/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ meegoUrl: feature.meegoUrl }),
+          });
+          if (!res.ok) return;
+          const data = await res.json() as {
+            status: string; name: string; owner: string;
+            meegoNodeKey: string; prd: string; complianceUrl: string;
+            priority: string | null; canCompleteNode: boolean;
+          };
+          setFeatures(prev => prev.map(f =>
+            f.id === feature.id
+              ? {
+                  ...f,
+                  status:          data.status                || f.status,
+                  name:            data.name                  || f.name,
+                  owner:           data.owner                 || f.owner,
+                  meegoNodeKey:    data.meegoNodeKey          || f.meegoNodeKey,
+                  prd:             data.prd                   || f.prd,
+                  complianceUrl:   data.complianceUrl         || f.complianceUrl,
+                  priority:        (data.priority as Priority) ?? f.priority,
+                  canCompleteNode: data.canCompleteNode,
+                  lastUpdated:     new Date().toISOString().split('T')[0],
+                }
+              : f
+          ));
+        } catch { /* silently ignore per-card errors */ }
+        setDetailSyncCount(c => c + 1);
+      }));
     }
-    // No cached data — fetch from Meego
-    fetchFromMeego().finally(() => {
+
+    setDetailSyncTotal(0);
+    setDetailSyncCount(0);
+  }, []);
+
+  // Load features then block until all detail syncs are complete,
+  // so features never appear with stale/missing status.
+  useEffect(() => {
+    async function init() {
+      let featureList: Feature[] | null = null;
+
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as Feature[];
+          if (parsed.length > 0) {
+            featureList = parsed;
+            setFeatures(parsed);
+          }
+        } catch { /* fall through */ }
+      }
+
+      if (!featureList) {
+        featureList = await fetchFromMeego();
+      }
+
+      if (featureList) {
+        await syncAllDetails(featureList);
+      }
+
       setHydrated(true);
       setLoading(false);
-    });
+    }
+    init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -56,7 +117,7 @@ export default function Home() {
 
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  async function fetchFromMeego() {
+  async function fetchFromMeego(): Promise<Feature[] | null> {
     setFetchError(null);
     try {
       const res = await fetch('/api/meego/features');
@@ -64,13 +125,16 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       if (data.features && data.features.length > 0) {
         setFeatures(data.features);
+        return data.features;
       } else {
         setFetchError('No features returned from Meego');
+        return null;
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       console.error('Meego fetch error:', msg);
       setFetchError(msg);
+      return null;
     }
   }
 
@@ -114,8 +178,9 @@ export default function Home() {
 
   async function syncAll() {
     setSyncingAll(true);
-    await fetchFromMeego();
+    const featureList = await fetchFromMeego();
     setSyncingAll(false);
+    if (featureList) syncAllDetails(featureList);
   }
 
   const uniqueStatuses = useMemo(() =>
@@ -189,7 +254,11 @@ export default function Home() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
               <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
-              <p className="text-sm">Loading features from Meego…</p>
+              <p className="text-sm">
+                {detailSyncTotal > 0
+                  ? `Syncing details… ${detailSyncCount}/${detailSyncTotal}`
+                  : 'Loading features from Meego…'}
+              </p>
             </div>
           ) : fetchError ? (
             <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
