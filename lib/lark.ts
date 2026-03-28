@@ -2,6 +2,15 @@ const LARK_BASE_URL    = process.env.LARK_BASE_URL ?? 'https://open.larksuite.co
 const WIKI_NODE_TOKEN  = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
 const OWNER_EMAIL      = 'thomas.oefverstroem@bytedance.com';
 
+async function parseJson(res: Response, label: string): Promise<unknown> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${label} returned non-JSON (${res.status}): ${text.slice(0, 200)}`);
+  }
+}
+
 // ─── Token cache ──────────────────────────────────────────────────────────────
 
 let cachedToken    = '';
@@ -19,7 +28,7 @@ async function getAccessToken(): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ app_id: appId, app_secret: appSecret }),
   });
-  const data = await res.json() as { code: number; msg?: string; tenant_access_token?: string; expire?: number };
+  const data = await parseJson(res, 'auth') as { code: number; msg?: string; tenant_access_token?: string; expire?: number };
   if (data.code !== 0) throw new Error(`Lark auth error ${data.code}: ${data.msg}`);
 
   cachedToken    = data.tenant_access_token!;
@@ -39,7 +48,7 @@ async function getRootFolderToken(accessToken: string): Promise<string> {
   const res  = await fetch(`${LARK_BASE_URL}/open-apis/drive/explorer/v2/root_folder/meta`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  const data = await res.json() as { code: number; msg?: string; data?: { token: string } };
+  const data = await parseJson(res, 'root_folder') as { code: number; msg?: string; data?: { token: string } };
   if (data.code !== 0) throw new Error(`Lark root folder error ${data.code}: ${data.msg}`);
 
   cachedRootFolder    = data.data!.token;
@@ -59,7 +68,7 @@ async function getWikiObjToken(accessToken: string): Promise<string> {
   const res  = await fetch(`${LARK_BASE_URL}/open-apis/wiki/v2/nodes?token=${WIKI_NODE_TOKEN}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  const data = await res.json() as {
+  const data = await parseJson(res, 'wiki_node') as {
     code: number; msg?: string;
     data?: { node?: { obj_token?: string } };
   };
@@ -91,7 +100,7 @@ export async function copyPrdTemplate(featureName: string): Promise<string> {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body:    JSON.stringify({ name: featureName, type: 'docx', folder_token: folderToken }),
   });
-  const data = await res.json() as {
+  const data = await parseJson(res, 'drive_copy') as {
     code: number; msg?: string;
     data?: { file?: { token?: string; url?: string } };
   };
