@@ -117,9 +117,8 @@ function FormLabel({ children, required }: { children: React.ReactNode; required
   );
 }
 
-const inputCls = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500 placeholder-gray-600';
+const inputCls  = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500 placeholder-gray-600';
 const selectCls = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500';
-const lockedCls = 'w-full bg-[#0e1120] border border-[#1e2240] text-gray-500 text-sm rounded-lg px-3 py-2 cursor-not-allowed';
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -133,10 +132,10 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
   // ── Add-mode state ──
   const [form, setForm] = useState({
     name:            '',
-    priority:        '2',          // P2 default
+    priority:        '1',          // P1 default
     quarterlyCycle:  '5350il55y',  // 2026-Q2 default
-    businessLine:    '',
-    socialComponent: '',
+    businessLine:    '2hj6rn3ao',  // Social Messaging default
+    socialComponent: 'mz8vxxems', // Sticker & Typing Rec default
     techOwner:       '',
     android:         '',
     ios:             '',
@@ -343,15 +342,21 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted }
               <div className="grid grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>DA</FormLabel>
-                  <div className={lockedCls}>{PRESET.da.name}</div>
+                  <select className={selectCls} defaultValue={PRESET.da.key}>
+                    <option value={PRESET.da.key}>{PRESET.da.name}</option>
+                  </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>Content Designer</FormLabel>
-                  <div className={lockedCls}>{PRESET.contentDesigner.name}</div>
+                  <select className={selectCls} defaultValue={PRESET.contentDesigner.key}>
+                    <option value={PRESET.contentDesigner.key}>{PRESET.contentDesigner.name}</option>
+                  </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>QA</FormLabel>
-                  <div className={lockedCls}>{PRESET.qa.name}</div>
+                  <select className={selectCls} defaultValue={PRESET.qa.key}>
+                    <option value={PRESET.qa.key}>{PRESET.qa.name}</option>
+                  </select>
                 </div>
               </div>
 
