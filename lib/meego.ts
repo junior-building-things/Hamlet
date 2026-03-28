@@ -21,12 +21,17 @@ const NODE_TRANSLATIONS: Record<string, string> = {
   '产品线内初评':  'Initial Review',
   '技术评估&排优': 'Tech Assessment',
   '需求详评':     'Detailed Review',
+  '需求评审':     'Requirements Review',
   '技术方案设计':  'Technical Design',
   'iOS 开发':     'iOS Development',
   'UI&UX验收':    'UI/UX Acceptance',
   'Server上线':   'Server Launch',
   'AB实验':       'AB Testing',
   '结束':         'Done',
+  'PM验收':       'PM Acceptance',
+  'PM走查':       'PM Walkthrough',
+  '依赖判断':     'Dependency Check',
+  '合规评估':     'Compliance Review',
 };
 
 export function translateNode(node: string): string {
