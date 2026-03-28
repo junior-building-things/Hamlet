@@ -14,9 +14,8 @@ interface Props {
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <div className="flex items-center gap-3 mb-4">
-      <h3 className="text-xs font-bold tracking-wide text-gray-400 whitespace-nowrap">{title}</h3>
-      <div className="flex-1 h-px bg-[#1e2240]" />
+    <div className="mb-4">
+      <h3 className="text-xs font-bold tracking-wide text-gray-400">{title}</h3>
     </div>
   );
 }
