@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
 import { AV } from '@/lib/avatars';
@@ -35,51 +35,17 @@ function buildPocs(feature: Feature): Poc[] {
   return pocs;
 }
 
-// ─── Ring-wrapped avatar ───────────────────────────────────────────────────────
+// ─── Portal tooltip shared by every avatar/bubble ─────────────────────────────
 
-function RingAvatar({ poc, ringColor = '#13162a' }: { poc: Poc; ringColor?: string }) {
-  return (
-    <div
-      className="rounded-full"
-      style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
-      title={`${poc.name} · ${poc.role}`}
-    >
-      <UserAvatar name={poc.name} url={poc.url} size={6} />
-    </div>
-  );
-}
+interface TooltipPos { top: number; left: number }
 
-// ─── "+N" overflow bubble — dropdown rendered in a portal so it floats above
-//     every list row regardless of their stacking contexts.
-
-interface BubblePos { top: number; left: number }
-
-function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColor?: string }) {
-  const [open,    setOpen]    = useState(false);
-  const [pos,     setPos]     = useState<BubblePos>({ top: 0, left: 0 });
-  const bubbleRef             = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
-
-  // Ensure we only use createPortal after hydration
-  useEffect(() => { setMounted(true); }, []);
-
-  function handleMouseEnter() {
-    if (bubbleRef.current) {
-      const r = bubbleRef.current.getBoundingClientRect();
-      setPos({
-        // anchor to the top of the bubble; dropdown grows upward via transform
-        top:  r.top,
-        left: r.left + r.width / 2,
-      });
-    }
-    setOpen(true);
-  }
-
-  const dropdown = open && mounted ? createPortal(
+function PocTooltip({ pocs, pos, mounted }: { pocs: Poc[]; pos: TooltipPos; mounted: boolean }) {
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed bg-[#0e1120] border border-[#1e2240] rounded-xl shadow-2xl py-2 px-3 min-w-[160px] pointer-events-none"
       style={{
-        top:       pos.top - 8,          // 8px gap above the bubble
+        top:       pos.top - 8,
         left:      pos.left,
         zIndex:    9999,
         transform: 'translateX(-50%) translateY(-100%)',
@@ -92,7 +58,7 @@ function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColo
                    border-l-transparent border-r-transparent border-t-[#1e2240]"
       />
       <div className="flex flex-col gap-1.5">
-        {rest.map(poc => (
+        {pocs.map(poc => (
           <div key={poc.name} className="flex items-center gap-2">
             <UserAvatar name={poc.name} url={poc.url} size={5} />
             <div className="min-w-0">
@@ -104,14 +70,62 @@ function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColo
       </div>
     </div>,
     document.body,
-  ) : null;
+  );
+}
+
+// ─── Shared hover-position hook ───────────────────────────────────────────────
+
+function useHoverTooltip() {
+  const [open,    setOpen]    = useState(false);
+  const [pos,     setPos]     = useState<TooltipPos>({ top: 0, left: 0 });
+  const [mounted, setMounted] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const onEnter = useCallback(() => {
+    if (ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      setPos({ top: r.top, left: r.left + r.width / 2 });
+    }
+    setOpen(true);
+  }, []);
+
+  const onLeave = useCallback(() => setOpen(false), []);
+
+  return { open, pos, mounted, ref, onEnter, onLeave };
+}
+
+// ─── Single avatar with hover tooltip ────────────────────────────────────────
+
+function RingAvatar({ poc, ringColor = '#13162a' }: { poc: Poc; ringColor?: string }) {
+  const { open, pos, mounted, ref, onEnter, onLeave } = useHoverTooltip();
 
   return (
     <div
-      ref={bubbleRef}
+      ref={ref}
+      className="rounded-full cursor-default"
+      style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+    >
+      <UserAvatar name={poc.name} url={poc.url} size={6} />
+      {open && <PocTooltip pocs={[poc]} pos={pos} mounted={mounted} />}
+    </div>
+  );
+}
+
+// ─── "+N" overflow bubble with hover tooltip ──────────────────────────────────
+
+function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColor?: string }) {
+  const { open, pos, mounted, ref, onEnter, onLeave } = useHoverTooltip();
+
+  return (
+    <div
+      ref={ref}
       style={{ marginLeft: '-5px', zIndex: 1 }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
     >
       <div
         className="w-6 h-6 rounded-full bg-[#1e2240] flex items-center justify-center text-[9px] font-semibold text-gray-300 cursor-default select-none"
@@ -119,8 +133,7 @@ function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColo
       >
         +{rest.length}
       </div>
-
-      {dropdown}
+      {open && <PocTooltip pocs={rest} pos={pos} mounted={mounted} />}
     </div>
   );
 }
