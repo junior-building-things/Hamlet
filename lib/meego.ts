@@ -139,6 +139,7 @@ function parseRoleMember(raw: string, roleName: string): string {
 interface MqlFieldValue {
   long_value?: number;
   varchar_value?: string;
+  string_value?: string;
   key_label_value?: { key: string; label: string };
 }
 
@@ -195,8 +196,14 @@ async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; 
         } else if (f.key === 'field_due3fb') {
           complianceUrl = f.value.varchar_value ?? '';
         } else if (f.key === 'updated_at') {
-          const ts = f.value.long_value;
-          if (ts) lastUpdated = new Date(ts).toISOString().split('T')[0];
+          const sv = f.value.string_value ?? f.value.varchar_value;
+          if (sv) {
+            const m = sv.match(/(\d{4}-\d{2}-\d{2})/);
+            if (m) lastUpdated = m[1];
+          } else {
+            const ts = f.value.long_value;
+            if (ts) lastUpdated = new Date(ts).toISOString().split('T')[0];
+          }
         }
       }
 
