@@ -1,14 +1,33 @@
 'use client';
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Feature, Priority } from '@/lib/types';
-import { FilterBar } from '@/components/FilterBar';
+import { FilterBar, GroupBy, SortBy, SortDir } from '@/components/FilterBar';
 import { FeatureCard } from '@/components/FeatureCard';
 import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
 import { Loader2, RefreshCw } from 'lucide-react';
 
-const STORAGE_KEY = 'hamlet_features_v1';
+const STORAGE_KEY      = 'hamlet_features_v1';
+const STORAGE_GROUP_BY = 'hamlet_group_by';
+const STORAGE_SORT_BY  = 'hamlet_sort_by';
+const STORAGE_SORT_DIR = 'hamlet_sort_dir';
+
+const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
+
+// ─── Group header row (spans all 6 list columns) ──────────────────────────────
+
+function GroupHeader({ label, count, first }: { label: string; count: number; first: boolean }) {
+  return (
+    <div className={`sm:col-span-full flex items-center gap-2.5 px-1 ${first ? 'mt-2' : 'mt-5'}`}>
+      <span className="text-xs font-semibold text-gray-300 tracking-wide">{label || '—'}</span>
+      <span className="text-xs text-gray-600">{count}</span>
+      <div className="flex-1 h-px bg-[#1e2240]" />
+    </div>
+  );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
   features: Feature[];
@@ -28,6 +47,29 @@ export function ProjectView({ features, setFeatures }: Props) {
   const [detailSyncTotal, setDetailSyncTotal] = useState(0);
   const [modalMode,      setModalMode]      = useState<'edit' | null>(null);
   const [editingFeature, setEditing]        = useState<Feature | undefined>();
+
+  // ── Persisted group + sort preferences ───────────────────────────────────
+
+  const [groupBy, setGroupByState] = useState<GroupBy>(() => {
+    if (typeof window === 'undefined') return 'none';
+    return (localStorage.getItem(STORAGE_GROUP_BY) as GroupBy) || 'none';
+  });
+  const [sortBy, setSortByState] = useState<SortBy>(() => {
+    if (typeof window === 'undefined') return 'none';
+    return (localStorage.getItem(STORAGE_SORT_BY) as SortBy) || 'none';
+  });
+  const [sortDir, setSortDirState] = useState<SortDir>(() => {
+    if (typeof window === 'undefined') return 'asc';
+    return (localStorage.getItem(STORAGE_SORT_DIR) as SortDir) || 'asc';
+  });
+
+  function setGroupBy(v: GroupBy)  { setGroupByState(v);  localStorage.setItem(STORAGE_GROUP_BY, v); }
+  function setSortBy(v: SortBy)    { setSortByState(v);   localStorage.setItem(STORAGE_SORT_BY, v); }
+  function toggleSortDir() {
+    const next: SortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    setSortDirState(next);
+    localStorage.setItem(STORAGE_SORT_DIR, next);
+  }
 
   // ── Detail sync ────────────────────────────────────────────────────────────
 
@@ -121,7 +163,6 @@ export function ProjectView({ features, setFeatures }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist to localStorage whenever features change
   useEffect(() => {
     if (features.length > 0) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(features)); } catch { /* ignore */ }
@@ -176,8 +217,6 @@ export function ProjectView({ features, setFeatures }: Props) {
     if (list) syncAllDetails(list);
   }
 
-  // ── Node completion callback ───────────────────────────────────────────────
-
   function handleNodeCompleted(featureId: string) {
     const f = features.find(x => x.id === featureId);
     if (f) syncOne(f);
@@ -188,7 +227,7 @@ export function ProjectView({ features, setFeatures }: Props) {
     else         setFeatures(prev => prev.filter(f => f.id !== tempId));
   }
 
-  // ── Filters ────────────────────────────────────────────────────────────────
+  // ── Filter ─────────────────────────────────────────────────────────────────
 
   const uniqueStatuses = useMemo(
     () => [...new Set(features.map(f => f.status).filter(Boolean))].sort(),
@@ -204,7 +243,63 @@ export function ProjectView({ features, setFeatures }: Props) {
     );
   }), [features, search, statusFilter, priorityFilter]);
 
+  // ── Sort ───────────────────────────────────────────────────────────────────
+
+  const sorted = useMemo(() => {
+    if (sortBy === 'none') return filtered;
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === 'priority') {
+        cmp = (PRIORITY_ORDER[a.priority] ?? 99) - (PRIORITY_ORDER[b.priority] ?? 99);
+      } else if (sortBy === 'status') {
+        cmp = (a.status ?? '').localeCompare(b.status ?? '');
+      } else if (sortBy === 'lastUpdated') {
+        cmp = new Date(a.lastUpdated).getTime() - new Date(b.lastUpdated).getTime();
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filtered, sortBy, sortDir]);
+
+  // ── Group ──────────────────────────────────────────────────────────────────
+
+  type FeatureGroup = { key: string; label: string; items: Feature[] };
+
+  const groups = useMemo((): FeatureGroup[] | null => {
+    if (groupBy === 'none') return null;
+
+    const buckets = new Map<string, Feature[]>();
+    for (const f of sorted) {
+      let key = '';
+      if      (groupBy === 'priority')        key = f.priority        ?? '';
+      else if (groupBy === 'status')          key = f.status          ?? '';
+      else if (groupBy === 'businessLine')    key = f.businessLine    ?? '';
+      else if (groupBy === 'socialComponent') key = f.socialComponent ?? '';
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key)!.push(f);
+    }
+
+    const keys = [...buckets.keys()].sort((a, b) => {
+      if (!a) return 1;   // empty/unknown always last
+      if (!b) return -1;
+      if (groupBy === 'priority') {
+        return (PRIORITY_ORDER[a] ?? 99) - (PRIORITY_ORDER[b] ?? 99);
+      }
+      return a.localeCompare(b);
+    });
+
+    return keys.map(key => ({ key, label: key || '—', items: buckets.get(key)! }));
+  }, [sorted, groupBy]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[2fr_auto_auto_220px_auto_1fr] sm:gap-x-4 sm:gap-y-2';
+
+  function renderListRows(items: Feature[]) {
+    return items.map(f => (
+      <FeatureListItem key={f.id} feature={f} syncing={syncingId === f.id}
+        onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne} />
+    ));
+  }
 
   return (
     <div className="min-h-screen">
@@ -222,27 +317,20 @@ export function ProjectView({ features, setFeatures }: Props) {
           disabled={syncingAll}
           className="flex items-center gap-2 px-4 py-2 bg-[#1e2240] hover:bg-[#252a4a] text-gray-300 hover:text-white text-sm rounded-xl transition-colors disabled:opacity-50"
         >
-          {syncingAll
-            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            : <RefreshCw className="w-3.5 h-3.5" />
-          }
+          {syncingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           Sync All
         </button>
       </div>
 
-      {/* FilterBar has its own px-6 internally */}
       <FilterBar
-        search={search}
-        statusFilter={statusFilter}
-        statuses={uniqueStatuses}
-        priorityFilter={priorityFilter}
-        view={view}
-        onSearchChange={setSearch}
-        onStatusChange={setStatusFilter}
-        onPriorityChange={setPriority}
-        onViewChange={setView}
-        onAddFeature={() => { /* handled by sidebar */ }}
-        hideAddButton
+        search={search} statusFilter={statusFilter} statuses={uniqueStatuses}
+        priorityFilter={priorityFilter} view={view}
+        onSearchChange={setSearch} onStatusChange={setStatusFilter}
+        onPriorityChange={setPriority} onViewChange={setView}
+        onAddFeature={() => {}} hideAddButton
+        groupBy={groupBy}  onGroupByChange={setGroupBy}
+        sortBy={sortBy}    onSortByChange={setSortBy}
+        sortDir={sortDir}  onSortDirToggle={toggleSortDir}
       />
 
       <div className="px-6 pb-16 mt-4">
@@ -254,37 +342,38 @@ export function ProjectView({ features, setFeatures }: Props) {
         ) : fetchError ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <p className="text-sm text-red-400">Failed to load: {fetchError}</p>
-            <button
-              onClick={() => { setLoading(true); fetchFromMeego().finally(() => setLoading(false)); }}
-              className="text-xs text-purple-400 hover:text-purple-300 underline"
-            >
-              Retry
-            </button>
+            <button onClick={() => { setLoading(true); fetchFromMeego().finally(() => setLoading(false)); }}
+              className="text-xs text-purple-400 hover:text-purple-300 underline">Retry</button>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-2 text-gray-500">
             <p className="text-sm">No features match your filters.</p>
-            <button
-              onClick={() => { setSearch(''); setStatusFilter('All'); setPriority('All'); }}
-              className="text-xs text-purple-400 hover:text-purple-300 underline"
-            >
-              Clear filters
-            </button>
+            <button onClick={() => { setSearch(''); setStatusFilter('All'); setPriority('All'); }}
+              className="text-xs text-purple-400 hover:text-purple-300 underline">Clear filters</button>
           </div>
         ) : view === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {filtered.map(f => (
+            {sorted.map(f => (
               <FeatureCard key={f.id} feature={f} syncing={syncingId === f.id}
                 onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne} />
             ))}
           </div>
-        ) : (
-          <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[2fr_auto_auto_220px_auto_1fr] sm:gap-x-4 sm:gap-y-2">
+        ) : groups ? (
+          // ── Grouped list view ──────────────────────────────────────────────
+          <div className={listGridCls}>
             <FeatureListHeader />
-            {filtered.map(f => (
-              <FeatureListItem key={f.id} feature={f} syncing={syncingId === f.id}
-                onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne} />
+            {groups.map((group, gi) => (
+              <React.Fragment key={group.key}>
+                <GroupHeader label={group.label} count={group.items.length} first={gi === 0} />
+                {renderListRows(group.items)}
+              </React.Fragment>
             ))}
+          </div>
+        ) : (
+          // ── Plain list view ────────────────────────────────────────────────
+          <div className={listGridCls}>
+            <FeatureListHeader />
+            {renderListRows(sorted)}
           </div>
         )}
 

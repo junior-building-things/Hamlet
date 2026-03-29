@@ -4,7 +4,7 @@ import { Send, Loader2 } from 'lucide-react';
 import type { Feature } from '@/lib/types';
 
 interface Link { label: string; url: string }
-interface Msg { role: 'user' | 'assistant'; content: string; links?: Link[] }
+interface Msg { role: 'user' | 'assistant'; content: string; links?: Link[]; isWelcome?: boolean }
 interface ChatResponse {
   reply: string;
   action?: string;
@@ -16,6 +16,7 @@ interface ChatResponse {
 
 const WELCOME_MSG: Msg = {
   role: 'assistant',
+  isWelcome: true,
   content:
     "I'm Hamlet, your helpful PM assistant. I can help you create features, edit PRDs, or update workflow nodes. How can I assist you with your project today?",
 };
@@ -25,20 +26,21 @@ interface Props {
 }
 
 export function ChatView({ onFeatureCreated }: Props) {
-  const [messages, setMessages]     = useState<Msg[]>([]);
+  // Seed with welcome so it's always the first message in the list
+  const [messages, setMessages]     = useState<Msg[]>([WELCOME_MSG]);
   const [input, setInput]           = useState('');
   const [loading, setLoading]       = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const containerRef                = useRef<HTMLDivElement>(null);
   const textareaRef                 = useRef<HTMLTextAreaElement>(null);
 
-  // Load server-side history on mount
+  // Load server-side history on mount; prepend welcome in front of any history
   useEffect(() => {
     fetch('/api/chat/history')
       .then(r => r.json())
       .then((data: { messages?: Msg[] }) => {
         if (data.messages && data.messages.length > 0) {
-          setMessages(data.messages);
+          setMessages([WELCOME_MSG, ...data.messages]);
         }
         setHistoryLoaded(true);
       })
@@ -65,8 +67,8 @@ export function ChatView({ onFeatureCreated }: Props) {
     const text = input.trim();
     if (!text || loading) return;
 
-    // Snapshot of non-welcome messages for context
-    const snapshot = messages;
+    // Exclude the welcome message from the context snapshot sent to the API
+    const snapshot = messages.filter(m => !m.isWelcome);
 
     const userMsg: Msg = { role: 'user', content: text };
     setMessages(prev => [...prev, userMsg]);
@@ -127,11 +129,6 @@ export function ChatView({ onFeatureCreated }: Props) {
     }
   }
 
-  // Show welcome message only when history is loaded and empty
-  const displayMessages = historyLoaded && messages.length === 0
-    ? [WELCOME_MSG]
-    : messages;
-
   return (
     <div className="flex flex-col" style={{ height: '100vh' }}>
 
@@ -157,7 +154,7 @@ export function ChatView({ onFeatureCreated }: Props) {
               <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
             </div>
           ) : (
-            displayMessages.map((msg, i) => (
+            messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                   msg.role === 'user'
