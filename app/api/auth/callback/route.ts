@@ -21,38 +21,43 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=invalid_state`);
   }
 
-  // Exchange code for user access token
-  const tokenRes = await fetch(`${base}/open-apis/authen/v1/oidc/access_token`, {
+  // Step 1: get app_access_token
+  const appTokenRes  = await fetch(`${base}/open-apis/auth/v3/app_access_token/internal`, {
     method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Basic ${Buffer.from(`${appId}:${secret}`).toString('base64')}`,
-    },
-    body: JSON.stringify({ grant_type: 'authorization_code', code }),
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ app_id: appId, app_secret: secret }),
   });
-
-  const tokenRaw = await tokenRes.text();
-  console.log('Lark token response status:', tokenRes.status);
-  console.log('Lark token response body:', tokenRaw);
-
-  if (!tokenRes.ok) {
+  const appTokenData = await appTokenRes.json() as { code: number; app_access_token?: string; msg?: string };
+  console.log('app_access_token response:', appTokenData);
+  if (appTokenData.code !== 0 || !appTokenData.app_access_token) {
+    console.error('Failed to get app_access_token:', appTokenData);
     return NextResponse.redirect(`${origin}/login?error=token_exchange`);
   }
 
-  let tokenData: Record<string, unknown>;
-  try {
-    tokenData = JSON.parse(tokenRaw) as Record<string, unknown>;
-  } catch {
-    console.error('Lark token response is not JSON:', tokenRaw);
-    return NextResponse.redirect(`${origin}/login?error=no_token`);
-  }
+  // Step 2: exchange code for user access token (classic endpoint, not OIDC)
+  const tokenRes = await fetch(`${base}/open-apis/authen/v1/access_token`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      app_access_token: appTokenData.app_access_token,
+      grant_type:       'authorization_code',
+      code,
+    }),
+  });
+  const tokenRaw = await tokenRes.text();
+  console.log('user token response status:', tokenRes.status);
+  console.log('user token response body:', tokenRaw);
 
-  const accessToken =
-    (tokenData.access_token as string | undefined) ??
-    ((tokenData.data as Record<string, unknown> | undefined)?.access_token as string | undefined);
+  let tokenData: Record<string, unknown>;
+  try { tokenData = JSON.parse(tokenRaw) as Record<string, unknown>; }
+  catch { return NextResponse.redirect(`${origin}/login?error=no_token`); }
+
+  // Classic endpoint nests under data
+  const inner      = (tokenData.data as Record<string, unknown> | undefined) ?? tokenData;
+  const accessToken = inner.access_token as string | undefined;
 
   if (!accessToken) {
-    console.error('No access token in Lark response:', tokenData);
+    console.error('No access token in response:', tokenData);
     return NextResponse.redirect(`${origin}/login?error=no_token`);
   }
 
