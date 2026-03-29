@@ -18,6 +18,7 @@ export interface Feature {
   tasks: Task[];
   lastUpdated: string;
   prd?: string;
+  figmaUrl?: string;
   complianceUrl?: string;
   canCompleteNode?: boolean;
   // Meego integration

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
 import { copyPrdTemplate } from '@/lib/lark';
 import type { Feature } from '@/lib/types';
@@ -93,6 +94,55 @@ export async function POST(req: NextRequest) {
         reply: `The PRD for "${name}" is ready!`,
         links: [{ label: '📄 PRD', url: prd }],
       });
+    }
+
+    // ── Query Meego ───────────────────────────────────────────────────────────
+    if (action === 'query_meego' && (params.featureName || params.featureId) && params.query) {
+      let workItemId = params.featureId;
+      if (!workItemId && params.featureName) {
+        const features = await fetchUserStories(PROJECT_KEY);
+        const term     = params.featureName.toLowerCase();
+        const match    = features.find(f =>
+          f.name.toLowerCase().includes(term) || term.includes(f.name.toLowerCase())
+        );
+        if (!match) {
+          // fallback: try MQL search
+          try {
+            const mqlResult = await callMeego('search_by_mql', {
+              project_key: PROJECT_KEY,
+              mql: `name contains "${params.featureName}"`,
+              page_size: 5,
+            });
+            // parse first workitem id from result
+            const idMatch = mqlResult.match(/work_item_id[^\d]*(\d+)/i) ?? mqlResult.match(/\b(\d{6,})\b/);
+            if (idMatch) {
+              workItemId = idMatch[1];
+            }
+          } catch { /* ignore */ }
+        } else {
+          workItemId = match.id;
+        }
+      }
+      if (!workItemId) {
+        return NextResponse.json({ reply: `I couldn't find a feature matching "${params.featureName}" in Meego. Could you double-check the name or share the Meego ID?` });
+      }
+
+      const brief = await callMeego('get_workitem_brief', { project_key: PROJECT_KEY, work_item_id: workItemId });
+
+      // Use Gemini to answer the user's question from the raw brief
+      const apiKey = process.env.GOOGLE_AI_API_KEY;
+      if (!apiKey) throw new Error('GOOGLE_AI_API_KEY not set');
+      const genAI  = new GoogleGenerativeAI(apiKey);
+      const model  = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+      const prompt = `You are Hamlet, a helpful PM assistant. Below is the raw Meego work item brief for a feature. Answer the user's question concisely and naturally based only on the information in the brief. If the answer is not present in the brief, say so honestly.
+
+User's question: ${params.query}
+
+Meego brief:
+${brief}`;
+      const result  = await model.generateContent(prompt);
+      const answer  = result.response.text().trim();
+      return NextResponse.json({ reply: answer });
     }
 
     // ── Complete Node ─────────────────────────────────────────────────────────

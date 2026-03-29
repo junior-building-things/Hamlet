@@ -3,7 +3,7 @@ import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
 import { TeamAvatars } from './TeamAvatars';
-import { RefreshCw, Calendar, ExternalLink } from 'lucide-react';
+import { RefreshCw, Calendar, ExternalLink, Figma } from 'lucide-react';
 
 interface Props {
   feature: Feature;
@@ -52,6 +52,11 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
               Compliance <ExternalLink className="w-3 h-3" />
             </a>
           )}
+          {feature.figmaUrl && (
+            <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
+              Figma <Figma className="w-3 h-3" />
+            </a>
+          )}
         </div>
       </div>
 
@@ -85,6 +90,11 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
         {feature.complianceUrl && (
           <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
             Compliance <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
+        {feature.figmaUrl && (
+          <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
+            Figma <Figma className="w-3 h-3" />
           </a>
         )}
       </div>

@@ -17,10 +17,45 @@ const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
 
 // ─── Group header row (spans all 6 list columns) ──────────────────────────────
 
-function GroupHeader({ label, count, first }: { label: string; count: number; first: boolean }) {
+function priorityChipCls(key: string): string {
+  switch (key) {
+    case 'P0': return 'bg-red-900/50 border border-red-700 text-red-400';
+    case 'P1': return 'bg-orange-900/50 border border-orange-700 text-orange-400';
+    case 'P2': return 'bg-blue-900/50 border border-blue-700 text-blue-400';
+    case 'P3': return 'bg-gray-800 border border-gray-700 text-gray-400';
+    default:   return 'bg-[#1e2240] border border-[#2e3460] text-gray-400';
+  }
+}
+
+function statusChipCls(key: string): string {
+  const s = key.toLowerCase();
+  if (s.includes('上线') || s.includes('launch') || s.includes('灰度') || s.includes('已发布') || s.includes('已完成') || s.includes('验收'))
+    return 'bg-[#0d2b1f] border border-emerald-900 text-emerald-400';
+  if (s.includes('ab') || s.includes('测试') || s.includes('testing'))
+    return 'bg-[#1e2240] border border-yellow-900/50 text-yellow-300';
+  if (s.includes('开发') || s.includes('dev') || s.includes('coding') || s.includes('impl'))
+    return 'bg-[#1a2535] border border-blue-900/50 text-blue-300';
+  if (s.includes('设计') || s.includes('design') || s.includes('走查'))
+    return 'bg-[#1e2240] border border-purple-900/50 text-purple-300';
+  if (s.includes('hold') || s.includes('暂停') || s.includes('搁置'))
+    return 'bg-[#221a10] border border-amber-900 text-amber-400';
+  return 'bg-[#1e2240] border border-[#2e3460] text-gray-300';
+}
+
+function groupChipCls(groupBy: GroupBy, key: string): string {
+  if (!key) return 'bg-[#1e2240] border border-[#2e3460] text-gray-500';
+  if (groupBy === 'priority') return priorityChipCls(key);
+  if (groupBy === 'status')   return statusChipCls(key);
+  return 'bg-[#1e2240] border border-[#2e3460] text-gray-300';
+}
+
+function GroupHeader({ label, count, first, groupBy }: { label: string; count: number; first: boolean; groupBy: GroupBy }) {
+  const chipCls = groupChipCls(groupBy, label === '—' ? '' : label);
   return (
     <div className={`sm:col-span-full flex items-center gap-2.5 px-1 ${first ? 'mt-2' : 'mt-5'}`}>
-      <span className="text-xs font-semibold text-gray-300 tracking-wide">{label || '—'}</span>
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${chipCls}`}>
+        {label || '—'}
+      </span>
       <span className="text-xs text-gray-600">{count}</span>
       <div className="flex-1 h-px bg-[#1e2240]" />
     </div>
@@ -95,6 +130,7 @@ export function ProjectView({ features, setFeatures }: Props) {
             owner:           (d.owner            as string) || p.owner,
             meegoNodeKey:    (d.meegoNodeKey     as string) || p.meegoNodeKey,
             prd:             (d.prd              as string) || p.prd,
+            figmaUrl:        (d.figmaUrl         as string) || p.figmaUrl,
             complianceUrl:   (d.complianceUrl    as string) || p.complianceUrl,
             priority:        ((d.priority as Priority) ?? p.priority),
             canCompleteNode: d.canCompleteNode   as boolean,
@@ -188,6 +224,7 @@ export function ProjectView({ features, setFeatures }: Props) {
         owner:           (d.owner           as string) || p.owner,
         meegoNodeKey:    (d.meegoNodeKey    as string) || p.meegoNodeKey,
         prd:             (d.prd             as string) || p.prd,
+        figmaUrl:        (d.figmaUrl        as string) || p.figmaUrl,
         complianceUrl:   (d.complianceUrl   as string) || p.complianceUrl,
         priority:        ((d.priority as Priority) ?? p.priority),
         canCompleteNode: d.canCompleteNode  as boolean,
@@ -364,7 +401,7 @@ export function ProjectView({ features, setFeatures }: Props) {
             <FeatureListHeader />
             {groups.map((group, gi) => (
               <React.Fragment key={group.key}>
-                <GroupHeader label={group.label} count={group.items.length} first={gi === 0} />
+                <GroupHeader label={group.label} count={group.items.length} first={gi === 0} groupBy={groupBy} />
                 {renderListRows(group.items)}
               </React.Fragment>
             ))}

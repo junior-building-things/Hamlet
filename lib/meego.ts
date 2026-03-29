@@ -1,4 +1,5 @@
 import { Priority, Feature } from './types';
+import { extractFigmaUrlFromPrd } from './lark';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const MY_EMAIL = 'thomas.oefverstroem@bytedance.com';
@@ -292,6 +293,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   owner: string;
   meegoNodeKey: string;
   prd: string;
+  figmaUrl: string;
   complianceUrl: string;
   priority: Priority | null;
   canCompleteNode: boolean;
@@ -362,6 +364,14 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
 
+  // Extract Figma URL from the PRD's "Relevant Links" section (best-effort)
+  let figmaUrl = '';
+  if (prd) {
+    try {
+      figmaUrl = await extractFigmaUrlFromPrd(prd);
+    } catch { /* ignore — Figma link is optional */ }
+  }
+
   return {
     status:      best ? translateNode(best.name) : 'Unknown',
     name:        workItemName,
@@ -369,6 +379,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
     owner,
     meegoNodeKey: best?.key ?? '',
     prd,
+    figmaUrl,
     complianceUrl,
     priority,
     canCompleteNode,
