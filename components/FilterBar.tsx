@@ -13,11 +13,12 @@ interface Props {
   onPriorityChange: (v: Priority | 'All') => void;
   onViewChange: (v: 'grid' | 'list') => void;
   onAddFeature: () => void;
+  hideAddButton?: boolean;
 }
 
 const priorities: (Priority | 'All')[] = ['All', 'P0', 'P1', 'P2', 'P3'];
 
-export function FilterBar({ search, statusFilter, statuses, priorityFilter, view, onSearchChange, onStatusChange, onPriorityChange, onViewChange, onAddFeature }: Props) {
+export function FilterBar({ search, statusFilter, statuses, priorityFilter, view, onSearchChange, onStatusChange, onPriorityChange, onViewChange, onAddFeature, hideAddButton }: Props) {
   return (
     <div className="flex items-center gap-3 px-6 mt-5 flex-wrap">
       {/* Search */}
@@ -82,13 +83,15 @@ export function FilterBar({ search, statusFilter, statuses, priorityFilter, view
       </div>
 
       {/* Add Feature */}
-      <button
-        onClick={onAddFeature}
-        className="flex items-center gap-1.5 bg-white text-black text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors whitespace-nowrap ml-auto"
-      >
-        <Plus className="w-4 h-4" />
-        Create Feature
-      </button>
+      {!hideAddButton && (
+        <button
+          onClick={onAddFeature}
+          className="flex items-center gap-1.5 bg-white text-black text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors whitespace-nowrap ml-auto"
+        >
+          <Plus className="w-4 h-4" />
+          Create Feature
+        </button>
+      )}
     </div>
   );
 }

@@ -1,0 +1,132 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
+import { copyPrdTemplate } from '@/lib/lark';
+import type { Feature } from '@/lib/types';
+
+const PROJECT_KEY   = '5f105019a8b9a853da64767f';
+const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
+
+async function callMeego(tool: string, args: Record<string, unknown>): Promise<string> {
+  const token = process.env.MEEGO_USER_TOKEN;
+  if (!token) throw new Error('MEEGO_USER_TOKEN not configured');
+  const res  = await fetch(MEEGO_MCP_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Mcp-Token': token },
+    body:    JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'tools/call', params: { name: tool, arguments: args } }),
+  });
+  if (!res.ok) throw new Error(`Meego HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(`Meego error: ${data.error.message}`);
+  return data.result?.content?.[0]?.text ?? '';
+}
+
+function parseNodes(raw: string): Array<{ key: string; name: string }> {
+  const section = raw.split('# 进行中的节点')[1] ?? '';
+  return section.split('\n')
+    .filter(l => l.startsWith('|') && !l.includes('---') && !l.includes('节点 ID'))
+    .flatMap(line => {
+      const parts = line.split('|').map(p => p.trim()).filter(Boolean);
+      return parts.length >= 2 ? [{ key: parts[0], name: parts[1] }] : [];
+    });
+}
+
+const NODE_TRANSLATIONS: Record<string, string> = {
+  '产品需求准备': 'Requirements Prep', '产品线内初评': 'Initial Review',
+  '技术评估&排优': 'Tech Assessment',  '需求详评':    'Detailed Review',
+  '需求评审':    'Requirements Review', '技术方案设计': 'Technical Design',
+  'iOS 开发':    'iOS Development',     'UI&UX验收':   'UI/UX Acceptance',
+  'Server上线':  'Server Launch',       'AB实验':      'AB Testing',
+  '结束':        'Done',               'PM验收':      'PM Acceptance',
+  'PM走查':      'PM Walkthrough',     '依赖判断':    'Dependency Check',
+  '合规评估':    'Compliance Review',
+};
+
+export async function POST(req: NextRequest) {
+  const { action, params } = await req.json() as {
+    action: string;
+    params: Record<string, string>;
+  };
+
+  try {
+    // ── Create Feature ────────────────────────────────────────────────────────
+    if (action === 'create_feature' && params.featureName) {
+      const created = await createFeature({ name: params.featureName, priority: 'P2', roles: [] });
+
+      let prd: string | undefined;
+      try {
+        prd = await copyPrdTemplate(params.featureName);
+        await updateFeatureFields(PROJECT_KEY, created.id, { prd });
+      } catch { /* best-effort */ }
+
+      const feature: Feature = {
+        id:          created.id,
+        name:        params.featureName,
+        description: '',
+        status:      'Backlog',
+        priority:    'P2',
+        owner:       '',
+        tasks:       [],
+        lastUpdated: new Date().toISOString().slice(0, 10),
+        meegoUrl:    created.meegoUrl,
+        prd,
+      };
+
+      const links = [
+        prd              && { label: '📄 PRD',   url: prd },
+        created.meegoUrl && { label: '🎯 Meego', url: created.meegoUrl },
+      ].filter(Boolean) as { label: string; url: string }[];
+
+      return NextResponse.json({
+        reply:  `"${params.featureName}" has been created!`,
+        action: 'create_feature',
+        feature,
+        links,
+      });
+    }
+
+    // ── Create PRD ────────────────────────────────────────────────────────────
+    if (action === 'create_prd' && (params.featureName || params.featureId)) {
+      const name = params.featureName ?? `Feature ${params.featureId}`;
+      const prd  = await copyPrdTemplate(name);
+      if (params.featureId) await updateFeatureFields(PROJECT_KEY, params.featureId, { prd });
+      return NextResponse.json({
+        reply: `The PRD for "${name}" is ready!`,
+        links: [{ label: '📄 PRD', url: prd }],
+      });
+    }
+
+    // ── Complete Node ─────────────────────────────────────────────────────────
+    if (action === 'complete_node' && (params.featureName || params.featureId)) {
+      let workItemId = params.featureId;
+      if (!workItemId && params.featureName) {
+        const features = await fetchUserStories(PROJECT_KEY);
+        const term     = params.featureName.toLowerCase();
+        const match    = features.find(f =>
+          f.name.toLowerCase().includes(term) || term.includes(f.name.toLowerCase())
+        );
+        if (!match) return NextResponse.json({ reply: `I couldn't find a feature matching "${params.featureName}". Could you share the Meego ID?` });
+        workItemId = match.id;
+      }
+      const brief = await callMeego('get_workitem_brief', { project_key: PROJECT_KEY, work_item_id: workItemId });
+      const nodes = parseNodes(brief);
+      if (nodes.length === 0) return NextResponse.json({ reply: `There are no active nodes on that feature right now.` });
+
+      const targetName = params.nodeName?.toLowerCase();
+      const node = targetName
+        ? (nodes.find(n => {
+            const en = NODE_TRANSLATIONS[n.name]?.toLowerCase() ?? '';
+            return n.name.toLowerCase().includes(targetName) || en.includes(targetName);
+          }) ?? nodes[0])
+        : nodes[0];
+
+      await completeNode(PROJECT_KEY, workItemId!, node.key);
+      const displayName = NODE_TRANSLATIONS[node.name] ?? node.name;
+      return NextResponse.json({ reply: `"${displayName}" has been marked as complete! ✅`, action: 'complete_node' });
+    }
+
+  } catch (err) {
+    return NextResponse.json({ reply: `Something went wrong: ${err instanceof Error ? err.message : 'Unknown error'}` });
+  }
+
+  return NextResponse.json({ reply: 'Done!' });
+}
