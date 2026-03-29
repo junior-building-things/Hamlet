@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Newsreader } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const geistSans  = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const newsreader = Newsreader({ variable: "--font-newsreader", subsets: ["latin"], weight: ["400"], style: ["normal"] });
 
 export const metadata: Metadata = {
   title: "Hamlet — PM Dashboard",
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} antialiased`} style={{ backgroundColor: '#0c0e1a' }}>
+    <html lang="en" className={`${geistSans.variable} ${newsreader.variable} antialiased`} style={{ backgroundColor: '#0c0e1a' }}>
       <body className="min-h-screen" style={{ backgroundColor: '#0c0e1a' }}>
         {children}
       </body>

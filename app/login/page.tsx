@@ -38,10 +38,11 @@ function LoginContent() {
     <div className="min-h-screen bg-[#080b18] flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
 
-        {/* Wordmark */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white tracking-tight">Hamlet</h1>
-          <p className="text-gray-500 text-sm mt-1">TikTok DM · Feature Tracker</p>
+        {/* Logo + wordmark */}
+        <div className="text-center mb-8 flex flex-col items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/hamlet.png" alt="Hamlet" className="w-16 h-16 object-contain" />
+          <h1 className="text-5xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>Hamlet</h1>
         </div>
 
         <div className="bg-[#0e1120] border border-[#1e2240] rounded-2xl p-8 shadow-2xl flex flex-col gap-6">
