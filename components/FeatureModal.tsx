@@ -334,107 +334,119 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
           </div>
 
           <form onSubmit={handleCreate} className="flex flex-col min-h-0 flex-1">
-            <div className="px-6 py-5 flex flex-col gap-4 overflow-y-auto flex-1">
+            <div className="px-6 py-5 flex flex-col gap-0 overflow-y-auto flex-1 divide-y divide-[#1e2240]">
 
-              <div className="flex flex-col gap-1.5">
-                <FormLabel required>Feature name</FormLabel>
-                <input autoFocus type="text" className={inputCls}
-                  placeholder="Enter feature name…"
-                  value={form.name} onChange={e => setField('name', e.target.value)} />
-              </div>
-
-              {/* PRD Builder */}
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-                  <input
-                    type="checkbox"
-                    checked={prdBuilder}
-                    onChange={e => setPrdBuilder(e.target.checked)}
-                    className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
-                  />
-                  <span className="text-[11px] text-gray-500 font-medium">PRD Builder</span>
-                </label>
-                {prdBuilder && (
-                  <textarea
-                    className={`${inputCls} resize-none`}
-                    rows={3}
-                    placeholder="What are you building?"
-                    value={prdBuilderText}
-                    onChange={e => setPrdBuilderText(e.target.value)}
-                  />
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              {/* Feature name + PRD Builder */}
+              <div className="pb-5 flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <FormLabel required>Priority</FormLabel>
-                  <CustomSelect options={PRIORITIES.map(p => ({ value: p.id, label: p.label }))} value={form.priority} onChange={v => setField('priority', v)} />
+                  <FormLabel required>Feature name</FormLabel>
+                  <input autoFocus type="text" className={inputCls}
+                    placeholder="Enter feature name…"
+                    value={form.name} onChange={e => setField('name', e.target.value)} />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>Quarterly Cycle</FormLabel>
-                  <CustomSelect options={QUARTERLY_CYCLES.map(q => ({ value: q.id, label: q.label }))} value={form.quarterlyCycle} onChange={v => setField('quarterlyCycle', v)} />
+
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+                    <input
+                      type="checkbox"
+                      checked={prdBuilder}
+                      onChange={e => setPrdBuilder(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
+                    />
+                    <span className="text-[11px] text-gray-500 font-medium">PRD Builder</span>
+                  </label>
+                  {prdBuilder && (
+                    <textarea
+                      className={`${inputCls} resize-none`}
+                      rows={3}
+                      placeholder="What are you building?"
+                      value={prdBuilderText}
+                      onChange={e => setPrdBuilderText(e.target.value)}
+                    />
+                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>Business Line</FormLabel>
-                  <CustomSelect options={BUSINESS_LINES.map(b => ({ value: b.id, label: b.label }))} value={form.businessLine} onChange={v => setField('businessLine', v)} />
+              {/* Feature Details */}
+              <div className="py-5 flex flex-col gap-4">
+                <SectionHeader title="Feature Details" />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel required>Priority</FormLabel>
+                    <CustomSelect options={PRIORITIES.map(p => ({ value: p.id, label: p.label }))} value={form.priority} onChange={v => setField('priority', v)} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Quarterly Cycle</FormLabel>
+                    <CustomSelect options={QUARTERLY_CYCLES.map(q => ({ value: q.id, label: q.label }))} value={form.quarterlyCycle} onChange={v => setField('quarterlyCycle', v)} />
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>Social Component</FormLabel>
-                  <CustomSelect options={SOCIAL_COMPONENTS.map(s => ({ value: s.id, label: s.label }))} value={form.socialComponent} onChange={v => setField('socialComponent', v)} />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Business Line</FormLabel>
+                    <CustomSelect options={BUSINESS_LINES.map(b => ({ value: b.id, label: b.label }))} value={form.businessLine} onChange={v => setField('businessLine', v)} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Social Component</FormLabel>
+                    <CustomSelect options={SOCIAL_COMPONENTS.map(s => ({ value: s.id, label: s.label }))} value={form.socialComponent} onChange={v => setField('socialComponent', v)} />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>Tech Owner</FormLabel>
-                  <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>Server</FormLabel>
-                  <AvatarSelect options={SERVER_OWNERS} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" />
-                </div>
-              </div>
+              {/* POC Details */}
+              <div className="pt-5 flex flex-col gap-4">
+                <SectionHeader title="POC Details" />
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>Android</FormLabel>
-                  <AvatarSelect options={ANDROID_OWNERS} value={form.android} onChange={v => setField('android', v)} placeholder="Optional" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Tech Owner</FormLabel>
+                    <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Server</FormLabel>
+                    <AvatarSelect options={SERVER_OWNERS} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" />
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>iOS</FormLabel>
-                  <AvatarSelect options={IOS_OWNERS} value={form.ios} onChange={v => setField('ios', v)} placeholder="Optional" />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>UI&amp;UX</FormLabel>
-                  <AvatarSelect options={UIUX_OWNERS} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Android</FormLabel>
+                    <AvatarSelect options={ANDROID_OWNERS} value={form.android} onChange={v => setField('android', v)} placeholder="Optional" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>iOS</FormLabel>
+                    <AvatarSelect options={IOS_OWNERS} value={form.ios} onChange={v => setField('ios', v)} placeholder="Optional" />
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>Content Designer</FormLabel>
-                  <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} locked />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>TPM</FormLabel>
-                  <AvatarSelect options={TPM_OPTIONS} value={form.tpm} onChange={v => setField('tpm', v)} />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>UI&amp;UX</FormLabel>
+                    <AvatarSelect options={UIUX_OWNERS} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Content Designer</FormLabel>
+                    <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} locked />
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>DA</FormLabel>
-                  <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>QA</FormLabel>
-                  <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} locked />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>TPM</FormLabel>
+                    <AvatarSelect options={TPM_OPTIONS} value={form.tpm} onChange={v => setField('tpm', v)} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>DA</FormLabel>
+                    <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>QA</FormLabel>
+                    <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} locked />
+                  </div>
                 </div>
               </div>
 
