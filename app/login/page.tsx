@@ -78,15 +78,8 @@ function LoginContent() {
             href="/api/auth/login"
             className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 font-semibold text-sm px-5 py-3 rounded-xl transition-colors shadow"
           >
-            {/* Lark logo (inline SVG — no external file dependency) */}
-            <svg width="20" height="20" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* teal top wing */}
-              <path d="M100 30 C60 30 30 55 38 90 L100 110 L155 60 C140 40 120 30 100 30Z" fill="#00C8A0"/>
-              {/* dark blue right wing */}
-              <path d="M155 60 L100 110 L160 145 C185 125 190 90 175 68 L155 60Z" fill="#1A3CB8"/>
-              {/* bright blue bottom body */}
-              <path d="M38 90 C28 120 40 158 70 170 L160 145 L100 110 Z" fill="#3B82F6"/>
-            </svg>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/lark_logo.png" alt="" width={20} height={20} />
             Log in with Lark
           </a>
 
