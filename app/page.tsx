@@ -7,6 +7,7 @@ import { FeatureCard } from '@/components/FeatureCard';
 import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
+import { Chat } from '@/components/Chat';
 import { Loader2 } from 'lucide-react';
 
 const STORAGE_KEY = 'hamlet_features_v1';
@@ -266,16 +267,7 @@ export default function Home() {
     <main className="min-h-screen" style={{ backgroundColor: 'transparent' }}>
       <div className="max-w-5xl mx-auto pb-16">
         <Header syncing={syncingAll} onSyncAll={syncAll} user={user} />
-        <div className="px-6 pt-6 pb-4">
-          <h2 className="text-3xl text-white mb-4" style={{ fontFamily: 'var(--font-newsreader)' }}>
-            I&apos;m Hamlet, your personal feature assistant 👋
-          </h2>
-          <textarea
-            rows={3}
-            placeholder="You can ask me to create new features, or follow up on the progress of ongoing features"
-            className="w-full bg-[#0e1120] border border-[#1e2240] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 resize-none focus:outline-none focus:border-purple-600 transition-colors"
-          />
-        </div>
+        <Chat onFeatureCreated={f => setFeatures(prev => [f, ...prev])} />
         <FilterBar
           search={search}
           statusFilter={statusFilter}
