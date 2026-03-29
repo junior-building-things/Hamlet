@@ -12,6 +12,23 @@ import { Loader2 } from 'lucide-react';
 
 const STORAGE_KEY = 'hamlet_features_v1';
 
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h >= 5  && h < 12) return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function Greeting({ name }: { name: string }) {
+  return (
+    <div className="px-6 pt-6 pb-2">
+      <p className="text-2xl font-semibold text-white">
+        {greeting()}, {name}!
+      </p>
+    </div>
+  );
+}
+
 export default function Home() {
   const [features, setFeatures]           = useState<Feature[]>([]);
   const [hydrated, setHydrated]           = useState(false);
@@ -26,6 +43,7 @@ export default function Home() {
   const [syncingAll, setSyncingAll]       = useState(false);
   const [detailSyncCount, setDetailSyncCount] = useState(0);
   const [detailSyncTotal, setDetailSyncTotal] = useState(0);
+  const [userName, setUserName]           = useState<string>('');
 
   // Background-sync full details (status, PRD, compliance, priority) for all features
   // in parallel batches of 5 so the UI populates immediately after load.
@@ -119,6 +137,11 @@ export default function Home() {
       }
     }
     init();
+    // Fetch current user name for greeting
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then((d: { name?: string }) => { if (d.name) setUserName(d.name.split(' ')[0]); })
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -254,6 +277,7 @@ export default function Home() {
     <main className="min-h-screen" style={{ backgroundColor: '#0c0e1a' }}>
       <div className="max-w-5xl mx-auto pb-16">
         <Header syncing={syncingAll} onSyncAll={syncAll} />
+        {userName && <Greeting name={userName} />}
         <StatsCards features={features} />
         <FilterBar
           search={search}
