@@ -16,17 +16,17 @@ const FEATURES = [
   {
     icon: <LayoutList className="w-5 h-5 text-purple-400" />,
     bg:   'bg-purple-400/10',
-    text: 'Track all your TikTok DM features in one place',
+    text: 'Track all your features in one place',
   },
   {
     icon: <FileText className="w-5 h-5 text-blue-400" />,
     bg:   'bg-blue-400/10',
-    text: 'Auto-generate and link PRDs to every feature',
+    text: 'Auto-generate Meego, PRD, and compliance review',
   },
   {
     icon: <RefreshCw className="w-5 h-5 text-emerald-400" />,
     bg:   'bg-emerald-400/10',
-    text: 'Stay in sync with Meego in real time',
+    text: 'Connect to your agent of choice',
   },
 ];
 
