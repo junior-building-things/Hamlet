@@ -91,7 +91,7 @@ async function parseIntent(messages: ChatMsg[], userMessage: string): Promise<In
     : '';
 
   const genAI  = new GoogleGenerativeAI(apiKey);
-  const model  = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-preview-04-17' });
   const result = await model.generateContent(`${SYSTEM}${history}\n\nUser: ${userMessage}`);
   const raw    = result.response.text().trim();
   console.log('[chat] Gemini raw response:', raw.slice(0, 500));
@@ -111,9 +111,8 @@ export async function POST(req: NextRequest) {
   try {
     intent = await parseIntent(messages, userMessage);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error('[chat] parseIntent failed:', msg);
-    return NextResponse.json({ reply: `Debug: ${msg}` });
+    console.error('[chat] parseIntent failed:', e instanceof Error ? e.message : e);
+    return NextResponse.json({ reply: "I had trouble understanding that. Could you rephrase?" });
   }
 
   const { action, params, reply } = intent;

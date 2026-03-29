@@ -51,8 +51,8 @@ export function Chat({ onFeatureCreated }: Props) {
         I&apos;m Hamlet, your personal feature assistant 👋
       </h2>
 
-      {/* Message history — always reserves h-48, capped at 50% width */}
-      <div className="mb-4 h-48 overflow-y-auto pr-1 w-1/2">
+      {/* Message history — only shown when there are messages */}
+      <div className={`w-1/2 overflow-y-auto pr-1 ${messages.length > 0 || loading ? 'mb-4 max-h-48' : 'max-h-0'}`}>
         <div className="flex flex-col gap-3">
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
