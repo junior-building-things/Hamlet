@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2B5FFF"/>
+      <stop offset="100%" style="stop-color:#00C2FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="44" fill="url(#bg)"/>
+  <!-- Lark stylised bird/leaf mark -->
+  <g fill="white">
+    <!-- Body -->
+    <ellipse cx="100" cy="108" rx="30" ry="42" transform="rotate(-15 100 108)"/>
+    <!-- Wing -->
+    <ellipse cx="128" cy="88" rx="22" ry="12" transform="rotate(30 128 88)"/>
+    <!-- Head -->
+    <circle cx="88" cy="72" r="16"/>
+    <!-- Beak highlight -->
+    <ellipse cx="78" cy="68" rx="6" ry="4" transform="rotate(-20 78 68)" fill="#2B5FFF" opacity="0.5"/>
+  </g>
+</svg>

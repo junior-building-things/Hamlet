@@ -3,7 +3,6 @@
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { LayoutList, FileText, RefreshCw } from 'lucide-react';
-import Image from 'next/image';
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_state:  'Authentication failed — please try again.',
@@ -78,7 +77,8 @@ function LoginContent() {
             href="/api/auth/login"
             className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 font-semibold text-sm px-5 py-3 rounded-xl transition-colors shadow"
           >
-            <Image src="/lark_logo.png" alt="Lark" width={20} height={20} className="rounded-sm" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/lark_logo.svg" alt="Lark" width={20} height={20} className="rounded-sm" />
             Log in with Lark
           </a>
 
