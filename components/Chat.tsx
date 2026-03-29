@@ -3,25 +3,10 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import type { Feature } from '@/lib/types';
 
-/** Render text with [label](url) markdown links as clickable anchors */
-function renderWithLinks(text: string) {
-  const parts = text.split(/(\[.*?\]\(.*?\))/g);
-  return parts.map((part, i) => {
-    const m = part.match(/^\[(.*?)\]\((.*?)\)$/);
-    if (m) {
-      return (
-        <a key={i} href={m[2]} target="_blank" rel="noopener noreferrer"
-          className="underline underline-offset-2 hover:opacity-80">
-          {m[1]}
-        </a>
-      );
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
 
-interface Msg { role: 'user' | 'assistant'; content: string }
-interface ChatResponse { reply: string; action?: string; feature?: Feature }
+interface Link { label: string; url: string }
+interface Msg { role: 'user' | 'assistant'; content: string; links?: Link[] }
+interface ChatResponse { reply: string; action?: string; feature?: Feature; links?: Link[] }
 
 interface Props {
   onFeatureCreated?: (feature: Feature) => void;
@@ -52,7 +37,7 @@ export function Chat({ onFeatureCreated }: Props) {
         body:    JSON.stringify({ messages: snapshot, userMessage: text }),
       });
       const data = await res.json() as ChatResponse;
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: data.reply, links: data.links }]);
       if (data.action === 'create_feature' && data.feature) {
         onFeatureCreated?.(data.feature);
       }
@@ -79,7 +64,17 @@ export function Chat({ onFeatureCreated }: Props) {
                   ? 'bg-purple-700 text-white rounded-br-sm'
                   : 'bg-[#1e2240] text-gray-200 rounded-bl-sm'
               }`}>
-                {renderWithLinks(msg.content)}
+                {msg.content}
+                {msg.links && msg.links.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-white/10">
+                    {msg.links.map(l => (
+                      <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer"
+                        className="text-purple-300 underline underline-offset-2 hover:text-purple-100 transition-colors">
+                        {l.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}

@@ -144,14 +144,15 @@ export async function POST(req: NextRequest) {
       };
 
       const links = [
-        prd             && `[📄 PRD](${prd})`,
-        created.meegoUrl && `[🎯 Meego](${created.meegoUrl})`,
-      ].filter(Boolean).join('  ·  ');
+        prd              && { label: '📄 PRD',   url: prd },
+        created.meegoUrl && { label: '🎯 Meego', url: created.meegoUrl },
+      ].filter(Boolean) as { label: string; url: string }[];
 
       return NextResponse.json({
-        reply: `${reply} ✅${links ? `\n\n${links}` : ''}`,
+        reply:  `${reply} ✅`,
         action: 'create_feature',
         feature,
+        links,
       });
     }
 
