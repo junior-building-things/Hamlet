@@ -280,7 +280,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen" style={{ backgroundColor: '#0c0e1a' }}>
+    <main className="min-h-screen" style={{ backgroundColor: 'transparent' }}>
       <div className="max-w-5xl mx-auto pb-16">
         <Header syncing={syncingAll} onSyncAll={syncAll} user={user} />
         {user && <Greeting name={user.name.split(' ')[0]} />}
