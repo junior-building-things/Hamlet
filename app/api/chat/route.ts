@@ -110,8 +110,10 @@ export async function POST(req: NextRequest) {
   let intent: Intent;
   try {
     intent = await parseIntent(messages, userMessage);
-  } catch {
-    return NextResponse.json({ reply: "I had trouble understanding that. Could you rephrase?" });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[chat] parseIntent failed:', msg);
+    return NextResponse.json({ reply: `Debug: ${msg}` });
   }
 
   const { action, params, reply } = intent;
