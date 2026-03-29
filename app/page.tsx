@@ -69,7 +69,7 @@ export default function Home() {
             meegoNodeKey: string; prd: string; complianceUrl: string;
             priority: string | null; canCompleteNode: boolean;
             quarterlyCycle: string; businessLine: string; socialComponent: string;
-            pmOwner: string; tpmOwner: string; techOwner: string; iosOwner: string; androidOwner: string;
+            lastUpdated: string; pmOwner: string; tpmOwner: string; techOwner: string; iosOwner: string; androidOwner: string;
             serverOwner: string; qaOwner: string; daOwner: string;
             uiuxOwner: string; contentDesigner: string;
           };
@@ -98,7 +98,7 @@ export default function Home() {
                   daOwner:         data.daOwner          || f.daOwner,
                   uiuxOwner:       data.uiuxOwner        || f.uiuxOwner,
                   contentDesigner: data.contentDesigner  || f.contentDesigner,
-                  lastUpdated:     new Date().toISOString().split('T')[0],
+                  lastUpdated:     data.lastUpdated || new Date().toISOString().split('T')[0],
                 }
               : f
           ));
@@ -192,7 +192,7 @@ export default function Home() {
         meegoNodeKey: string; prd: string; complianceUrl: string;
         priority: string | null; canCompleteNode: boolean;
         quarterlyCycle: string; businessLine: string; socialComponent: string;
-        pmOwner: string; tpmOwner: string; techOwner: string; iosOwner: string; androidOwner: string;
+        lastUpdated: string; pmOwner: string; tpmOwner: string; techOwner: string; iosOwner: string; androidOwner: string;
         serverOwner: string; qaOwner: string; daOwner: string;
         uiuxOwner: string; contentDesigner: string;
       };

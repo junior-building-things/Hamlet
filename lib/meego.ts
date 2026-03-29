@@ -114,6 +114,18 @@ function extractNames(value: string): string {
   return names.length > 0 ? names.join(', ') : value;
 }
 
+// Parse last-modified date from get_workitem_brief raw text
+function parseUpdateTime(raw: string): string {
+  const val = parseWorkItemField(raw, '更新时间') || parseWorkItemField(raw, 'updated_at');
+  if (val) {
+    const ts = Number(val);
+    if (!isNaN(ts) && ts > 1_000_000_000_000) return new Date(ts).toISOString().split('T')[0];
+    const m = val.match(/(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+  }
+  return new Date().toISOString().split('T')[0];
+}
+
 // Parse a role member from the 角色成员 JSON in the workitem attributes table
 function parseRoleMember(raw: string, roleName: string): string {
   const escapedRole = roleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -141,9 +153,9 @@ interface MqlResponse {
 }
 
 // Fetch priority, PRD and compliance URL for all of Thomas's TikTok stories in one MQL sweep
-async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; prd: string; complianceUrl: string }>> {
-  const map = new Map<string, { priority: Priority; prd: string; complianceUrl: string }>();
-  const MQL = 'SELECT `work_item_id`, `priority`, `wiki`, `field_due3fb` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
+async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string }>> {
+  const map = new Map<string, { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string }>();
+  const MQL = 'SELECT `work_item_id`, `priority`, `wiki`, `field_due3fb`, `updated_at` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
   const GROUP_ID = '1';
   let sessionId: string | undefined;
   let page = 1;
@@ -171,6 +183,7 @@ async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; 
       let prd = '';
       let complianceUrl = '';
 
+      let lastUpdated = '';
       for (const f of item.moql_field_list ?? []) {
         if (f.key === 'work_item_id') {
           id = String(f.value.long_value ?? '');
@@ -181,10 +194,13 @@ async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; 
           prd = f.value.varchar_value ?? '';
         } else if (f.key === 'field_due3fb') {
           complianceUrl = f.value.varchar_value ?? '';
+        } else if (f.key === 'updated_at') {
+          const ts = f.value.long_value;
+          if (ts) lastUpdated = new Date(ts).toISOString().split('T')[0];
         }
       }
 
-      if (id) map.set(id, { priority, prd, complianceUrl });
+      if (id) map.set(id, { priority, prd, complianceUrl, lastUpdated });
     }
 
     if (map.size >= total || items.length === 0) break;
@@ -232,7 +248,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       return items;
     })(),
     fetchExtendedFields().catch(() =>
-      new Map<string, { priority: Priority; prd: string; complianceUrl: string }>()
+      new Map<string, { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string }>()
     ),
   ]);
 
@@ -251,7 +267,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
         priority: ext?.priority ?? 'P2',
         owner: 'Thomas',
         tasks: [],
-        lastUpdated: new Date().toISOString().split('T')[0],
+        lastUpdated: ext?.lastUpdated || new Date().toISOString().split('T')[0],
         prd: ext?.prd || undefined,
         complianceUrl: ext?.complianceUrl || undefined,
         meegoProjectKey: item.project_key,
@@ -274,6 +290,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   quarterlyCycle: string;
   businessLine: string;
   socialComponent: string;
+  lastUpdated: string;
   pmOwner: string;
   tpmOwner: string;
   techOwner: string;
@@ -338,8 +355,9 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
 
   return {
-    status: best ? translateNode(best.name) : 'Unknown',
-    name: workItemName,
+    status:      best ? translateNode(best.name) : 'Unknown',
+    name:        workItemName,
+    lastUpdated: parseUpdateTime(raw),
     owner,
     meegoNodeKey: best?.key ?? '',
     prd,
