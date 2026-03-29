@@ -2,7 +2,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { Header } from '@/components/Header';
-import { StatsCards } from '@/components/StatsCards';
 import { FilterBar } from '@/components/FilterBar';
 import { FeatureCard } from '@/components/FeatureCard';
 import { FeatureListHeader } from '@/components/FeatureListHeader';
@@ -12,22 +11,6 @@ import { Loader2 } from 'lucide-react';
 
 const STORAGE_KEY = 'hamlet_features_v1';
 
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h >= 5  && h < 12) return 'Good morning';
-  if (h >= 12 && h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
-
-function Greeting({ name }: { name: string }) {
-  return (
-    <div className="px-6 pt-6 pb-2">
-      <p className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
-        {greeting()}, {name}!
-      </p>
-    </div>
-  );
-}
 
 export default function Home() {
   const [features, setFeatures]           = useState<Feature[]>([]);
@@ -283,8 +266,16 @@ export default function Home() {
     <main className="min-h-screen" style={{ backgroundColor: 'transparent' }}>
       <div className="max-w-5xl mx-auto pb-16">
         <Header syncing={syncingAll} onSyncAll={syncAll} user={user} />
-        {user && <Greeting name={user.name.split(' ')[0]} />}
-        <StatsCards features={features} />
+        <div className="px-6 pt-6 pb-4">
+          <h2 className="text-3xl text-white mb-4" style={{ fontFamily: 'var(--font-newsreader)' }}>
+            I&apos;m Hamlet, your personal feature assistant 👋
+          </h2>
+          <textarea
+            rows={3}
+            placeholder="You can ask me to create new features, or follow up on the progress of ongoing features"
+            className="w-full bg-[#0e1120] border border-[#1e2240] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 resize-none focus:outline-none focus:border-purple-600 transition-colors"
+          />
+        </div>
         <FilterBar
           search={search}
           statusFilter={statusFilter}
