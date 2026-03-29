@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { X, ExternalLink, Loader2, CheckCircle2 } from 'lucide-react';
 import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
+import { AV } from '@/lib/avatars';
 
 interface Props {
   mode: 'add' | 'edit';
@@ -13,28 +14,6 @@ interface Props {
   /** Called after background creation completes. null = failed (temp entry should be removed). */
   onFeatureCreated?: (tempId: string, feature: Feature | null) => void;
 }
-
-// ─── Avatar URLs ──────────────────────────────────────────────────────────────
-
-const AV: Record<string, string> = {
-  'Thomas':      'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00tl_59bdfbf7-09d8-485f-8904-7b97678b85hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Austin Lee':    'https://pan16.larksuitecdn.com/static-resource/v1/v2_cf35e3a3-be89-4e2f-9998-b813f928f77h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Kyle Chan':     'https://pan16.larksuitecdn.com/static-resource/v1/v2_042084af-a296-44f0-a9b5-0116f934742h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Xuan Sheng':    'https://s1-imfile.feishucdn.com/static-resource/v1/d118fefe-52ae-4b21-8aa5-c99a20748c7g~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  '盛煊':          'https://s1-imfile.feishucdn.com/static-resource/v1/d118fefe-52ae-4b21-8aa5-c99a20748c7g~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Tianyang Ni':   'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00vr_0a4c671c-c533-46aa-9fac-fd51782d7ehu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  '倪天洋':        'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00vr_0a4c671c-c533-46aa-9fac-fd51782d7ehu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Rishou Bao':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_0068_cc598725-854f-41e0-bb58-0cb5ee5cachu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  '包日守':        'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_0068_cc598725-854f-41e0-bb58-0cb5ee5cachu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Kim Li':        'https://pan16.larksuitecdn.com/static-resource/v1/v3_00qf_51fb0974-66d5-4069-aff5-c2de14bde7ch~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Lionel Lew':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00f1_17ab3065-3434-4398-9a00-247d1d7880hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Edward Lin':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00104_8c5bf311-78ed-45cf-ab81-47bd4032a6hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Tao Zhu':       'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00fg_2e6b01f3-4700-473a-9ebb-698203fdbahu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Hazel Li':      'https://pan16.larksuitecdn.com/static-resource/v1/v3_00tj_78445933-31f7-4349-adcb-3e11d4e0b64h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Xiaobo Tian':   'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00l5_7ccb4901-d79c-4997-9538-b90bfae341hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Spring Ren':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00tb_ad7c948b-ed8f-4462-83f5-3ffb3783b1hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Yunyi Yang':    'https://pan16.larksuitecdn.com/static-resource/v1/v2_f5fcd3b3-5752-4ab4-ab0f-310ebc15c31h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-};
 
 function av(name: string): AvatarOption { return { value: name, label: name, avatarUrl: AV[name] }; }
 

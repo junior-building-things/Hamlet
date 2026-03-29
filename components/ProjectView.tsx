@@ -279,7 +279,7 @@ export function ProjectView({ features, setFeatures }: Props) {
             ))}
           </div>
         ) : (
-          <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[2fr_auto_auto_220px_1fr] sm:gap-x-4 sm:gap-y-2">
+          <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[2fr_auto_auto_160px_auto_1fr] sm:gap-x-4 sm:gap-y-2">
             <FeatureListHeader />
             {filtered.map(f => (
               <FeatureListItem key={f.id} feature={f} syncing={syncingId === f.id}

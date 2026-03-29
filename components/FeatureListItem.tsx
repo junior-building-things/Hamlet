@@ -2,6 +2,7 @@
 import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
+import { TeamAvatars } from './TeamAvatars';
 import { RefreshCw, Calendar, ExternalLink } from 'lucide-react';
 
 interface Props {
@@ -86,6 +87,11 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
             Compliance <ExternalLink className="w-3 h-3" />
           </a>
         )}
+      </div>
+
+      {/* Team avatars */}
+      <div className="hidden sm:flex items-center py-3">
+        <TeamAvatars feature={feature} ringColor="#13162a" />
       </div>
 
       <span className="hidden sm:flex items-center gap-1 pr-4 py-3 text-xs text-gray-400 truncate">
