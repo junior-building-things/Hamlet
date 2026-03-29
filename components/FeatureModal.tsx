@@ -434,18 +434,18 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Content Designer</FormLabel>
-                    <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} locked />
+                    <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>DS</FormLabel>
-                    <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
+                    <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>QA</FormLabel>
-                    <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} locked />
+                    <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} />
                   </div>
                 </div>
 
