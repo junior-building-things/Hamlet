@@ -2,6 +2,8 @@
 
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { LayoutList, FileText, RefreshCw } from 'lucide-react';
+import Image from 'next/image';
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_state:  'Authentication failed — please try again.',
@@ -11,6 +13,24 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_user:        'Login failed — please try again.',
 };
 
+const FEATURES = [
+  {
+    icon: <LayoutList className="w-5 h-5 text-purple-400" />,
+    bg:   'bg-purple-400/10',
+    text: 'Track all your TikTok DM features in one place',
+  },
+  {
+    icon: <FileText className="w-5 h-5 text-blue-400" />,
+    bg:   'bg-blue-400/10',
+    text: 'Auto-generate and link PRDs to every feature',
+  },
+  {
+    icon: <RefreshCw className="w-5 h-5 text-emerald-400" />,
+    bg:   'bg-emerald-400/10',
+    text: 'Stay in sync with Meego in real time',
+  },
+];
+
 function LoginContent() {
   const params = useSearchParams();
   const error  = params.get('error');
@@ -18,35 +38,50 @@ function LoginContent() {
   return (
     <div className="min-h-screen bg-[#080b18] flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        {/* Logo / wordmark */}
-        <div className="text-center mb-10">
+
+        {/* Wordmark */}
+        <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white tracking-tight">Hamlet</h1>
           <p className="text-gray-500 text-sm mt-1">TikTok DM · Feature Tracker</p>
         </div>
 
-        <div className="bg-[#0e1120] border border-[#1e2240] rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-6">
-          <p className="text-gray-400 text-sm text-center leading-relaxed">
-            Sign in with your ByteDance Lark account to continue.
-          </p>
+        <div className="bg-[#0e1120] border border-[#1e2240] rounded-2xl p-8 shadow-2xl flex flex-col gap-6">
 
+          {/* Feature bullets */}
+          <div className="flex flex-col gap-4">
+            {FEATURES.map(({ icon, bg, text }) => (
+              <div key={text} className="flex items-center gap-4">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}`}>
+                  {icon}
+                </div>
+                <span className="text-sm font-semibold text-white leading-snug">{text}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-[#1e2240]" />
+            <span className="text-[11px] font-semibold tracking-widest text-gray-500 uppercase">Continue with</span>
+            <div className="flex-1 h-px bg-[#1e2240]" />
+          </div>
+
+          {/* Error */}
           {error && (
-            <p className="w-full text-center text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-2">
+            <p className="text-center text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-2">
               {ERROR_MESSAGES[error] ?? 'An error occurred — please try again.'}
             </p>
           )}
 
+          {/* Login button */}
           <a
             href="/api/auth/login"
-            className="w-full flex items-center justify-center gap-3 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm px-5 py-3 rounded-xl transition-colors"
+            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 font-semibold text-sm px-5 py-3 rounded-xl transition-colors shadow"
           >
-            {/* Lark icon (simplified) */}
-            <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M24 4C12.954 4 4 12.954 4 24s8.954 20 20 20 20-8.954 20-20S35.046 4 24 4z" fill="white" fillOpacity="0.2"/>
-              <path d="M32 16l-10 8 10 8" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M16 16v16" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
-            </svg>
-            Sign in with Lark
+            <Image src="/lark_logo.png" alt="Lark" width={20} height={20} className="rounded-sm" />
+            Log in with Lark
           </a>
+
         </div>
 
         <p className="text-center text-xs text-gray-600 mt-6">
