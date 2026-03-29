@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${newsreader.variable} antialiased`} style={{ backgroundColor: '#0c0e1a' }}>
-      <body className="min-h-screen" style={{ backgroundColor: '#0c0e1a' }}>
+      <body className="min-h-screen" style={{ backgroundColor: '#0c0e1a', backgroundImage: 'radial-gradient(circle, #ffffff18 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
         {children}
       </body>
     </html>

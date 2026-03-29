@@ -35,8 +35,7 @@ function LoginContent() {
   const error  = params.get('error');
 
   return (
-    <div className="min-h-screen bg-[#080b18] flex items-center justify-center p-4"
-      style={{ backgroundImage: 'radial-gradient(circle, #ffffff18 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
+    <div className="min-h-screen bg-transparent flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
 
         {/* Logo + wordmark */}
