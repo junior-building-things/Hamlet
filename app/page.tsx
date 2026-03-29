@@ -22,7 +22,7 @@ function greeting(): string {
 function Greeting({ name }: { name: string }) {
   return (
     <div className="px-6 pt-6 pb-2">
-      <p className="text-2xl font-semibold text-white">
+      <p className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
         {greeting()}, {name}!
       </p>
     </div>

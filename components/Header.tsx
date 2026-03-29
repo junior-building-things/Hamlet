@@ -1,6 +1,6 @@
 'use client';
 import { useTheme } from 'next-themes';
-import { Moon, Sun, RefreshCw, Zap, LogOut } from 'lucide-react';
+import { Moon, Sun, RefreshCw, LogOut } from 'lucide-react';
 
 interface Props {
   syncing: boolean;
@@ -17,7 +17,7 @@ export function Header({ syncing, onSyncAll, user }: Props) {
         <div className="w-10 h-10 rounded-xl overflow-hidden bg-purple-700 flex items-center justify-center text-white shrink-0">
           {user?.avatarUrl
             ? <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
-            : <Zap className="w-5 h-5 fill-white" />}
+            : <img src="/hamlet.png" alt="Hamlet" className="w-full h-full object-contain p-1" />}
         </div>
         <div>
           <h1 className="text-xl font-bold text-white">{user?.name ?? 'Hamlet'}</h1>
