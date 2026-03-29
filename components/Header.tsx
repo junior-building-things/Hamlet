@@ -14,7 +14,7 @@ export function Header({ syncing, onSyncAll, user }: Props) {
   return (
     <div className="flex items-center justify-between px-6 py-5">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl overflow-hidden bg-purple-700 flex items-center justify-center text-white shrink-0">
+        <div className={`w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center text-white shrink-0 ${user?.avatarUrl ? 'bg-purple-700' : 'bg-transparent'}`}>
           {user?.avatarUrl
             ? <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
             : <img src="/hamlet.png" alt="Hamlet" className="w-full h-full object-contain p-1" />}
