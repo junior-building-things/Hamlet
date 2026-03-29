@@ -128,9 +128,7 @@ const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <div className="mb-4">
-      <h3 className="text-xs font-bold tracking-wide text-gray-400">{title}</h3>
-    </div>
+    <h3 className="text-xs font-bold tracking-wide text-gray-400">{title}</h3>
   );
 }
 
@@ -193,7 +191,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     quarterlyCycle:  '5350il55y',   // 2026-Q2 default
     businessLine:    '2hj6rn3ao',   // Social Messaging default
     socialComponent: 'mz8vxxems',   // Sticker & Typing Rec default
-    techOwner:       '',
     server:          '',
     android:         '',
     ios:             '',
@@ -247,7 +244,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
       { role: 'QA',          owners: [form.qa] },
       { role: 'role_e8ce24', owners: [form.tpm] },
     ];
-    if (form.techOwner) roles.push({ role: 'Tech_Owner', owners: [form.techOwner] });
     if (form.server)    roles.push({ role: 'Server',     owners: [form.server] });
     if (form.android)   roles.push({ role: 'Android',    owners: [form.android] });
     if (form.ios)       roles.push({ role: 'iOS',        owners: [form.ios] });
@@ -400,12 +396,23 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <FormLabel>Tech Owner</FormLabel>
-                    <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" />
+                    <FormLabel>TPM</FormLabel>
+                    <AvatarSelect options={TPM_OPTIONS} value={form.tpm} onChange={v => setField('tpm', v)} />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <FormLabel>Server</FormLabel>
-                    <AvatarSelect options={SERVER_OWNERS} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" />
+                    <FormLabel>DS</FormLabel>
+                    <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>UX Designer</FormLabel>
+                    <AvatarSelect options={UIUX_OWNERS} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Content Designer</FormLabel>
+                    <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} locked />
                   </div>
                 </div>
 
@@ -422,27 +429,9 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <FormLabel>UI&amp;UX</FormLabel>
-                    <AvatarSelect options={UIUX_OWNERS} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
+                    <FormLabel>Server</FormLabel>
+                    <AvatarSelect options={SERVER_OWNERS} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <FormLabel>Content Designer</FormLabel>
-                    <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} locked />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <FormLabel>TPM</FormLabel>
-                    <AvatarSelect options={TPM_OPTIONS} value={form.tpm} onChange={v => setField('tpm', v)} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <FormLabel>DA</FormLabel>
-                    <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>QA</FormLabel>
                     <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} locked />
@@ -545,14 +534,14 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
           <div className="pt-5">
             <SectionHeader title="POC Details" />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-              <AvatarInfoField label="Tech Owner"       value={feature?.techOwner} />
-              <AvatarInfoField label="iOS"              value={feature?.iosOwner} />
+              <AvatarInfoField label="TPM"              value={feature?.tpmOwner} />
+              <AvatarInfoField label="DS"               value={feature?.daOwner} />
+              <AvatarInfoField label="UX Designer"      value={feature?.uiuxOwner} />
+              <AvatarInfoField label="Content Designer" value={feature?.contentDesigner} />
               <AvatarInfoField label="Android"          value={feature?.androidOwner} />
+              <AvatarInfoField label="iOS"              value={feature?.iosOwner} />
               <AvatarInfoField label="Server"           value={feature?.serverOwner} />
               <AvatarInfoField label="QA"               value={feature?.qaOwner} />
-              <AvatarInfoField label="DA"               value={feature?.daOwner} />
-              <AvatarInfoField label="UI&UX"            value={feature?.uiuxOwner} />
-              <AvatarInfoField label="Content Designer" value={feature?.contentDesigner} />
             </div>
           </div>
 

@@ -274,7 +274,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   quarterlyCycle: string;
   businessLine: string;
   socialComponent: string;
-  techOwner: string;
+  tpmOwner: string;
   iosOwner: string;
   androidOwner: string;
   serverOwner: string;
@@ -324,7 +324,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const businessLine   = parseWorkItemField(raw, 'DM Business Line');
   const socialComponent = parseWorkItemField(raw, 'Social模块');
 
-  const techOwner      = parseRoleMember(raw, 'Tech owner');
+  const tpmOwner       = parseRoleMember(raw, 'TPM');
   const iosOwner       = parseRoleMember(raw, 'iOS');
   const androidOwner   = parseRoleMember(raw, 'Android');
   const serverOwner    = parseRoleMember(raw, 'Server');
@@ -345,7 +345,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
     quarterlyCycle,
     businessLine,
     socialComponent,
-    techOwner,
+    tpmOwner,
     iosOwner,
     androidOwner,
     serverOwner,
