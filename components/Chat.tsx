@@ -51,10 +51,10 @@ export function Chat({ onFeatureCreated }: Props) {
         I&apos;m Hamlet, your personal feature assistant 👋
       </h2>
 
-      {/* Message history — fixed height, scrollable, always snaps to bottom */}
+      {/* Message history — grows up to max-h-64, then scrollable */}
       {(messages.length > 0 || loading) && (
-        <div className="mb-4 h-64 overflow-y-auto pr-1 flex flex-col">
-          <div className="flex flex-col gap-3 mt-auto">
+        <div className="mb-4 max-h-64 overflow-y-auto pr-1">
+          <div className="flex flex-col gap-3">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
