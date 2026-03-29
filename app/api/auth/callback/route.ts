@@ -37,11 +37,14 @@ export async function GET(req: NextRequest) {
   }
 
   const tokenData = await tokenRes.json() as {
-    code: number;
+    // OIDC endpoint returns token at top level (standard OAuth2)
+    access_token?: string;
+    // Older non-OIDC endpoint wraps it under data
+    code?: number;
     data?: { access_token?: string };
   };
 
-  const accessToken = tokenData.data?.access_token;
+  const accessToken = tokenData.access_token ?? tokenData.data?.access_token;
   if (!accessToken) {
     console.error('No access token in Lark response:', tokenData);
     return NextResponse.redirect(`${origin}/login?error=no_token`);
