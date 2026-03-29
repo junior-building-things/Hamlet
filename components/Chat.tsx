@@ -51,38 +51,36 @@ export function Chat({ onFeatureCreated }: Props) {
         I&apos;m Hamlet, your personal feature assistant 👋
       </h2>
 
-      {/* Message history — grows up to max-h-64, then scrollable */}
-      {(messages.length > 0 || loading) && (
-        <div className="mb-4 max-h-64 overflow-y-auto pr-1">
-          <div className="flex flex-col gap-3">
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.role === 'user'
-                    ? 'bg-purple-700 text-white rounded-br-sm'
-                    : 'bg-[#1e2240] text-gray-200 rounded-bl-sm'
-                }`}>
-                  {msg.content}
-                </div>
+      {/* Message history — always reserves h-48, capped at 50% width */}
+      <div className="mb-4 h-48 overflow-y-auto pr-1 w-1/2">
+        <div className="flex flex-col gap-3">
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                msg.role === 'user'
+                  ? 'bg-purple-700 text-white rounded-br-sm'
+                  : 'bg-[#1e2240] text-gray-200 rounded-bl-sm'
+              }`}>
+                {msg.content}
               </div>
-            ))}
+            </div>
+          ))}
 
-            {loading && (
-              <div className="flex justify-start">
-                <div className="bg-[#1e2240] px-4 py-3 rounded-2xl rounded-bl-sm">
-                  <div className="flex gap-1 items-center h-3">
-                    {[0, 150, 300].map(d => (
-                      <span key={d} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                        style={{ animationDelay: `${d}ms` }} />
-                    ))}
-                  </div>
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-[#1e2240] px-4 py-3 rounded-2xl rounded-bl-sm">
+                <div className="flex gap-1 items-center h-3">
+                  {[0, 150, 300].map(d => (
+                    <span key={d} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: `${d}ms` }} />
+                  ))}
                 </div>
               </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
         </div>
-      )}
+      </div>
 
       {/* Input row — 50% width, left-aligned */}
       <div className="flex gap-2 items-end w-1/2">
