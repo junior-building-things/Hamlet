@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const LARK_BASE_URL   = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 const WIKI_NODE_TOKEN = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
@@ -216,7 +216,7 @@ async function fillPrdSections(
   description: string,
   token:       string,
 ): Promise<void> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) return; // skip silently if no key configured
 
   const blocks  = await getDocBlocks(docId, token);
@@ -259,16 +259,13 @@ async function fillPrdSections(
 
   if (targets.length === 0) return;
 
-  // Generate content with Claude
-  const client     = new Anthropic({ apiKey });
+  // Generate content with Gemini
+  const genAI      = new GoogleGenerativeAI(apiKey);
+  const model      = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   const headingList = targets.map(t => `"${t.headingText}"`).join(', ');
 
-  const msg = await client.messages.create({
-    model:      'claude-3-5-haiku-20241022',
-    max_tokens: 1024,
-    messages:   [{
-      role:    'user',
-      content: `You are a senior product manager at TikTok writing a PRD for the Direct Messaging (DM) team.
+  const result = await model.generateContent(
+    `You are a senior product manager at TikTok writing a PRD for the Direct Messaging (DM) team.
 
 Feature: "${featureName}"
 What we're building: "${description}"
@@ -279,10 +276,9 @@ Rules:
 - Return ONLY a valid JSON object — no markdown, no extra text
 - Keys must exactly match the section names listed above
 - Values are 2–4 sentence plain-text paragraphs (no bullet points, no formatting)`,
-    }],
-  });
+  );
 
-  const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}';
+  const raw = result.response.text().trim();
   let content: Record<string, string>;
   try {
     // Strip any accidental markdown code fences
