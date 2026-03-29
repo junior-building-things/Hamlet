@@ -90,7 +90,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
       </div>
 
       {/* Team avatars */}
-      <div className="hidden sm:flex items-center py-3">
+      <div className="hidden sm:flex items-center py-3 pl-4">
         <TeamAvatars feature={feature} ringColor="#13162a" />
       </div>
 
