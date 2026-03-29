@@ -31,20 +31,26 @@ export async function GET(req: NextRequest) {
     body: JSON.stringify({ grant_type: 'authorization_code', code }),
   });
 
+  const tokenRaw = await tokenRes.text();
+  console.log('Lark token response status:', tokenRes.status);
+  console.log('Lark token response body:', tokenRaw);
+
   if (!tokenRes.ok) {
-    console.error('Lark token exchange failed:', await tokenRes.text());
     return NextResponse.redirect(`${origin}/login?error=token_exchange`);
   }
 
-  const tokenData = await tokenRes.json() as {
-    // OIDC endpoint returns token at top level (standard OAuth2)
-    access_token?: string;
-    // Older non-OIDC endpoint wraps it under data
-    code?: number;
-    data?: { access_token?: string };
-  };
+  let tokenData: Record<string, unknown>;
+  try {
+    tokenData = JSON.parse(tokenRaw) as Record<string, unknown>;
+  } catch {
+    console.error('Lark token response is not JSON:', tokenRaw);
+    return NextResponse.redirect(`${origin}/login?error=no_token`);
+  }
 
-  const accessToken = tokenData.access_token ?? tokenData.data?.access_token;
+  const accessToken =
+    (tokenData.access_token as string | undefined) ??
+    ((tokenData.data as Record<string, unknown> | undefined)?.access_token as string | undefined);
+
   if (!accessToken) {
     console.error('No access token in Lark response:', tokenData);
     return NextResponse.redirect(`${origin}/login?error=no_token`);
