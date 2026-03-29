@@ -1,6 +1,10 @@
+import Anthropic from '@anthropic-ai/sdk';
+
 const LARK_BASE_URL   = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 const WIKI_NODE_TOKEN = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
 const OWNER_EMAIL     = 'thomas.oefverstroem@bytedance.com';
+
+// ─── JSON parsing helper ──────────────────────────────────────────────────────
 
 async function parseJson(res: Response, label: string): Promise<unknown> {
   const text = await res.text();
@@ -36,7 +40,7 @@ async function getAccessToken(): Promise<string> {
   return cachedToken;
 }
 
-// ─── Root folder ──────────────────────────────────────────────────────────────
+// ─── Root folder cache ────────────────────────────────────────────────────────
 
 let cachedRootFolder    = '';
 let rootFolderFetchedAt = 0;
@@ -55,7 +59,7 @@ async function getRootFolderToken(accessToken: string): Promise<string> {
   return cachedRootFolder;
 }
 
-// ─── Wiki node → drive obj_token ──────────────────────────────────────────────
+// ─── Wiki node → drive obj_token cache ───────────────────────────────────────
 
 let cachedObjToken    = '';
 let objTokenFetchedAt = 0;
@@ -80,27 +84,27 @@ async function getWikiObjToken(accessToken: string): Promise<string> {
   return cachedObjToken;
 }
 
-// ─── Doc block types ──────────────────────────────────────────────────────────
+// ─── Block types ──────────────────────────────────────────────────────────────
 
 interface TextRun     { content: string; text_element_style?: Record<string, unknown> }
 interface TextElement { text_run?: TextRun }
 interface LarkBlock {
-  block_id:   string;
-  block_type: number;
-  children?:  string[];
-  text?:      { elements: TextElement[] };
+  block_id:    string;
+  block_type:  number;
+  children?:   string[];
+  text?:       { elements: TextElement[] };
   table_cell?: { row_index: number; col_index: number };
-  table?:     unknown;
+  table?:      unknown;
 }
 
 function blockText(b: LarkBlock): string {
   return (b.text?.elements ?? []).map(e => e.text_run?.content ?? '').join('');
 }
 
-// ─── Update "Initial version" date in the freshly copied doc ─────────────────
+// ─── Shared doc block helpers ─────────────────────────────────────────────────
 
-async function updateInitialVersionDate(docId: string, date: string, token: string): Promise<void> {
-  const res = await fetch(
+async function getDocBlocks(docId: string, token: string): Promise<LarkBlock[]> {
+  const res  = await fetch(
     `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks?page_size=500&document_revision_id=-1`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
@@ -109,17 +113,40 @@ async function updateInitialVersionDate(docId: string, date: string, token: stri
     data?: { items?: LarkBlock[] };
   };
   if (data.code !== 0) throw new Error(`get_blocks error ${data.code}: ${data.msg}`);
+  return data.data?.items ?? [];
+}
 
-  const blocks = data.data?.items ?? [];
-  const byId   = new Map(blocks.map(b => [b.block_id, b]));
+type UpdateRequest = {
+  block_id: string;
+  update_text_elements: { elements: { text_run: { content: string; text_element_style: Record<string, unknown> } }[] };
+};
 
-  // Build parent map from children arrays
+async function batchUpdateBlocks(docId: string, requests: UpdateRequest[], token: string): Promise<void> {
+  if (requests.length === 0) return;
+  const res  = await fetch(
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/batch_update`,
+    {
+      method:  'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ requests, document_revision_id: -1 }),
+    },
+  );
+  const data = await parseJson(res, 'update_blocks') as { code: number; msg?: string };
+  if (data.code !== 0) throw new Error(`update_blocks error ${data.code}: ${data.msg}`);
+}
+
+// ─── Update "Initial version" date ───────────────────────────────────────────
+
+async function updateInitialVersionDate(docId: string, date: string, token: string): Promise<void> {
+  const blocks   = await getDocBlocks(docId, token);
+  const byId     = new Map(blocks.map(b => [b.block_id, b]));
+
+  // Build parent map
   const parentOf = new Map<string, string>();
   for (const b of blocks) {
     for (const childId of b.children ?? []) parentOf.set(childId, b.block_id);
   }
 
-  // Walk up ancestors looking for a block with a given property
   function findAncestorWithProp(blockId: string, prop: keyof LarkBlock): LarkBlock | undefined {
     let id = parentOf.get(blockId);
     while (id) {
@@ -131,13 +158,13 @@ async function updateInitialVersionDate(docId: string, date: string, token: stri
     return undefined;
   }
 
-  // Locate the table_cell (and its parent table) that contains "Initial version"
+  // Locate the table_cell containing "Initial version"
   let targetRowIndex = -1;
   let targetTableId  = '';
 
   for (const block of blocks) {
     if (!blockText(block).includes('Initial version')) continue;
-    const cell  = findAncestorWithProp(block.block_id, 'table_cell');
+    const cell    = findAncestorWithProp(block.block_id, 'table_cell');
     const tableId = cell ? parentOf.get(cell.block_id) : undefined;
     if (cell?.table_cell && tableId) {
       targetRowIndex = cell.table_cell.row_index;
@@ -146,9 +173,9 @@ async function updateInitialVersionDate(docId: string, date: string, token: stri
     }
   }
 
-  if (targetRowIndex === -1) return; // "Initial version" row not found — skip silently
+  if (targetRowIndex === -1) return;
 
-  // Find date-like blocks in the same table row
+  // Find date-pattern blocks in the same row
   const dateRe   = /\d{4}-\d{2}-\d{2}/;
   const toUpdate: LarkBlock[] = [];
 
@@ -161,47 +188,154 @@ async function updateInitialVersionDate(docId: string, date: string, token: stri
     }
   }
 
-  if (toUpdate.length === 0) return;
+  await batchUpdateBlocks(
+    docId,
+    toUpdate.map(b => ({
+      block_id:             b.block_id,
+      update_text_elements: { elements: [{ text_run: { content: date, text_element_style: {} } }] },
+    })),
+    token,
+  );
+}
 
-  const requests = toUpdate.map(b => ({
-    block_id:             b.block_id,
-    update_text_elements: {
-      elements: [{ text_run: { content: date, text_element_style: {} } }],
-    },
-  }));
+// ─── PRD Builder: fill sections with AI-generated content ────────────────────
 
-  const upRes  = await fetch(
-    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/batch_update`,
+// Heading block types in Lark Docx (Heading1–Heading9)
+const HEADING_BLOCK_TYPES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11]);
+
+// Keywords that identify PRD sections worth filling
+const PRD_KEYWORDS = [
+  'background', 'problem', 'goal', 'objective', 'metric', 'requirement',
+  'scope', 'overview', 'summary', 'context', 'why', 'impact', 'success',
+  'solution', 'description', 'motivation', 'hypothesis',
+];
+
+async function fillPrdSections(
+  docId:       string,
+  featureName: string,
+  description: string,
+  token:       string,
+): Promise<void> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return; // skip silently if no key configured
+
+  const blocks  = await getDocBlocks(docId, token);
+  const byId    = new Map(blocks.map(b => [b.block_id, b]));
+
+  // Find the page block and walk its top-level children in order
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) return;
+
+  const topLevel = pageBlock.children
+    .map(id => byId.get(id))
+    .filter((b): b is LarkBlock => b !== undefined);
+
+  // Build sections: heading → following sibling blocks (until next heading)
+  type Section = { headingText: string; contentBlocks: LarkBlock[] };
+  const sections: Section[] = [];
+  let current: Section | null = null;
+
+  for (const block of topLevel) {
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      if (current) sections.push(current);
+      current = { headingText: blockText(block), contentBlocks: [] };
+    } else if (current) {
+      current.contentBlocks.push(block);
+    }
+  }
+  if (current) sections.push(current);
+
+  // Find relevant sections with at least one empty text block
+  type Target = { headingText: string; blockId: string };
+  const targets: Target[] = [];
+
+  for (const section of sections) {
+    const ht = section.headingText.toLowerCase();
+    if (!PRD_KEYWORDS.some(kw => ht.includes(kw))) continue;
+    // paragraph block_type = 2
+    const empty = section.contentBlocks.find(b => b.block_type === 2 && !blockText(b).trim());
+    if (empty) targets.push({ headingText: section.headingText, blockId: empty.block_id });
+  }
+
+  if (targets.length === 0) return;
+
+  // Generate content with Claude
+  const client     = new Anthropic({ apiKey });
+  const headingList = targets.map(t => `"${t.headingText}"`).join(', ');
+
+  const msg = await client.messages.create({
+    model:      'claude-3-5-haiku-20241022',
+    max_tokens: 1024,
+    messages:   [{
+      role:    'user',
+      content: `You are a senior product manager at TikTok writing a PRD for the Direct Messaging (DM) team.
+
+Feature: "${featureName}"
+What we're building: "${description}"
+
+Write concise, professional content for these PRD sections: ${headingList}
+
+Rules:
+- Return ONLY a valid JSON object — no markdown, no extra text
+- Keys must exactly match the section names listed above
+- Values are 2–4 sentence plain-text paragraphs (no bullet points, no formatting)`,
+    }],
+  });
+
+  const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}';
+  let content: Record<string, string>;
+  try {
+    // Strip any accidental markdown code fences
+    const cleaned = raw.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '');
+    content = JSON.parse(cleaned) as Record<string, string>;
+  } catch {
+    console.warn('PRD Builder: failed to parse Claude response', raw.slice(0, 200));
+    return;
+  }
+
+  const requests: UpdateRequest[] = targets
+    .filter(t => content[t.headingText]?.trim())
+    .map(t => ({
+      block_id:             t.blockId,
+      update_text_elements: {
+        elements: [{ text_run: { content: content[t.headingText].trim(), text_element_style: {} } }],
+      },
+    }));
+
+  await batchUpdateBlocks(docId, requests, token);
+}
+
+// ─── Add collaborator helper ──────────────────────────────────────────────────
+
+async function addCollaborator(fileToken: string, token: string): Promise<void> {
+  await fetch(
+    `${LARK_BASE_URL}/open-apis/drive/v1/permissions/${fileToken}/members?type=docx&need_notification=false`,
     {
-      method:  'PATCH',
+      method:  'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ requests, document_revision_id: -1 }),
+      body:    JSON.stringify({ member_type: 'email', member_id: OWNER_EMAIL, perm: 'full_access', type: 'user' }),
     },
   );
-  const upData = await parseJson(upRes, 'update_blocks') as { code: number; msg?: string };
-  if (upData.code !== 0) throw new Error(`update_blocks error ${upData.code}: ${upData.msg}`);
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Copies the PRD wiki template into the bot's root folder, names it
- * "[PRD] {featureName}", updates the "Initial version" date, adds Thomas
- * as full-access collaborator, and returns the document URL.
+ * Copies the PRD wiki template, names it "[PRD] {featureName}", updates the
+ * "Initial version" date, optionally fills PRD sections with AI-generated
+ * content, adds Thomas as full-access collaborator, and returns the doc URL.
  */
-export async function copyPrdTemplate(featureName: string): Promise<string> {
+export async function copyPrdTemplate(featureName: string, prdBuilderText?: string): Promise<string> {
   const token = await getAccessToken();
   const [folderToken, objToken] = await Promise.all([
     getRootFolderToken(token),
     getWikiObjToken(token),
   ]);
 
-  const prdName = `[PRD] ${featureName}`;
-
   const res  = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${objToken}/copy`, {
     method:  'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ name: prdName, type: 'docx', folder_token: folderToken }),
+    body:    JSON.stringify({ name: `[PRD] ${featureName}`, type: 'docx', folder_token: folderToken }),
   });
   const data = await parseJson(res, 'drive_copy') as {
     code: number; msg?: string;
@@ -214,17 +348,16 @@ export async function copyPrdTemplate(featureName: string): Promise<string> {
 
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-  // Update date + add collaborator in parallel
+  // Doc updates (sequential) + collaborator add (parallel)
   await Promise.all([
-    updateInitialVersionDate(fileToken, today, token),
-    fetch(
-      `${LARK_BASE_URL}/open-apis/drive/v1/permissions/${fileToken}/members?type=docx&need_notification=false`,
-      {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ member_type: 'email', member_id: OWNER_EMAIL, perm: 'full_access', type: 'user' }),
-      },
-    ),
+    (async () => {
+      await updateInitialVersionDate(fileToken, today, token);
+      if (prdBuilderText?.trim()) {
+        await fillPrdSections(fileToken, featureName, prdBuilderText.trim(), token)
+          .catch(e => console.warn('PRD Builder fill failed:', e));
+      }
+    })(),
+    addCollaborator(fileToken, token),
   ]);
 
   return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;

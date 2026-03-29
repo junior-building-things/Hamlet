@@ -203,6 +203,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     contentDesigner: CONTENT_OPTIONS[0].value,
     qa:              QA_OPTIONS[0].value,
   });
+  const [prdBuilder, setPrdBuilder]         = useState(false);
+  const [prdBuilderText, setPrdBuilderText] = useState('');
 
   const isMeego     = !!(feature?.meegoUrl);
   const canComplete = feature?.canCompleteNode === true;
@@ -261,6 +263,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
         businessLineOptionId:    form.businessLine    || undefined,
         socialComponentOptionId: form.socialComponent || undefined,
         roles,
+        prdBuilderText:          prdBuilder && prdBuilderText.trim() ? prdBuilderText.trim() : undefined,
       }),
     })
       .then(res => res.json().then(data => ({ ok: res.ok, data })))
@@ -338,6 +341,28 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                 <input autoFocus type="text" className={inputCls}
                   placeholder="Enter feature name…"
                   value={form.name} onChange={e => setField('name', e.target.value)} />
+              </div>
+
+              {/* PRD Builder */}
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+                  <input
+                    type="checkbox"
+                    checked={prdBuilder}
+                    onChange={e => setPrdBuilder(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
+                  />
+                  <span className="text-[11px] text-gray-500 font-medium">PRD Builder</span>
+                </label>
+                {prdBuilder && (
+                  <textarea
+                    className={`${inputCls} resize-none`}
+                    rows={3}
+                    placeholder="What are you building?"
+                    value={prdBuilderText}
+                    onChange={e => setPrdBuilderText(e.target.value)}
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">

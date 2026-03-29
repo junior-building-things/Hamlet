@@ -6,7 +6,7 @@ const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as CreateFeatureParams;
+    const body = await req.json() as CreateFeatureParams & { prdBuilderText?: string };
     if (!body.name?.trim()) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     let prd: string | undefined;
     let prdError: string | undefined;
     try {
-      prd = await copyPrdTemplate(body.name.trim());
+      prd = await copyPrdTemplate(body.name.trim(), body.prdBuilderText);
       // 3. Write the PRD URL back to the Meego wiki field
       await updateFeatureFields(TIKTOK_PROJECT_KEY, result.id, { prd });
     } catch (larkErr) {
