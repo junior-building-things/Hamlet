@@ -254,9 +254,10 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       }
       return items;
     })(),
-    fetchExtendedFields().catch(() =>
-      new Map<string, { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string }>()
-    ),
+    fetchExtendedFields().catch((err) => {
+      console.error('[meego] fetchExtendedFields failed:', err);
+      return new Map<string, { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string }>();
+    }),
   ]);
 
   return allItems
