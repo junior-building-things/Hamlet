@@ -143,7 +143,16 @@ export async function POST(req: NextRequest) {
         prd,
       };
 
-      return NextResponse.json({ reply: `${reply} ✅`, action: 'create_feature', feature });
+      const links = [
+        prd             && `[📄 PRD](${prd})`,
+        created.meegoUrl && `[🎯 Meego](${created.meegoUrl})`,
+      ].filter(Boolean).join('  ·  ');
+
+      return NextResponse.json({
+        reply: `${reply} ✅${links ? `\n\n${links}` : ''}`,
+        action: 'create_feature',
+        feature,
+      });
     }
 
     // ── Create PRD ──────────────────────────────────────────────────────────────

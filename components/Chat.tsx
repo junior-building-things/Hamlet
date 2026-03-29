@@ -3,6 +3,23 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import type { Feature } from '@/lib/types';
 
+/** Render text with [label](url) markdown links as clickable anchors */
+function renderWithLinks(text: string) {
+  const parts = text.split(/(\[.*?\]\(.*?\))/g);
+  return parts.map((part, i) => {
+    const m = part.match(/^\[(.*?)\]\((.*?)\)$/);
+    if (m) {
+      return (
+        <a key={i} href={m[2]} target="_blank" rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:opacity-80">
+          {m[1]}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 interface Msg { role: 'user' | 'assistant'; content: string }
 interface ChatResponse { reply: string; action?: string; feature?: Feature }
 
@@ -62,7 +79,7 @@ export function Chat({ onFeatureCreated }: Props) {
                   ? 'bg-purple-700 text-white rounded-br-sm'
                   : 'bg-[#1e2240] text-gray-200 rounded-bl-sm'
               }`}>
-                {msg.content}
+                {renderWithLinks(msg.content)}
               </div>
             </div>
           ))}
