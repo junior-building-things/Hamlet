@@ -14,10 +14,11 @@ export function Chat({ onFeatureCreated }: Props) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input,    setInput]    = useState('');
   const [loading,  setLoading]  = useState(false);
-  const bottomRef               = useRef<HTMLDivElement>(null);
+  const containerRef            = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = containerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages, loading]);
 
   async function send() {
@@ -51,8 +52,8 @@ export function Chat({ onFeatureCreated }: Props) {
         I&apos;m Hamlet, your personal feature assistant 👋
       </h2>
 
-      {/* Message history — always h-48 so layout never shifts */}
-      <div className="w-1/2 h-48 overflow-y-auto pr-1 mb-4">
+      {/* Message history — grows up to max-h-48, scrolls internally (no page scroll) */}
+      <div ref={containerRef} className="w-1/2 max-h-48 overflow-y-auto pr-1 mb-2">
         <div className="flex flex-col gap-3">
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -78,7 +79,6 @@ export function Chat({ onFeatureCreated }: Props) {
               </div>
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
       </div>
 
