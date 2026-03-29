@@ -91,7 +91,7 @@ async function parseIntent(messages: ChatMsg[], userMessage: string): Promise<In
     : '';
 
   const genAI  = new GoogleGenerativeAI(apiKey);
-  const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-preview-04-17' });
+  const model  = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
   const result = await model.generateContent(`${SYSTEM}${history}\n\nUser: ${userMessage}`);
   const raw    = result.response.text().trim();
   console.log('[chat] Gemini raw response:', raw.slice(0, 500));

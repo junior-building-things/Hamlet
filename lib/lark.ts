@@ -265,7 +265,7 @@ async function fillPrdSections(
 
   // Generate content with Gemini
   const genAI      = new GoogleGenerativeAI(apiKey);
-  const model      = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-preview-04-17' });
+  const model      = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
   const headingList = targets.map(t => `"${t.headingText}"`).join(', ');
 
   const result = await model.generateContent(
