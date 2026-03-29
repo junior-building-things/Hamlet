@@ -1,24 +1,31 @@
 'use client';
 import { useTheme } from 'next-themes';
-import { Moon, Sun, RefreshCw, Zap } from 'lucide-react';
+import { Moon, Sun, RefreshCw, Zap, LogOut } from 'lucide-react';
 
 interface Props {
   syncing: boolean;
   onSyncAll: () => void;
+  user?: { name: string; avatarUrl: string };
 }
 
-export function Header({ syncing, onSyncAll }: Props) {
+export function Header({ syncing, onSyncAll, user }: Props) {
   const { theme, setTheme } = useTheme();
 
   return (
     <div className="flex items-center justify-between px-6 py-5">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-purple-700 flex items-center justify-center text-white">
-          <Zap className="w-5 h-5 fill-white" />
+        <div className="w-10 h-10 rounded-xl overflow-hidden bg-purple-700 flex items-center justify-center text-white shrink-0">
+          {user?.avatarUrl
+            ? <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+            : <Zap className="w-5 h-5 fill-white" />}
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">Hamlet</h1>
-          <p className="text-xs text-gray-400">Product Management Dashboard</p>
+          <h1 className="text-xl font-bold text-white">{user?.name ?? 'Hamlet'}</h1>
+          <a href="/api/auth/logout"
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-400 transition-colors w-fit">
+            <LogOut className="w-3 h-3" />
+            Log out
+          </a>
         </div>
       </div>
 

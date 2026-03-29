@@ -43,7 +43,7 @@ export default function Home() {
   const [syncingAll, setSyncingAll]       = useState(false);
   const [detailSyncCount, setDetailSyncCount] = useState(0);
   const [detailSyncTotal, setDetailSyncTotal] = useState(0);
-  const [userName, setUserName]           = useState<string>('');
+  const [user, setUser] = useState<{ name: string; avatarUrl: string } | undefined>();
 
   // Background-sync full details (status, PRD, compliance, priority) for all features
   // in parallel batches of 5 so the UI populates immediately after load.
@@ -139,10 +139,12 @@ export default function Home() {
       }
     }
     init();
-    // Fetch current user name for greeting
+    // Fetch current user for greeting + header
     fetch('/api/auth/me')
       .then(r => r.json())
-      .then((d: { name?: string }) => { if (d.name) setUserName(d.name.split(' ')[0]); })
+      .then((d: { name?: string; avatarUrl?: string }) => {
+        if (d.name) setUser({ name: d.name, avatarUrl: d.avatarUrl ?? '' });
+      })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -280,8 +282,8 @@ export default function Home() {
   return (
     <main className="min-h-screen" style={{ backgroundColor: '#0c0e1a' }}>
       <div className="max-w-5xl mx-auto pb-16">
-        <Header syncing={syncingAll} onSyncAll={syncAll} />
-        {userName && <Greeting name={userName} />}
+        <Header syncing={syncingAll} onSyncAll={syncAll} user={user} />
+        {user && <Greeting name={user.name.split(' ')[0]} />}
         <StatsCards features={features} />
         <FilterBar
           search={search}
