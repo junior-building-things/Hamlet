@@ -93,8 +93,13 @@ async function parseIntent(messages: ChatMsg[], userMessage: string): Promise<In
   const genAI  = new GoogleGenerativeAI(apiKey);
   const model  = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   const result = await model.generateContent(`${SYSTEM}${history}\n\nUser: ${userMessage}`);
-  const raw    = result.response.text().trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-  return JSON.parse(raw) as Intent;
+  const raw    = result.response.text().trim();
+  console.log('[chat] Gemini raw response:', raw.slice(0, 500));
+
+  // Extract JSON — find the first { ... } block regardless of surrounding markdown
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error(`No JSON object found in response: ${raw.slice(0, 200)}`);
+  return JSON.parse(jsonMatch[0]) as Intent;
 }
 
 // ── Route handler ──────────────────────────────────────────────────────────────
