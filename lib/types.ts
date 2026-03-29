@@ -29,7 +29,9 @@ export interface Feature {
   quarterlyCycle?: string;
   businessLine?: string;
   socialComponent?: string;
+  pmOwner?: string;
   tpmOwner?: string;
+  techOwner?: string;
   iosOwner?: string;
   androidOwner?: string;
   serverOwner?: string;

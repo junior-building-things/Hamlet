@@ -69,7 +69,7 @@ export default function Home() {
             meegoNodeKey: string; prd: string; complianceUrl: string;
             priority: string | null; canCompleteNode: boolean;
             quarterlyCycle: string; businessLine: string; socialComponent: string;
-            tpmOwner: string; iosOwner: string; androidOwner: string;
+            pmOwner: string; tpmOwner: string; techOwner: string; iosOwner: string; androidOwner: string;
             serverOwner: string; qaOwner: string; daOwner: string;
             uiuxOwner: string; contentDesigner: string;
           };
@@ -88,7 +88,9 @@ export default function Home() {
                   quarterlyCycle:  data.quarterlyCycle   || f.quarterlyCycle,
                   businessLine:    data.businessLine     || f.businessLine,
                   socialComponent: data.socialComponent  || f.socialComponent,
+                  pmOwner:         data.pmOwner          || f.pmOwner,
                   tpmOwner:        data.tpmOwner         || f.tpmOwner,
+                  techOwner:       data.techOwner        || f.techOwner,
                   iosOwner:        data.iosOwner         || f.iosOwner,
                   androidOwner:    data.androidOwner     || f.androidOwner,
                   serverOwner:     data.serverOwner      || f.serverOwner,
@@ -190,7 +192,7 @@ export default function Home() {
         meegoNodeKey: string; prd: string; complianceUrl: string;
         priority: string | null; canCompleteNode: boolean;
         quarterlyCycle: string; businessLine: string; socialComponent: string;
-        tpmOwner: string; iosOwner: string; androidOwner: string;
+        pmOwner: string; tpmOwner: string; techOwner: string; iosOwner: string; androidOwner: string;
         serverOwner: string; qaOwner: string; daOwner: string;
         uiuxOwner: string; contentDesigner: string;
       };
@@ -209,7 +211,9 @@ export default function Home() {
               quarterlyCycle:  data.quarterlyCycle   || f.quarterlyCycle,
               businessLine:    data.businessLine     || f.businessLine,
               socialComponent: data.socialComponent  || f.socialComponent,
-              tpmOwner:        data.tpmOwner         || f.tpmOwner,
+              pmOwner:         data.pmOwner          || f.pmOwner,
+                  tpmOwner:        data.tpmOwner         || f.tpmOwner,
+                  techOwner:       data.techOwner        || f.techOwner,
               iosOwner:        data.iosOwner         || f.iosOwner,
               androidOwner:    data.androidOwner     || f.androidOwner,
               serverOwner:     data.serverOwner      || f.serverOwner,

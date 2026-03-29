@@ -17,6 +17,7 @@ interface Props {
 // ─── Avatar URLs ──────────────────────────────────────────────────────────────
 
 const AV: Record<string, string> = {
+  'Thomas':      'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00tl_59bdfbf7-09d8-485f-8904-7b97678b85hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
   'Austin Lee':    'https://pan16.larksuitecdn.com/static-resource/v1/v2_cf35e3a3-be89-4e2f-9998-b813f928f77h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
   'Kyle Chan':     'https://pan16.larksuitecdn.com/static-resource/v1/v2_042084af-a296-44f0-a9b5-0116f934742h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
   'Xuan Sheng':    'https://s1-imfile.feishucdn.com/static-resource/v1/d118fefe-52ae-4b21-8aa5-c99a20748c7g~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
@@ -117,6 +118,10 @@ const CONTENT_OPTIONS: AvatarOption[] = [
 const QA_OPTIONS: AvatarOption[] = [
   { value: '7242202760668643331', label: 'Xiaobo Tian', avatarUrl: AV['Xiaobo Tian'] },
 ];
+const PM_OPTIONS: AvatarOption[] = [
+  { value: 'thomas.oefverstroem', label: 'Thomas', avatarUrl: AV['Thomas'] },
+];
+
 const TPM_OPTIONS: AvatarOption[] = [
   { value: '7330558724446191620', label: 'Spring Ren',  avatarUrl: AV['Spring Ren'] },
   { value: '7287415984883810308', label: 'Yunyi Yang',  avatarUrl: AV['Yunyi Yang'] },
@@ -191,6 +196,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     quarterlyCycle:  '5350il55y',   // 2026-Q2 default
     businessLine:    '2hj6rn3ao',   // Social Messaging default
     socialComponent: 'mz8vxxems',   // Sticker & Typing Rec default
+    pm:              '',
+    techOwner:       '',
     server:          '',
     android:         '',
     ios:             '',
@@ -212,6 +219,19 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Default PM to the currently logged-in user
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then((d: { name?: string }) => {
+        if (!d.name) return;
+        const match = PM_OPTIONS.find(o => o.label === d.name || o.label === d.name!.split(' ')[0]);
+        if (match) setForm(prev => ({ ...prev, pm: match.value }));
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function setField(key: keyof typeof form, value: string) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -244,6 +264,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
       { role: 'QA',          owners: [form.qa] },
       { role: 'role_e8ce24', owners: [form.tpm] },
     ];
+    if (form.pm)        roles.push({ role: 'PM',         owners: [form.pm] });
+    if (form.techOwner) roles.push({ role: 'Tech_Owner', owners: [form.techOwner] });
     if (form.server)    roles.push({ role: 'Server',     owners: [form.server] });
     if (form.android)   roles.push({ role: 'Android',    owners: [form.android] });
     if (form.ios)       roles.push({ role: 'iOS',        owners: [form.ios] });
@@ -396,12 +418,12 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <FormLabel>TPM</FormLabel>
-                    <AvatarSelect options={TPM_OPTIONS} value={form.tpm} onChange={v => setField('tpm', v)} />
+                    <FormLabel>PM</FormLabel>
+                    <AvatarSelect options={PM_OPTIONS} value={form.pm} onChange={v => setField('pm', v)} placeholder="Optional" />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <FormLabel>DS</FormLabel>
-                    <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
+                    <FormLabel>TPM</FormLabel>
+                    <AvatarSelect options={TPM_OPTIONS} value={form.tpm} onChange={v => setField('tpm', v)} />
                   </div>
                 </div>
 
@@ -413,6 +435,17 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Content Designer</FormLabel>
                     <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} locked />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>DS</FormLabel>
+                    <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} locked />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>QA</FormLabel>
+                    <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} locked />
                   </div>
                 </div>
 
@@ -433,8 +466,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                     <AvatarSelect options={SERVER_OWNERS} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <FormLabel>QA</FormLabel>
-                    <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} locked />
+                    <FormLabel>Tech Owner</FormLabel>
+                    <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" />
                   </div>
                 </div>
               </div>
@@ -499,6 +532,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
           <div className="pb-5">
             <SectionHeader title="Current Status" />
+            <div className="mt-4">
             <InfoField label="Node" value={nodeName} />
             {isMeego && canComplete && (
               <div className="mt-3">
@@ -520,11 +554,12 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
             {isMeego && feature?.canCompleteNode === false && (
               <p className="text-xs text-gray-600 mt-1">Not assigned to you</p>
             )}
+            </div>
           </div>
 
           <div className="py-5">
             <SectionHeader title="Feature Details" />
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-4">
               <InfoField label="Priority"         value={feature?.priority} />
               <InfoField label="Business Line"    value={feature?.businessLine} />
               <InfoField label="Social Component" value={feature?.socialComponent} />
@@ -533,15 +568,17 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
           <div className="pt-5">
             <SectionHeader title="POC Details" />
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-4">
+              <AvatarInfoField label="PM"               value={feature?.pmOwner} />
               <AvatarInfoField label="TPM"              value={feature?.tpmOwner} />
-              <AvatarInfoField label="DS"               value={feature?.daOwner} />
               <AvatarInfoField label="UX Designer"      value={feature?.uiuxOwner} />
               <AvatarInfoField label="Content Designer" value={feature?.contentDesigner} />
+              <AvatarInfoField label="DS"               value={feature?.daOwner} />
+              <AvatarInfoField label="QA"               value={feature?.qaOwner} />
               <AvatarInfoField label="Android"          value={feature?.androidOwner} />
               <AvatarInfoField label="iOS"              value={feature?.iosOwner} />
               <AvatarInfoField label="Server"           value={feature?.serverOwner} />
-              <AvatarInfoField label="QA"               value={feature?.qaOwner} />
+              <AvatarInfoField label="Tech Owner"       value={feature?.techOwner} />
             </div>
           </div>
 
