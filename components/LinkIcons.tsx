@@ -46,14 +46,12 @@ export function LinkIcons({ feature, ringColor = '#13162a' }: Props) {
           href={link.url}
           target="_blank"
           rel="noreferrer"
-          className="group/link flex items-center h-7 rounded-full bg-[#1a1d32] cursor-pointer hover:brightness-125 transition-all duration-200 hover:z-20 relative"
+          className="group/link flex items-center h-7 w-7 rounded-full bg-[#1a1d32] cursor-pointer hover:brightness-125 hover:w-auto hover:z-20 relative transition-none"
           style={{
             marginLeft: i === 0 ? 0 : '-4px',
             zIndex: links.length - i,
             outline: `2px solid ${ringColor}`,
             outlineOffset: '-1px',
-            /* collapsed = icon only (28px circle), expanded = icon + text */
-            width: '28px',
           }}
         >
           {/* Icon — always visible, centred in the circle */}
@@ -67,11 +65,9 @@ export function LinkIcons({ feature, ringColor = '#13162a' }: Props) {
             />
           </span>
 
-          {/* Label — hidden by default, slides in on hover */}
+          {/* Label — hidden by default, shown on hover */}
           <span
-            className="overflow-hidden whitespace-nowrap text-[11px] font-semibold leading-none
-                       max-w-0 opacity-0 group-hover/link:max-w-[80px] group-hover/link:opacity-100
-                       group-hover/link:pr-2.5 transition-all duration-200 ease-out"
+            className="hidden group-hover/link:inline whitespace-nowrap text-[11px] font-semibold leading-none pr-2.5"
             style={{ color: link.color }}
           >
             {link.label}
