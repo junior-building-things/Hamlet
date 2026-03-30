@@ -369,20 +369,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                 <SectionHeader title="PRD Details" />
 
                 <div className="flex flex-col gap-1.5">
-                  <FormLabel required>Feature Name</FormLabel>
-                  <div className="flex items-center gap-2">
-                    <input autoFocus type="text" className={inputCls}
-                      placeholder="Enter feature name…"
-                      value={form.name} onChange={e => setField('name', e.target.value)} />
-                    <button type="button" disabled={!form.name.trim() || rewritingName}
-                      onClick={() => handleRewrite('name')}
-                      className="shrink-0 p-2 rounded-lg border border-[#2e3460] text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:text-purple-400 enabled:hover:border-purple-500/50">
-                      {rewritingName ? <Loader2 className="w-4 h-4 animate-spin" /> : <WandSparkles className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
                   <FormLabel required>PRD Type</FormLabel>
                   <CustomSelect
                     options={[
@@ -395,7 +381,21 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <FormLabel>Feature Description</FormLabel>
+                  <FormLabel required>PRD Name</FormLabel>
+                  <div className="flex items-center gap-2">
+                    <input autoFocus type="text" className={inputCls}
+                      placeholder="Enter PRD name…"
+                      value={form.name} onChange={e => setField('name', e.target.value)} />
+                    <button type="button" disabled={!form.name.trim() || rewritingName}
+                      onClick={() => handleRewrite('name')}
+                      className="shrink-0 p-2 rounded-lg border border-[#2e3460] text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:text-purple-400 enabled:hover:border-purple-500/50">
+                      {rewritingName ? <Loader2 className="w-4 h-4 animate-spin" /> : <WandSparkles className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <FormLabel>PRD Description</FormLabel>
                   <div className="flex items-start gap-2">
                     <textarea
                       className={`${inputCls} resize-none`}
