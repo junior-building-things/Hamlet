@@ -220,10 +220,49 @@ ${brief}`;
         });
       }
       const target = comments[0];
-      await replyToComment(params.docUrl, target.commentId, params.replyText);
+
+      // Detect if replyText is an instruction (e.g. "something insightful") vs literal text
+      const instructionWords = ['something', 'insightful', 'thoughtful', 'agree', 'disagree', 'elaborate', 'suggest', 'question', 'challenge', 'positive', 'constructive', 'funny', 'witty', 'helpful'];
+      const isInstruction = params.replyText.split(/\s+/).length <= 8 &&
+        instructionWords.some(w => params.replyText.toLowerCase().includes(w));
+
+      let finalReply = params.replyText;
+      if (isInstruction) {
+        const apiKey = process.env.GOOGLE_AI_API_KEY;
+        if (apiKey) {
+          const genAI = new GoogleGenerativeAI(apiKey);
+          const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+
+          // Read doc content for context
+          let docContext = '';
+          try {
+            docContext = await readDocContent(params.docUrl);
+            docContext = docContext.slice(0, 4000);
+          } catch { /* best effort */ }
+
+          const existingReplies = target.replies.map(r => r.content).join('\n');
+          const prompt = `You are a TikTok product manager replying to a comment on a PRD document.
+
+Comment quoted text: "${target.quote}"
+Comment: "${target.content}"
+${existingReplies ? `Existing replies:\n${existingReplies}\n` : ''}
+${docContext ? `Document context:\n${docContext}\n` : ''}
+Instruction: Write a reply that is "${params.replyText}"
+
+Rules:
+- Keep it concise (1-3 sentences)
+- Be professional but conversational
+- Return ONLY the reply text, no quotes or formatting`;
+
+          const result = await model.generateContent(prompt);
+          finalReply = result.response.text().trim();
+        }
+      }
+
+      await replyToComment(params.docUrl, target.commentId, finalReply);
       const preview = target.content.slice(0, 80);
       return NextResponse.json({
-        reply: `Replied to the comment "${preview}${target.content.length > 80 ? '…' : ''}"!`,
+        reply: `Replied to "${preview}${target.content.length > 80 ? '…' : ''}" with:\n\n"${finalReply}"`,
         links: [{ label: '📄 Doc', url: params.docUrl }],
       });
     }

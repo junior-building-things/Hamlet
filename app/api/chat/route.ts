@@ -40,8 +40,8 @@ Respond with ONLY valid JSON — no markdown fences, no extra text:
     "query": "the user's exact question verbatim, for query_meego",
     "docUrl": "full Lark doc URL if shared by user",
     "commentText": "the comment text for comment_doc",
-    "commentSearch": "keyword or phrase to find the target comment for reply_comment",
-    "replyText": "the reply text for reply_comment",
+    "commentSearch": "keyword or phrase to find the target comment for reply_comment (use the commenter's name or quoted text)",
+    "replyText": "for reply_comment: the exact reply if user provides one, OR a brief instruction like 'something insightful' or 'agree and elaborate' if user wants AI to generate it",
     "useHalfDayPrd": "true if user wants a half-day PRD template, omit otherwise"
   },
   "reply": "warm, natural response"
