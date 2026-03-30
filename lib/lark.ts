@@ -584,6 +584,12 @@ export async function addDocSection(
   const pageBlock = blocks.find(b => b.block_type === 1);
   if (!pageBlock) throw new Error('Empty document');
 
+  // Log a sample heading block to verify structure
+  const sampleHeading = blocks.find(b => HEADING_BLOCK_TYPES.has(b.block_type));
+  if (sampleHeading) {
+    console.log('[addDocSection] Sample heading block:', JSON.stringify(sampleHeading).slice(0, 500));
+  }
+
   // Determine insert index (-1 = end of document)
   let insertIndex = -1;
   if (afterSection && pageBlock.children) {
@@ -626,6 +632,7 @@ export async function addDocSection(
     body.index = insertIndex;
   }
 
+  console.log('[addDocSection] Request body:', JSON.stringify(body).slice(0, 500));
   const res = await fetch(
     `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children`,
     {
@@ -634,7 +641,8 @@ export async function addDocSection(
       body: JSON.stringify(body),
     },
   );
-  const data = await parseJson(res, 'create_blocks') as { code: number; msg?: string };
+  const data = await parseJson(res, 'create_blocks') as { code: number; msg?: string; data?: unknown };
+  console.log('[addDocSection] API response:', JSON.stringify(data).slice(0, 500));
   if (data.code !== 0) throw new Error(`Lark create blocks error ${data.code}: ${data.msg}`);
 }
 
