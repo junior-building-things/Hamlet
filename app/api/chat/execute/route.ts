@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getClaudeClient } from '@/lib/claude';
 import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
 import { copyPrdTemplate } from '@/lib/lark';
 import type { Feature } from '@/lib/types';
@@ -129,19 +129,22 @@ export async function POST(req: NextRequest) {
 
       const brief = await callMeego('get_workitem_brief', { project_key: PROJECT_KEY, work_item_id: workItemId });
 
-      // Use Gemini to answer the user's question from the raw brief
-      const apiKey = process.env.GOOGLE_AI_API_KEY;
-      if (!apiKey) throw new Error('GOOGLE_AI_API_KEY not set');
-      const genAI  = new GoogleGenerativeAI(apiKey);
-      const model  = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
-      const prompt = `You are Hamlet, a helpful PM assistant. Below is the raw Meego work item brief for a feature. Answer the user's question concisely and naturally based only on the information in the brief. If the answer is not present in the brief, say so honestly.
-
-User's question: ${params.query}
-
-Meego brief:
-${brief}`;
-      const result  = await model.generateContent(prompt);
-      const answer  = result.response.text().trim();
+      // Use Claude to answer the user's question from the raw brief
+      const client = getClaudeClient();
+      const response = await client.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 1024,
+        system: 'You are Hamlet, a helpful PM assistant. Answer the user\'s question concisely and naturally based only on the information in the provided Meego brief. If the answer is not present in the brief, say so honestly.',
+        messages: [{
+          role: 'user',
+          content: `User's question: ${params.query}\n\nMeego brief:\n${brief}`,
+        }],
+      });
+      const answer = response.content
+        .filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join('')
+        .trim();
       return NextResponse.json({ reply: answer });
     }
 

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getClaudeClient } from './claude';
 
 const LARK_BASE_URL   = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 const WIKI_NODE_TOKEN = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
@@ -220,9 +220,6 @@ async function fillPrdSections(
   description: string,
   token:       string,
 ): Promise<void> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) return; // skip silently if no key configured
-
   const blocks  = await getDocBlocks(docId, token);
   const byId    = new Map(blocks.map(b => [b.block_id, b]));
 
@@ -263,13 +260,16 @@ async function fillPrdSections(
 
   if (targets.length === 0) return;
 
-  // Generate content with Gemini
-  const genAI      = new GoogleGenerativeAI(apiKey);
-  const model      = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+  // Generate content with Claude
+  const client     = getClaudeClient();
   const headingList = targets.map(t => `"${t.headingText}"`).join(', ');
 
-  const result = await model.generateContent(
-    `You are a senior product manager at TikTok writing a PRD for the Direct Messaging (DM) team.
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: 4096,
+    messages: [{
+      role: 'user',
+      content: `You are a senior product manager at TikTok writing a PRD for the Direct Messaging (DM) team.
 
 Feature: "${featureName}"
 What we're building: "${description}"
@@ -280,16 +280,21 @@ Rules:
 - Return ONLY a valid JSON object — no markdown, no extra text
 - Keys must exactly match the section names listed above
 - Values are 2–4 sentence plain-text paragraphs (no bullet points, no formatting)`,
-  );
+    }],
+  });
 
-  const raw = result.response.text().trim();
+  const raw = response.content
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('')
+    .trim();
   let content: Record<string, string>;
   try {
     // Strip any accidental markdown code fences
     const cleaned = raw.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '');
     content = JSON.parse(cleaned) as Record<string, string>;
   } catch {
-    console.warn('PRD Builder: failed to parse Claude response', raw.slice(0, 200));
+    console.warn('PRD Builder: failed to parse AI response', raw.slice(0, 200));
     return;
   }
 
