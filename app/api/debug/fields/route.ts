@@ -29,24 +29,20 @@ async function callMeegoMcp(toolName: string, args: Record<string, unknown>) {
 
 export async function GET() {
   try {
-    // Get a sample work item brief with all default fields
+    // Get a sample work item brief — request ALL fields by omitting fields param
     const raw = await callMeegoMcp('get_workitem_brief', {
       url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/3752309`,
-      fields: [],
     });
 
-    // Also try MQL to find version-related fields
-    let mqlResult = '';
-    try {
-      mqlResult = await callMeegoMcp('search_by_mql', {
-        project_key: TIKTOK_PROJECT_KEY,
-        mql: `SELECT * FROM \`TikTok\`.\`需求\` WHERE \`work_item_id\` = 3752309`,
-      });
-    } catch (e) {
-      mqlResult = `MQL error: ${e}`;
-    }
+    // Extract lines containing "版本" (version) or "iOS" or "version"
+    const versionLines = raw.split('\n').filter((l: string) =>
+      l.includes('版本') || l.toLowerCase().includes('version') || l.toLowerCase().includes('ios')
+    );
 
-    return NextResponse.json({ brief: raw, mql: mqlResult });
+    return NextResponse.json({
+      versionRelatedLines: versionLines,
+      fullBrief: raw,
+    });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
