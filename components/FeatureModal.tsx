@@ -510,7 +510,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
           {isMeego && (
             <div className="flex items-center gap-4 mt-1.5">
               <a href={feature?.meegoUrl} target="_blank" rel="noopener noreferrer"
-                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                className="text-xs flex items-center gap-1 hover:brightness-125 transition-all" style={{ color: '#B291F7' }}>
                 <Image src="/meego.png" alt="" width={16} height={16} className="shrink-0" /> Meego
               </a>
               {feature?.prd && (
@@ -521,13 +521,13 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
               )}
               {feature?.complianceUrl && (
                 <a href={feature.complianceUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                  className="text-xs flex items-center gap-1 hover:brightness-125 transition-all" style={{ color: '#88DBDD' }}>
                   <Image src="/compliance.png" alt="" width={14} height={14} className="shrink-0" /> Compliance
                 </a>
               )}
               {feature?.figmaUrl && (
                 <a href={feature.figmaUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                  className="text-xs flex items-center gap-1 hover:brightness-125 transition-all" style={{ color: '#FF7362' }}>
                   <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
                 </a>
               )}

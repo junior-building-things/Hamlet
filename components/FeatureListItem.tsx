@@ -41,7 +41,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {feature.meegoUrl && (
-            <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+            <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs hover:brightness-125 transition-all" style={{ color: '#B291F7' }}>
               <Image src="/meego.png" alt="" width={16} height={16} className="shrink-0" /> Meego
             </a>
           )}
@@ -51,12 +51,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
             </a>
           )}
           {feature.complianceUrl && (
-            <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+            <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs hover:brightness-125 transition-all" style={{ color: '#88DBDD' }}>
               <Image src="/compliance.png" alt="" width={14} height={14} className="shrink-0" /> Compliance
             </a>
           )}
           {feature.figmaUrl && (
-            <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+            <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs hover:brightness-125 transition-all" style={{ color: '#FF7362' }}>
               <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
             </a>
           )}
@@ -91,7 +91,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
 
       <div className="hidden sm:flex items-center gap-3 py-3 whitespace-nowrap">
         {feature.meegoUrl && (
-          <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+          <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs hover:brightness-125 transition-all" style={{ color: '#B291F7' }}>
             <Image src="/meego.png" alt="" width={16} height={16} className="shrink-0" /> Meego
           </a>
         )}
@@ -101,12 +101,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
           </a>
         )}
         {feature.complianceUrl && (
-          <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+          <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs hover:brightness-125 transition-all" style={{ color: '#88DBDD' }}>
             <Image src="/compliance.png" alt="" width={14} height={14} className="shrink-0" /> Compliance
           </a>
         )}
         {feature.figmaUrl && (
-          <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+          <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs hover:brightness-125 transition-all" style={{ color: '#FF7362' }}>
             <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
           </a>
         )}
