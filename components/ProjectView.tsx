@@ -7,6 +7,7 @@ import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
 import { Loader2, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 
 const STORAGE_KEY      = 'hamlet_features_v1';
 const STORAGE_GROUP_BY = 'hamlet_group_by';
@@ -259,8 +260,13 @@ export function ProjectView({ features, setFeatures }: Props) {
   }
 
   function handleFeatureCreated(tempId: string, feature: Feature | null) {
-    if (feature) setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
-    else         setFeatures(prev => prev.filter(f => f.id !== tempId));
+    if (feature) {
+      setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
+      toast.success(`"${feature.name}" created`);
+    } else {
+      setFeatures(prev => prev.filter(f => f.id !== tempId));
+      toast.error('Failed to create feature');
+    }
   }
 
   // ── Filter ─────────────────────────────────────────────────────────────────

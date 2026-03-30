@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Newsreader } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const geistSans  = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${geistSans.variable} ${newsreader.variable} antialiased`} style={{ backgroundColor: '#0c0e1a' }}>
       <body className="min-h-screen" style={{ backgroundColor: '#0c0e1a', backgroundImage: 'radial-gradient(circle, #ffffff18 1px, transparent 1px)', backgroundSize: '24px 24px', backgroundAttachment: 'fixed' }}>
         {children}
+        <Toaster position="bottom-right" theme="dark" richColors />
       </body>
     </html>
   );

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Props {
   features: Feature[];
@@ -43,6 +44,7 @@ export function TodoView({ features, setFeatures }: Props) {
       }
 
       setCompleted(prev => new Set([...prev, feature.id]));
+      toast.success(`"${feature.status}" marked as complete`);
 
       // Trigger a background re-sync for this feature
       if (feature.meegoUrl) {
@@ -66,7 +68,9 @@ export function TodoView({ features, setFeatures }: Props) {
           .catch(() => {});
       }
     } catch (err) {
-      setErrors(prev => ({ ...prev, [feature.id]: err instanceof Error ? err.message : 'Failed' }));
+      const msg = err instanceof Error ? err.message : 'Failed to complete node';
+      setErrors(prev => ({ ...prev, [feature.id]: msg }));
+      toast.error(msg);
     } finally {
       setCompleting(null);
     }

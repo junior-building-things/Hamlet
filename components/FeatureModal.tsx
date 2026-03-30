@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { X, ExternalLink, Loader2, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
 import { AV } from '@/lib/avatars';
 
@@ -165,7 +166,6 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
   // ── Edit-mode state ──
   const [completing, setCompleting]       = useState(false);
-  const [completed, setCompleted]         = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
 
   // ── Add-mode state ──
@@ -268,7 +268,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
         if (!ok) throw new Error(data.error ?? 'Create failed');
         if (data.prdError) {
           console.error('PRD creation failed:', data.prdError);
-          alert(`PRD creation failed: ${data.prdError}`);
+          toast.error(`PRD creation failed: ${data.prdError}`);
         }
         onFeatureCreated?.(tempId, {
           id:              data.id ?? tempId,
@@ -306,10 +306,13 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
         const data = await res.json() as { error?: string };
         throw new Error(data.error ?? 'Failed to complete node');
       }
-      setCompleted(true);
+      toast.success(`"${feature.status}" marked as complete`);
       onNodeCompleted?.(feature.id);
+      onClose();
     } catch (err) {
-      setCompleteError(err instanceof Error ? err.message : 'Failed');
+      const msg = err instanceof Error ? err.message : 'Failed to complete node';
+      setCompleteError(msg);
+      toast.error(msg);
     } finally {
       setCompleting(false);
     }
@@ -515,18 +518,12 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
             <InfoField label="Node" value={nodeName} />
             {isMeego && canComplete && (
               <div className="mt-3">
-                {completed ? (
-                  <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                    <CheckCircle2 className="w-4 h-4" /> Node completed!
-                  </div>
-                ) : (
-                  <button onClick={handleCompleteNode} disabled={completing}
-                    className="flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
-                    {completing
-                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Completing…</>
-                      : <>Complete: {nodeName} →</>}
-                  </button>
-                )}
+                <button onClick={handleCompleteNode} disabled={completing}
+                  className="flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+                  {completing
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Completing…</>
+                    : <>Complete: {nodeName} →</>}
+                </button>
                 {completeError && <p className="text-xs text-red-400 mt-1">{completeError}</p>}
               </div>
             )}
