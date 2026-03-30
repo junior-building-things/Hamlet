@@ -42,7 +42,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <div className="flex items-center gap-3 flex-wrap">
           {feature.meegoUrl && (
             <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-              <Image src="/meego.png" alt="" width={14} height={14} className="shrink-0" /> Meego
+              <Image src="/meego.png" alt="" width={16} height={16} className="shrink-0" /> Meego
             </a>
           )}
           {feature.prd && (
@@ -57,7 +57,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
           )}
           {feature.figmaUrl && (
             <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
-              <Image src="/figma.svg" alt="" width={14} height={14} className="shrink-0" /> Figma
+              <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
             </a>
           )}
         </div>
@@ -92,7 +92,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       <div className="hidden sm:flex items-center gap-3 py-3 whitespace-nowrap">
         {feature.meegoUrl && (
           <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-            <Image src="/meego.png" alt="" width={14} height={14} className="shrink-0" /> Meego
+            <Image src="/meego.png" alt="" width={16} height={16} className="shrink-0" /> Meego
           </a>
         )}
         {feature.prd && (
@@ -107,7 +107,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         )}
         {feature.figmaUrl && (
           <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
-            <Image src="/figma.svg" alt="" width={14} height={14} className="shrink-0" /> Figma
+            <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
           </a>
         )}
       </div>
