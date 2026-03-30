@@ -775,3 +775,77 @@ export async function copyPrdTemplate(
 
   return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;
 }
+
+// ─── Batch-fetch user avatars by email ────────────────────────────────────────
+
+/**
+ * Given a map of { name → email }, resolves each email to a Lark user ID
+ * and fetches their avatar URL. Returns { name → avatarUrl }.
+ */
+export async function batchFetchAvatars(
+  nameEmailMap: Record<string, string>,
+): Promise<Record<string, string>> {
+  const entries = Object.entries(nameEmailMap);
+  if (entries.length === 0) return {};
+
+  const token = await getAccessToken();
+
+  // Step 1: Batch resolve emails → user IDs
+  const emails = [...new Set(entries.map(([, email]) => email))];
+  const res = await fetch(`${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emails }),
+  });
+  const idData = await parseJson(res, 'batch_get_id') as {
+    code: number; msg?: string;
+    data?: { email_users?: Record<string, Array<{ user_id: string }>> };
+  };
+  if (idData.code !== 0) {
+    console.warn('[lark] batch_get_id failed:', idData.code, idData.msg);
+    return {};
+  }
+
+  // Build email → user_id map
+  const emailToUserId = new Map<string, string>();
+  for (const [email, users] of Object.entries(idData.data?.email_users ?? {})) {
+    if (users?.[0]?.user_id) emailToUserId.set(email, users[0].user_id);
+  }
+
+  // Step 2: Batch fetch user details (up to 50 at a time)
+  const userIds = [...new Set(emailToUserId.values())];
+  if (userIds.length === 0) return {};
+
+  const userIdToAvatar = new Map<string, string>();
+  for (let i = 0; i < userIds.length; i += 50) {
+    const batch = userIds.slice(i, i + 50);
+    const params = batch.map(id => `user_ids=${id}`).join('&');
+    const userRes = await fetch(
+      `${LARK_BASE_URL}/open-apis/contact/v3/users/batch?${params}&user_id_type=user_id`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const userData = await parseJson(userRes, 'users_batch') as {
+      code: number; msg?: string;
+      data?: { items?: Array<{ user_id: string; avatar?: { avatar_72?: string; avatar_240?: string } }> };
+    };
+    if (userData.code !== 0) {
+      console.warn('[lark] users/batch failed:', userData.code, userData.msg);
+      continue;
+    }
+    for (const user of userData.data?.items ?? []) {
+      const url = user.avatar?.avatar_72 || user.avatar?.avatar_240;
+      if (url) userIdToAvatar.set(user.user_id, url);
+    }
+  }
+
+  // Step 3: Map back to name → avatarUrl
+  const result: Record<string, string> = {};
+  for (const [name, email] of entries) {
+    const userId = emailToUserId.get(email);
+    if (userId) {
+      const avatar = userIdToAvatar.get(userId);
+      if (avatar) result[name] = avatar;
+    }
+  }
+  return result;
+}

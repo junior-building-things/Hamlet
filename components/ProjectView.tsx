@@ -8,6 +8,7 @@ import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { AV } from '@/lib/avatars';
 
 const STORAGE_KEY      = 'hamlet_features_v1';
 const STORAGE_GROUP_BY = 'hamlet_group_by';
@@ -124,6 +125,10 @@ export function ProjectView({ features, setFeatures }: Props) {
           });
           if (!res.ok) return;
           const d = await res.json() as Record<string, unknown>;
+          // Merge discovered avatars into the global AV map
+          if (d.pocAvatars && typeof d.pocAvatars === 'object') {
+            Object.assign(AV, d.pocAvatars);
+          }
           setFeatures(prev => prev.map(p => p.id !== f.id ? p : {
             ...p,
             status:          (d.status          as string) || p.status,
@@ -219,6 +224,9 @@ export function ProjectView({ features, setFeatures }: Props) {
       });
       if (!res.ok) throw new Error('Sync failed');
       const d = await res.json() as Record<string, unknown>;
+      if (d.pocAvatars && typeof d.pocAvatars === 'object') {
+        Object.assign(AV, d.pocAvatars);
+      }
       setFeatures(prev => prev.map(p => p.id !== feature.id ? p : {
         ...p,
         status:          (d.status         as string) || p.status,
@@ -378,6 +386,9 @@ export function ProjectView({ features, setFeatures }: Props) {
           .then(r => r.ok ? r.json() : null)
           .then((d: Record<string, unknown> | null) => {
             if (!d) return;
+            if (d.pocAvatars && typeof d.pocAvatars === 'object') {
+              Object.assign(AV, d.pocAvatars);
+            }
             setFeatures(prev => prev.map(f => f.id !== feature.id ? f : {
               ...f,
               status:          (d.status as string) || f.status,

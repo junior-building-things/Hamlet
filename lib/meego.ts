@@ -115,6 +115,37 @@ function extractNames(value: string): string {
   return names.length > 0 ? names.join(', ') : value;
 }
 
+// Extract name→email pairs from role member value "Name1(email1),Name2(email2)"
+function extractNameEmailPairs(value: string): Array<{ name: string; email: string }> {
+  if (!value || value === '未填写') return [];
+  const pairs: Array<{ name: string; email: string }> = [];
+  const regex = /([^,(]+)\(([^)]+)\)/g;
+  let m;
+  while ((m = regex.exec(value)) !== null) {
+    const name = m[1].trim();
+    const email = m[2].trim();
+    if (name && email.includes('@')) pairs.push({ name, email });
+  }
+  return pairs;
+}
+
+// Collect all name→email pairs from all roles in the raw brief
+function collectAllPocEmails(raw: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const roles = ['PM', 'TPM', 'Tech owner', 'iOS', 'Android', 'Server', 'QA', 'DA', 'UI&UX', 'Content Designer'];
+  for (const role of roles) {
+    const escapedRole = role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`"${escapedRole}":"([^"]+)"`);
+    const match = raw.match(regex);
+    if (match) {
+      for (const { name, email } of extractNameEmailPairs(match[1])) {
+        if (!map.has(name)) map.set(name, email);
+      }
+    }
+  }
+  return map;
+}
+
 // Parse last-modified date from get_workitem_brief raw text
 function parseUpdateTime(raw: string): string {
   const val = parseWorkItemField(raw, '更新时间') || parseWorkItemField(raw, 'updated_at');
@@ -312,6 +343,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   uiuxOwner: string;
   contentDesigner: string;
   iosVersion: string;
+  pocEmails: Record<string, string>;
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
@@ -364,6 +396,9 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const daOwner        = parseRoleMember(raw, 'DA');
   const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
+
+  // Collect name→email pairs for avatar resolution
+  const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
 
   // Fetch planned version from node detail JSON
   // Try iOS (field_08a9ca) first, fall back to Android (field_c88970)
@@ -468,6 +503,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
     uiuxOwner,
     contentDesigner,
     iosVersion,
+    pocEmails,
   };
 }
 
