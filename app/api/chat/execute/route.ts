@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
-import { copyPrdTemplate, readDocContent, editDocSection, addDocSection, addDocComment, listDocComments, replyToComment, duplicateDoc } from '@/lib/lark';
+import { copyPrdTemplate, readDocContent, editDocSection, renameDocSection, addDocSection, addDocComment, listDocComments, replyToComment, duplicateDoc } from '@/lib/lark';
 import type { Feature } from '@/lib/types';
 
 const PROJECT_KEY   = '5f105019a8b9a853da64767f';
@@ -196,6 +196,15 @@ ${brief}`;
       await editDocSection(params.docUrl, params.section, params.content);
       return NextResponse.json({
         reply: `Updated the "${params.section}" section!`,
+        links: [{ label: '📄 Doc', url: params.docUrl }],
+      });
+    }
+
+    // ── Rename Section ────────────────────────────────────────────────────────
+    if (action === 'rename_section' && params.docUrl && params.section && params.newHeading) {
+      await renameDocSection(params.docUrl, params.section, params.newHeading);
+      return NextResponse.json({
+        reply: `Renamed "${params.section}" to "${params.newHeading}"!`,
         links: [{ label: '📄 Doc', url: params.docUrl }],
       });
     }

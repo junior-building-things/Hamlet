@@ -568,6 +568,35 @@ export async function editDocSection(docUrl: string, sectionHeading: string, new
 }
 
 /**
+ * Rename a section heading in a Lark doc.
+ */
+export async function renameDocSection(docUrl: string, oldHeading: string, newHeading: string): Promise<void> {
+  const docId = await resolveDocId(docUrl);
+  const token = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) throw new Error('Empty document');
+
+  const byId = new Map(blocks.map(b => [b.block_id, b]));
+  const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
+
+  for (const block of topLevel) {
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      const ht = blockText(block).toLowerCase();
+      if (ht.includes(oldHeading.toLowerCase())) {
+        await batchUpdateBlocks(docId, [{
+          block_id: block.block_id,
+          update_text_elements: { elements: [{ text_run: { content: newHeading, text_element_style: {} } }] },
+        }], token);
+        return;
+      }
+    }
+  }
+  throw new Error(`Section "${oldHeading}" not found in document`);
+}
+
+/**
  * Add a new section (heading + paragraph) to a Lark doc.
  * Inserts at the end of the document by default, or after a specific section if `afterSection` is provided.
  */
