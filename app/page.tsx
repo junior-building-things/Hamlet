@@ -9,9 +9,42 @@ import { FeatureModal } from '@/components/FeatureModal';
 
 export default function Home() {
   const [features,      setFeatures]      = useState<Feature[]>([]);
-  const [activeView,    setActiveView]    = useState<SidebarView>('project');
+  const [activeView,    setActiveView]    = useState<SidebarView>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      if (path === '/todos') return 'todos';
+      if (path === '/chat') return 'chat';
+    }
+    return 'project';
+  });
   const [showAddModal,  setShowAddModal]  = useState(false);
   const [user,          setUser]          = useState<{ name: string; avatarUrl: string } | undefined>();
+
+  // Sync URL when view changes
+  const viewToPath: Record<SidebarView, string> = { project: '/projects', todos: '/todos', chat: '/chat' };
+  function handleViewChange(view: SidebarView) {
+    setActiveView(view);
+    window.history.pushState(null, '', viewToPath[view]);
+  }
+
+  // Handle browser back/forward
+  useEffect(() => {
+    function onPopState() {
+      const path = window.location.pathname;
+      if (path === '/todos') setActiveView('todos');
+      else if (path === '/chat') setActiveView('chat');
+      else setActiveView('project');
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // Set initial URL if on root
+  useEffect(() => {
+    if (window.location.pathname === '/') {
+      window.history.replaceState(null, '', '/projects');
+    }
+  }, []);
 
   // Fetch current user for sidebar avatar + name
   useEffect(() => {
@@ -46,7 +79,7 @@ export default function Home() {
     <main className="flex min-h-screen">
       <Sidebar
         activeView={activeView}
-        onViewChange={setActiveView}
+        onViewChange={handleViewChange}
         onCreateFeature={() => setShowAddModal(true)}
         user={user}
       />
