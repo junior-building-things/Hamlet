@@ -1007,3 +1007,85 @@ export async function batchFetchAvatars(
   }
   return result;
 }
+
+// ─── Add bot to Meego feature group chat ──────────────────────────────────────
+
+/**
+ * Search for a Lark group chat matching the feature name and add the bot to it.
+ * Returns true if the bot was successfully added (or was already a member).
+ */
+export async function joinFeatureChat(featureName: string): Promise<boolean> {
+  if (!featureName) return false;
+
+  const token = await getAccessToken();
+  const appId = process.env.LARK_APP_ID;
+  if (!appId) return false;
+
+  // Search for group chats matching the feature name
+  const searchRes = await fetch(
+    `${LARK_BASE_URL}/open-apis/im/v1/chats/search?query=${encodeURIComponent(featureName)}&page_size=5`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const searchData = await parseJson(searchRes, 'chat_search') as {
+    code: number; msg?: string;
+    data?: { items?: Array<{ chat_id: string; name: string }> };
+  };
+
+  if (searchData.code !== 0) {
+    console.warn('[lark] chat search failed:', searchData.code, searchData.msg);
+    return false;
+  }
+
+  const chats = searchData.data?.items ?? [];
+  if (chats.length === 0) {
+    console.log('[lark] no chat found for feature:', featureName);
+    return false;
+  }
+
+  // Find best match — look for a chat whose name contains significant words from the feature name
+  const nameTokens = featureName.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  let bestChat: { chat_id: string; name: string } | null = null;
+  let bestScore = 0;
+
+  for (const chat of chats) {
+    const chatLower = chat.name.toLowerCase();
+    const score = nameTokens.filter(w => chatLower.includes(w)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestChat = chat;
+    }
+  }
+
+  if (!bestChat || bestScore < Math.max(2, Math.ceil(nameTokens.length * 0.4))) {
+    console.log('[lark] no close chat match for:', featureName, '— best:', bestChat?.name, 'score:', bestScore);
+    return false;
+  }
+
+  console.log('[lark] found chat:', bestChat.name, '— adding bot');
+
+  // Add the bot to the chat
+  const addRes = await fetch(
+    `${LARK_BASE_URL}/open-apis/im/v1/chats/${bestChat.chat_id}/members?member_id_type=app_id`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_list: [appId] }),
+    },
+  );
+  const addData = await parseJson(addRes, 'chat_add_bot') as {
+    code: number; msg?: string;
+  };
+
+  if (addData.code !== 0) {
+    // 230001 = already in group — that's fine
+    if (addData.code === 230001) {
+      console.log('[lark] bot already in chat:', bestChat.name);
+      return true;
+    }
+    console.warn('[lark] failed to add bot to chat:', addData.code, addData.msg);
+    return false;
+  }
+
+  console.log('[lark] bot added to chat:', bestChat.name);
+  return true;
+}

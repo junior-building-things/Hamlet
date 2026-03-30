@@ -1,5 +1,5 @@
 import { Priority, Feature } from './types';
-import { extractFigmaUrlFromPrd, searchAbReport } from './lark';
+import { extractFigmaUrlFromPrd, searchAbReport, joinFeatureChat } from './lark';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const MY_EMAIL = process.env.OWNER_EMAIL!;
@@ -487,6 +487,13 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     } catch (e) {
       console.warn('[sync] AB report search error:', e);
     }
+  }
+
+  // Add bot to the feature's group chat (best-effort, don't block)
+  if (workItemName) {
+    joinFeatureChat(workItemName).catch(e =>
+      console.warn('[sync] join feature chat error:', e),
+    );
   }
 
   return {
