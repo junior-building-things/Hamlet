@@ -210,8 +210,38 @@ ${brief}`;
     }
 
     // ── Add Section ──────────────────────────────────────────────────────────
-    if (action === 'add_section' && params.docUrl && params.section && params.content) {
-      await addDocSection(params.docUrl, params.section, params.content, params.afterSection);
+    if (action === 'add_section' && params.docUrl && params.section) {
+      let sectionContent = params.content ?? '';
+
+      // If no content provided, generate it with AI based on the doc
+      if (!sectionContent.trim()) {
+        const apiKey = process.env.GOOGLE_AI_API_KEY;
+        if (apiKey) {
+          let docContext = '';
+          try {
+            docContext = await readDocContent(params.docUrl);
+            docContext = docContext.slice(0, 6000);
+          } catch { /* best effort */ }
+
+          const genAI = new GoogleGenerativeAI(apiKey);
+          const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+          const prompt = `You are a senior TikTok product manager. Based on the document below, write concise, professional content for a new section titled "${params.section}".
+
+Document:
+${docContext}
+
+Rules:
+- Write 2-5 sentences of plain text (no markdown, no bullet points)
+- Make it relevant to the document's topic
+- Return ONLY the section content text, nothing else`;
+          const result = await model.generateContent(prompt);
+          sectionContent = result.response.text().trim();
+        }
+      }
+
+      if (!sectionContent.trim()) sectionContent = '(To be filled in)';
+
+      await addDocSection(params.docUrl, params.section, sectionContent, params.afterSection);
       return NextResponse.json({
         reply: `Added the "${params.section}" section!`,
         links: [{ label: '📄 Doc', url: params.docUrl }],

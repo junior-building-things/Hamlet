@@ -23,7 +23,7 @@ Classify the user's message into one of these actions:
 6. read_doc         – User shares a Lark doc URL and wants to read, summarize, or ask about its contents (needs: docUrl)
 7. edit_doc         – User wants to edit/update/rewrite the BODY CONTENT (paragraph text) of an EXISTING section in a Lark doc (needs: docUrl, section, content)
 8. rename_section   – User wants to RENAME/CHANGE a section HEADING/TITLE in a Lark doc, e.g. "change appendix to options", "rename the background section to context" (needs: docUrl, section for the current heading, newHeading for the new heading text)
-9. add_section      – User wants to ADD/INSERT/CREATE a NEW section that does NOT yet exist in a Lark doc. Keywords: "add a section", "insert a section", "create a section", "add an appendix" (needs: docUrl, section for the new heading title, content for the section body; optionally afterSection to insert after a specific existing section)
+9. add_section      – User wants to ADD/INSERT/CREATE a NEW section that does NOT yet exist in a Lark doc. Keywords: "add a section", "insert a section", "create a section", "add an appendix" (needs: docUrl, section for the new heading title; optionally content for the section body — if not provided, AI will generate it; optionally afterSection to insert after a specific existing section)
 9. comment_doc      – User wants to add a comment to a Lark doc (needs: docUrl, commentText, optionally section to comment on a specific section)
 10. reply_comment    – User wants to reply to an existing comment on a Lark doc (needs: docUrl, replyText, and commentSearch — a keyword/phrase to find the target comment)
 11. duplicate_doc    – User wants to duplicate/copy a Lark doc (needs: docUrl, optionally featureName for the new name)
@@ -84,7 +84,7 @@ function isReady(intent: Intent): boolean {
   if (action === 'read_doc')       return !!params.docUrl;
   if (action === 'edit_doc')       return !!params.docUrl && !!params.section && !!params.content;
   if (action === 'rename_section') return !!params.docUrl && !!params.section && !!params.newHeading;
-  if (action === 'add_section')    return !!params.docUrl && !!params.section && !!params.content;
+  if (action === 'add_section')    return !!params.docUrl && !!params.section;
   if (action === 'comment_doc')    return !!params.docUrl && !!params.commentText;
   if (action === 'reply_comment')  return !!params.docUrl && !!params.replyText && !!params.commentSearch;
   if (action === 'duplicate_doc')  return !!params.docUrl;
