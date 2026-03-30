@@ -22,7 +22,7 @@ Classify the user's message into one of these actions:
 5. query_meego      – User asks a question about a specific feature that requires live data: who owns a node, what is the status of a node, who is on the team, what nodes are in progress, etc. (needs: featureName or featureId, query)
 6. read_doc         – User shares a Lark doc URL and wants to read, summarize, or ask about its contents (needs: docUrl)
 7. edit_doc         – User wants to edit/update a specific section of a Lark doc (needs: docUrl, section, content)
-8. comment_doc      – User wants to add a comment to a Lark doc (needs: docUrl, commentText)
+8. comment_doc      – User wants to add a comment to a Lark doc (needs: docUrl, commentText, optionally section to comment on a specific section)
 9. duplicate_doc    – User wants to duplicate/copy a Lark doc (needs: docUrl, optionally featureName for the new name)
 10. chat            – General conversation, greetings, questions, small talk, or requests for clarification
 11. unsupported     – User is asking for a SPECIFIC action that is not in the list above (e.g. "create a compliance ticket", "send an email")

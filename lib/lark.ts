@@ -566,22 +566,57 @@ export async function editDocSection(docUrl: string, sectionHeading: string, new
 }
 
 /**
- * Add a comment to a Lark document (whole-doc comment).
+ * Add a comment to a Lark document, optionally on a specific section.
+ * When `section` is provided, the comment quotes the section text.
  */
-export async function addDocComment(docUrl: string, content: string): Promise<void> {
+export async function addDocComment(docUrl: string, content: string, section?: string): Promise<void> {
   const docId = await resolveDocId(docUrl);
-
   const token = await getAccessToken();
+
+  let quote: string | undefined;
+  if (section) {
+    // Find the section and extract its text to use as quote
+    const blocks = await getDocBlocks(docId, token);
+    const byId   = new Map(blocks.map(b => [b.block_id, b]));
+    const pageBlock = blocks.find(b => b.block_type === 1);
+    if (pageBlock?.children) {
+      const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
+      let foundHeading = false;
+      const sectionTexts: string[] = [];
+      for (const block of topLevel) {
+        if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+          if (foundHeading) break; // reached next heading
+          if (blockText(block).toLowerCase().includes(section.toLowerCase())) {
+            foundHeading = true;
+          }
+        } else if (foundHeading) {
+          const t = blockText(block).trim();
+          if (t) sectionTexts.push(t);
+        }
+      }
+      if (sectionTexts.length > 0) {
+        quote = sectionTexts.join('\n').slice(0, 500); // cap quote length
+      }
+    }
+  }
+
+  // Build comment body
+  const body: Record<string, unknown> = {
+    reply_list: {
+      replies: [{
+        content: { elements: [{ type: 'text_run', text_run: { text: content } }] },
+      }],
+    },
+  };
+  if (quote) {
+    body.is_whole = false;
+    body.quote = quote;
+  }
+
   const res = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/comments?file_type=docx`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      reply_list: {
-        replies: [{
-          content: { elements: [{ type: 'text_run', text_run: { text: content } }] },
-        }],
-      },
-    }),
+    body: JSON.stringify(body),
   });
   const data = await parseJson(res, 'add_comment') as { code: number; msg?: string };
   if (data.code !== 0) throw new Error(`Lark comment error ${data.code}: ${data.msg}`);

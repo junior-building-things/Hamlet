@@ -200,9 +200,10 @@ ${brief}`;
 
     // ── Comment Doc ──────────────────────────────────────────────────────────
     if (action === 'comment_doc' && params.docUrl && params.commentText) {
-      await addDocComment(params.docUrl, params.commentText);
+      await addDocComment(params.docUrl, params.commentText, params.section);
+      const where = params.section ? ` on the "${params.section}" section` : '';
       return NextResponse.json({
-        reply: `Comment added!`,
+        reply: `Comment added${where}!`,
         links: [{ label: '📄 Doc', url: params.docUrl }],
       });
     }
