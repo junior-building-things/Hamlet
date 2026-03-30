@@ -6,7 +6,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 interface ChatMsg { role: 'user' | 'assistant'; content: string }
 interface Intent {
   action: 'create_feature' | 'create_prd' | 'update_prd' | 'complete_node' | 'query_meego' | 'read_doc' | 'edit_doc' | 'comment_doc' | 'duplicate_doc' | 'chat' | 'unsupported';
-  params: { featureName?: string; featureId?: string; nodeName?: string; section?: string; content?: string; query?: string; docUrl?: string; commentText?: string };
+  params: { featureName?: string; featureId?: string; nodeName?: string; section?: string; content?: string; query?: string; docUrl?: string; commentText?: string; useHalfDayPrd?: boolean };
   reply: string;
 }
 
@@ -16,7 +16,7 @@ const SYSTEM = `You are Hamlet, a friendly AI assistant that helps manage featur
 
 Classify the user's message into one of these actions:
 1. create_feature   – User wants to create a new feature  (needs: featureName)
-2. create_prd       – User wants to create a PRD for a feature  (needs: featureName or featureId)
+2. create_prd       – User wants to create a PRD for a feature  (needs: featureName or featureId, optionally useHalfDayPrd=true if user mentions "half-day PRD" or "half day")
 3. update_prd       – User wants to update a PRD section        (needs: featureName or featureId, section, content)
 4. complete_node    – User wants to mark a workflow node done    (needs: featureName or featureId, nodeName)
 5. query_meego      – User asks a question about a specific feature that requires live data: who owns a node, what is the status of a node, who is on the team, what nodes are in progress, etc. (needs: featureName or featureId, query)
@@ -38,7 +38,8 @@ Respond with ONLY valid JSON — no markdown fences, no extra text:
     "content": "new text for update_prd or edit_doc",
     "query": "the user's exact question verbatim, for query_meego",
     "docUrl": "full Lark doc URL if shared by user",
-    "commentText": "the comment text for comment_doc"
+    "commentText": "the comment text for comment_doc",
+    "useHalfDayPrd": "true if user wants a half-day PRD template, omit otherwise"
   },
   "reply": "warm, natural response"
 }

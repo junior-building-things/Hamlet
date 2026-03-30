@@ -88,11 +88,13 @@ export async function POST(req: NextRequest) {
     // ── Create PRD ────────────────────────────────────────────────────────────
     if (action === 'create_prd' && (params.featureName || params.featureId)) {
       const name = params.featureName ?? `Feature ${params.featureId}`;
-      const prd  = await copyPrdTemplate(name);
+      const isHalfDay = String(params.useHalfDayPrd) === 'true';
+      const prd  = await copyPrdTemplate(name, undefined, { useHalfDayPrd: isHalfDay });
       if (params.featureId) await updateFeatureFields(PROJECT_KEY, params.featureId, { prd });
+      const prdType = isHalfDay ? 'Half-Day PRD' : 'PRD';
       return NextResponse.json({
-        reply: `The PRD for "${name}" is ready!`,
-        links: [{ label: '📄 PRD', url: prd }],
+        reply: `The ${prdType} for "${name}" is ready!`,
+        links: [{ label: `📄 ${prdType}`, url: prd }],
       });
     }
 
