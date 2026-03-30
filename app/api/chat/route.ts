@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getClaudeClient } from '@/lib/claude';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -63,24 +63,17 @@ function isReady(intent: Intent): boolean {
 // ── Intent parsing ─────────────────────────────────────────────────────────────
 
 async function parseIntent(messages: ChatMsg[], userMessage: string): Promise<Intent> {
-  const client = getClaudeClient();
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey) throw new Error('GOOGLE_AI_API_KEY not set');
 
   const history = messages.length
     ? '\n\nPrevious conversation:\n' + messages.map(m => `${m.role === 'user' ? 'User' : 'Hamlet'}: ${m.content}`).join('\n')
     : '';
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 1024,
-    system: SYSTEM,
-    messages: [{ role: 'user', content: `${history}\n\nUser: ${userMessage}` }],
-  });
-
-  const raw = response.content
-    .filter(b => b.type === 'text')
-    .map(b => b.text)
-    .join('')
-    .trim();
+  const genAI  = new GoogleGenerativeAI(apiKey);
+  const model  = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+  const result = await model.generateContent(`${SYSTEM}${history}\n\nUser: ${userMessage}`);
+  const raw    = result.response.text().trim();
 
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error(`No JSON in response: ${raw.slice(0, 200)}`);
@@ -96,7 +89,7 @@ export async function POST(req: NextRequest) {
   try {
     intent = await parseIntent(messages, userMessage);
   } catch (e) {
-    console.error('[chat] parseIntent failed:', e);
+    console.error('[chat] parseIntent failed:', e instanceof Error ? e.message : e);
     return NextResponse.json({ reply: "I had trouble understanding that. Could you rephrase?" });
   }
 
@@ -107,6 +100,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply: 'On it!', action, params, executing: true });
   }
 
-  // chat, unsupported, or missing params → reply from Claude directly
+  // chat, unsupported, or missing params → reply from Gemini directly
   return NextResponse.json({ reply, action });
 }
