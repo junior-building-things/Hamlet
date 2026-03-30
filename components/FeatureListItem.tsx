@@ -121,6 +121,11 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
             <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
           </a>
         )}
+        {feature.abReportUrl && (
+          <a href={feature.abReportUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs hover:brightness-125 transition-all" style={{ color: '#F59E0B' }}>
+            <FlaskConical className="w-3.5 h-3.5 shrink-0" /> AB
+          </a>
+        )}
       </div>
 
       {/* Team avatars */}
