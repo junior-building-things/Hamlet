@@ -174,7 +174,7 @@ export function TodoView({ features, setFeatures }: Props) {
         {/* All synced but nothing to do */}
         {features.length > 0 && syncing.length === 0 && todos.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-16 text-gray-500">
-            <CheckCircle2 className="w-10 h-10 text-emerald-500/60" />
+            <CheckCircle2 className="w-10 h-10 text-blue-500/60" />
             <p className="text-sm font-medium text-gray-400">You&apos;re all caught up!</p>
             <p className="text-xs text-gray-600">No pending nodes assigned to you.</p>
           </div>
@@ -227,7 +227,7 @@ export function TodoView({ features, setFeatures }: Props) {
                 .filter(f => completed.has(f.id))
                 .map(f => (
                   <div key={f.id} className="flex items-center gap-3 text-sm text-gray-500">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
                     <span>{f.name}</span>
                     <span className="text-gray-600">·</span>
                     <span>{f.status}</span>

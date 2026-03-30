@@ -64,7 +64,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
           <button
             onClick={() => onComplete(feature)}
             disabled={completing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors self-start"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors self-start"
           >
             {completing ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
             Complete: {feature.status}
@@ -127,7 +127,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
           <button
             onClick={(e) => { e.stopPropagation(); onComplete(feature); }}
             disabled={completing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
           >
             {completing
               ? <Loader2 className="w-3 h-3 animate-spin" />
