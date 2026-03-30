@@ -124,16 +124,22 @@ interface CustomSelectProps {
   options: SelectOption[];
   value: string;
   onChange: (value: string) => void;
+  placeholder?: string;
+  allowDeselect?: boolean;
+  icon?: React.ReactNode;
 }
 
-export function CustomSelect({ options, value, onChange }: CustomSelectProps) {
+export function CustomSelect({ options, value, onChange, placeholder, allowDeselect, icon }: CustomSelectProps) {
   const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
   const selected = options.find(o => o.value === value);
 
   return (
     <div ref={ref} className="relative w-full">
       <button type="button" onClick={() => open ? setOpen(false) : openDropdown()} className={triggerCls}>
-        <span className="flex-1 text-left truncate">{selected?.label ?? '—'}</span>
+        {icon && <span className="text-gray-500 flex-shrink-0 flex items-center">{icon}</span>}
+        <span className={`flex-1 text-left truncate ${!selected && placeholder ? 'text-gray-500' : ''}`}>
+          {selected?.label ?? placeholder ?? '—'}
+        </span>
         <ChevronDown className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
       </button>
 
@@ -142,7 +148,10 @@ export function CustomSelect({ options, value, onChange }: CustomSelectProps) {
           {options.map(opt => (
             <div key={opt.value}
               className={`${itemBaseCls} ${value === opt.value ? 'bg-[#1e2240]' : ''}`}
-              onClick={() => { onChange(opt.value); setOpen(false); }}>
+              onClick={() => {
+                onChange(allowDeselect && value === opt.value ? '' : opt.value);
+                setOpen(false);
+              }}>
               <span className="text-sm text-white flex-1">{opt.label}</span>
               {value === opt.value && <Check className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />}
             </div>

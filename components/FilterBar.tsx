@@ -1,6 +1,7 @@
 'use client';
 import { Priority } from '@/lib/types';
 import { Search, Filter, LayoutGrid, List, Plus, Layers, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { CustomSelect } from './AvatarSelect';
 
 export type GroupBy  = 'none' | 'priority' | 'status' | 'businessLine' | 'socialComponent';
 export type SortBy   = 'none' | 'priority' | 'status' | 'lastUpdated';
@@ -29,8 +30,7 @@ interface Props {
 
 const priorities: (Priority | 'All')[] = ['All', 'P0', 'P1', 'P2', 'P3'];
 
-const selectCls = 'bg-transparent text-sm text-white outline-none cursor-pointer';
-const cellCls   = 'flex items-center gap-2 bg-[#13162a] border border-[#1e2240] rounded-lg px-3 py-2';
+const cellCls = 'flex items-center gap-2 bg-[#13162a] border border-[#1e2240] rounded-lg px-3 py-2';
 
 export function FilterBar({
   search, statusFilter, statuses, priorityFilter, view,
@@ -55,7 +55,7 @@ export function FilterBar({
       {/* Status filter */}
       <div className={cellCls}>
         <Filter className="w-4 h-4 text-gray-500 shrink-0" />
-        <select value={statusFilter} onChange={e => onStatusChange(e.target.value)} className={selectCls}>
+        <select value={statusFilter} onChange={e => onStatusChange(e.target.value)} className="bg-transparent text-sm text-white outline-none cursor-pointer">
           <option value="All" className="bg-[#13162a]">All Status</option>
           {statuses.map(s => <option key={s} value={s} className="bg-[#13162a]">{s}</option>)}
         </select>
@@ -64,7 +64,7 @@ export function FilterBar({
       {/* Priority filter */}
       <div className={cellCls}>
         <Filter className="w-4 h-4 text-gray-500 shrink-0" />
-        <select value={priorityFilter} onChange={e => onPriorityChange(e.target.value as Priority | 'All')} className={selectCls}>
+        <select value={priorityFilter} onChange={e => onPriorityChange(e.target.value as Priority | 'All')} className="bg-transparent text-sm text-white outline-none cursor-pointer">
           {priorities.map(p => (
             <option key={p} value={p} className="bg-[#13162a]">{p === 'All' ? 'All Priority' : p}</option>
           ))}
@@ -75,33 +75,39 @@ export function FilterBar({
       <div className="w-px h-6 bg-[#1e2240]" />
 
       {/* Group By */}
-      <div className={cellCls}>
-        <Layers className="w-4 h-4 text-gray-500 shrink-0" />
-        <select value={groupBy} onChange={e => onGroupByChange(e.target.value as GroupBy)} className={selectCls}>
-          <option value="none"            className="bg-[#13162a]">No Grouping</option>
-          <option value="priority"        className="bg-[#13162a]">Priority</option>
-          <option value="status"          className="bg-[#13162a]">Current Status</option>
-          <option value="businessLine"    className="bg-[#13162a]">Business Line</option>
-          <option value="socialComponent" className="bg-[#13162a]">Social Component</option>
-        </select>
-      </div>
+      <CustomSelect
+        icon={<Layers className="w-4 h-4" />}
+        options={[
+          { value: 'priority',        label: 'Priority' },
+          { value: 'status',          label: 'Current Status' },
+          { value: 'businessLine',    label: 'Business Line' },
+          { value: 'socialComponent', label: 'Social Component' },
+        ]}
+        value={groupBy === 'none' ? '' : groupBy}
+        onChange={v => onGroupByChange((v || 'none') as GroupBy)}
+        placeholder="Group By"
+        allowDeselect
+      />
 
       {/* Sort By + direction */}
-      <div className="flex items-center">
-        <div className="flex items-center gap-2 bg-[#13162a] border border-[#1e2240] rounded-l-lg px-3 py-2 border-r-0">
-          <ArrowUpDown className="w-4 h-4 text-gray-500 shrink-0" />
-          <select value={sortBy} onChange={e => onSortByChange(e.target.value as SortBy)} className={selectCls}>
-            <option value="none"        className="bg-[#13162a]">No Sort</option>
-            <option value="priority"    className="bg-[#13162a]">Priority</option>
-            <option value="status"      className="bg-[#13162a]">Current Status</option>
-            <option value="lastUpdated" className="bg-[#13162a]">Last Updated</option>
-          </select>
-        </div>
+      <div className="flex items-center gap-1">
+        <CustomSelect
+          icon={<ArrowUpDown className="w-4 h-4" />}
+          options={[
+            { value: 'priority',    label: 'Priority' },
+            { value: 'status',      label: 'Current Status' },
+            { value: 'lastUpdated', label: 'Last Updated' },
+          ]}
+          value={sortBy === 'none' ? '' : sortBy}
+          onChange={v => onSortByChange((v || 'none') as SortBy)}
+          placeholder="Sort By"
+          allowDeselect
+        />
         <button
           onClick={onSortDirToggle}
           disabled={sortBy === 'none'}
           title={sortDir === 'asc' ? 'Ascending (click to reverse)' : 'Descending (click to reverse)'}
-          className="bg-[#13162a] border border-[#1e2240] rounded-r-lg px-2.5 py-2 text-gray-400 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="bg-[#13162a] border border-[#2e3460] rounded-lg px-2.5 py-2 text-gray-400 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
         >
           {sortDir === 'asc'
             ? <ArrowUp   className="w-4 h-4" />
