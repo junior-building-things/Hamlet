@@ -2,6 +2,7 @@
 import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
+import { VersionBadge } from './VersionBadge';
 import { TeamAvatars } from './TeamAvatars';
 import Image from 'next/image';
 import { RefreshCw, Calendar, CheckCircle2, Loader2 } from 'lucide-react';
@@ -37,9 +38,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={feature.status} />
-          {feature.iosVersion && (
-            <span className="text-xs text-gray-400">{feature.iosVersion}</span>
-          )}
+          <VersionBadge version={feature.iosVersion} />
           <PriorityBadge priority={feature.priority} />
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -88,9 +87,9 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <StatusBadge status={feature.status} />
       </div>
 
-      <span className="hidden sm:flex items-center py-3 pl-4 text-xs text-gray-400 whitespace-nowrap">
-        {feature.iosVersion || '—'}
-      </span>
+      <div className="hidden sm:flex items-center py-3 pl-4">
+        <VersionBadge version={feature.iosVersion} />
+      </div>
 
       <div className="hidden sm:flex py-3">
         <PriorityBadge priority={feature.priority} />
