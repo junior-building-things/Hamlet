@@ -14,7 +14,7 @@ export function Header({ syncing, onSyncAll, user }: Props) {
   return (
     <div className="flex items-center justify-between px-6 py-5">
       <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center text-white shrink-0 ${user?.avatarUrl ? 'bg-purple-700' : 'bg-transparent'}`}>
+        <div className={`w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center text-white shrink-0 ${user?.avatarUrl ? 'bg-blue-700' : 'bg-transparent'}`}>
           {user?.avatarUrl
             ? <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
             : <img src="/hamlet.png" alt="Hamlet" className="w-full h-full object-contain p-1" />}
@@ -34,7 +34,7 @@ export function Header({ syncing, onSyncAll, user }: Props) {
           onClick={onSyncAll}
           disabled={syncing}
           title="Sync all from Meego"
-          className="flex items-center gap-2 bg-[#13162a] border border-[#1e2240] text-gray-300 text-xs px-3 py-1.5 rounded-lg hover:border-purple-700 hover:text-white transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 bg-[#13162a] border border-[#1e2240] text-gray-300 text-xs px-3 py-1.5 rounded-lg hover:border-blue-700 hover:text-white transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
           {syncing ? 'Syncing…' : 'Sync Meego'}

@@ -26,7 +26,7 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Pro
       <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
         <button
           onClick={onCreateFeature}
-          className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors mb-3"
+          className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium transition-colors mb-3"
         >
           <Plus className="w-4 h-4 shrink-0" />
           Create Feature

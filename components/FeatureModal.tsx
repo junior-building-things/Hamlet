@@ -158,7 +158,7 @@ function FormLabel({ children, required }: { children: React.ReactNode; required
   );
 }
 
-const inputCls = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500 placeholder-gray-600';
+const inputCls = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 placeholder-gray-600';
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -351,7 +351,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                         type="checkbox"
                         checked={prdBuilder}
                         onChange={e => setPrdBuilder(e.target.checked)}
-                        className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
+                        className="w-3.5 h-3.5 accent-blue-500 cursor-pointer"
                       />
                       <span className="text-[11px] text-gray-500 font-medium">PRD Builder</span>
                     </label>
@@ -480,7 +480,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                 Cancel
               </button>
               <button type="submit" disabled={!form.name.trim()}
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
                 Create Feature
               </button>
             </div>
@@ -509,7 +509,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
           {isMeego && (
             <div className="flex items-center gap-4 mt-1.5">
               <a href={feature?.meegoUrl} target="_blank" rel="noopener noreferrer"
-                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
                 Meego <ExternalLink className="w-3 h-3" />
               </a>
               {feature?.prd && (

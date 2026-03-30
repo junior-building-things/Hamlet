@@ -37,7 +37,7 @@ function statusChipCls(key: string): string {
   if (s.includes('开发') || s.includes('dev') || s.includes('coding') || s.includes('impl'))
     return 'bg-[#1a2535] border border-blue-900/50 text-blue-300';
   if (s.includes('设计') || s.includes('design') || s.includes('走查'))
-    return 'bg-[#1e2240] border border-purple-900/50 text-purple-300';
+    return 'bg-[#1e2240] border border-blue-900/50 text-blue-300';
   if (s.includes('hold') || s.includes('暂停') || s.includes('搁置'))
     return 'bg-[#221a10] border border-amber-900 text-amber-400';
   return 'bg-[#1e2240] border border-[#2e3460] text-gray-300';
@@ -438,20 +438,20 @@ export function ProjectView({ features, setFeatures }: Props) {
       <div className="px-6 pb-16 mt-4">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
-            <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
             <p className="text-sm">Loading features from Meego…</p>
           </div>
         ) : fetchError ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <p className="text-sm text-red-400">Failed to load: {fetchError}</p>
             <button onClick={() => { setLoading(true); fetchFromMeego().finally(() => setLoading(false)); }}
-              className="text-xs text-purple-400 hover:text-purple-300 underline">Retry</button>
+              className="text-xs text-blue-400 hover:text-blue-300 underline">Retry</button>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-2 text-gray-500">
             <p className="text-sm">No features match your filters.</p>
             <button onClick={() => { setSearch(''); setStatusFilter('All'); setPriority('All'); }}
-              className="text-xs text-purple-400 hover:text-purple-300 underline">Clear filters</button>
+              className="text-xs text-blue-400 hover:text-blue-300 underline">Clear filters</button>
           </div>
         ) : view === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

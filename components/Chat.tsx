@@ -61,7 +61,7 @@ export function Chat({ onFeatureCreated }: Props) {
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                 msg.role === 'user'
-                  ? 'bg-purple-700 text-white rounded-br-sm'
+                  ? 'bg-blue-700 text-white rounded-br-sm'
                   : 'bg-[#1e2240] text-gray-200 rounded-bl-sm'
               }`}>
                 {msg.content}
@@ -69,7 +69,7 @@ export function Chat({ onFeatureCreated }: Props) {
                   <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-white/10">
                     {msg.links.map(l => (
                       <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer"
-                        className="text-purple-300 underline underline-offset-2 hover:text-purple-100 transition-colors">
+                        className="text-blue-300 underline underline-offset-2 hover:text-blue-100 transition-colors">
                         {l.label}
                       </a>
                     ))}
@@ -103,12 +103,12 @@ export function Chat({ onFeatureCreated }: Props) {
           rows={2}
           placeholder="You can ask me to create new features, or follow up on the progress of ongoing features"
           disabled={loading}
-          className="flex-1 bg-[#0e1120] border border-[#1e2240] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 resize-none focus:outline-none focus:border-purple-600 transition-colors disabled:opacity-60"
+          className="flex-1 bg-[#0e1120] border border-[#1e2240] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 resize-none focus:outline-none focus:border-blue-600 transition-colors disabled:opacity-60"
         />
         <button
           onClick={send}
           disabled={loading || !input.trim()}
-          className="p-3 bg-purple-700 text-white rounded-xl hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+          className="p-3 bg-blue-700 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>

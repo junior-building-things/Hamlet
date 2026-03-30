@@ -24,7 +24,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <div className="flex items-start justify-between gap-2">
           <button
             onClick={() => onEdit(feature)}
-            className="text-white text-sm font-semibold leading-tight text-left hover:text-purple-300 transition-colors cursor-pointer"
+            className="text-white text-sm font-semibold leading-tight text-left hover:text-blue-300 transition-colors cursor-pointer"
           >
             {feature.name}
           </button>
@@ -40,7 +40,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {feature.meegoUrl && (
-            <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors">
+            <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
               Meego <ExternalLink className="w-3 h-3" />
             </a>
           )}
@@ -55,7 +55,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
             </a>
           )}
           {feature.figmaUrl && (
-            <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
+            <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
               Figma <Pen className="w-3 h-3" />
             </a>
           )}
@@ -75,7 +75,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       {/* Desktop cells — direct subgrid children */}
       <button
         onClick={() => onEdit(feature)}
-        className="hidden sm:block pl-4 py-3 w-full min-w-0 truncate text-left text-white text-sm font-semibold hover:text-purple-300 transition-colors cursor-pointer"
+        className="hidden sm:block pl-4 py-3 w-full min-w-0 truncate text-left text-white text-sm font-semibold hover:text-blue-300 transition-colors cursor-pointer"
       >
         {feature.name}
       </button>
@@ -90,7 +90,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
 
       <div className="hidden sm:flex items-center gap-3 py-3 whitespace-nowrap">
         {feature.meegoUrl && (
-          <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors">
+          <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
             Meego <ExternalLink className="w-3 h-3" />
           </a>
         )}
@@ -105,7 +105,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
           </a>
         )}
         {feature.figmaUrl && (
-          <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
+          <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
             Figma <Pen className="w-3 h-3" />
           </a>
         )}

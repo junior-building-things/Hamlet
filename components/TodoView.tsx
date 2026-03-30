@@ -114,11 +114,11 @@ export function TodoView({ features, setFeatures }: Props) {
             <button
               onClick={() => bulkComplete('PM Acceptance', pmAcceptanceTodos)}
               disabled={!!bulkRunning}
-              className="flex items-center gap-2.5 px-4 py-2.5 bg-[#0e1120] border border-[#1e2240] rounded-xl hover:border-purple-500/40 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2.5 px-4 py-2.5 bg-[#0e1120] border border-[#1e2240] rounded-xl hover:border-blue-500/40 transition-colors disabled:opacity-50"
             >
               {bulkRunning === 'PM Acceptance'
-                ? <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
-                : <CheckCircle2 className="w-4 h-4 text-purple-400" />}
+                ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                : <CheckCircle2 className="w-4 h-4 text-blue-400" />}
               <span className="text-sm text-white font-medium">Complete All PM Acceptance</span>
               <span className="text-xs text-gray-500">{pmAcceptanceTodos.length}</span>
             </button>
@@ -143,7 +143,7 @@ export function TodoView({ features, setFeatures }: Props) {
         {/* Still loading sync data */}
         {todos.length === 0 && syncing.length > 0 && (
           <div className="flex items-center gap-2 text-gray-500 py-12 justify-center">
-            <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
+            <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
             <span className="text-sm">Checking for pending nodes…</span>
           </div>
         )}
@@ -151,7 +151,7 @@ export function TodoView({ features, setFeatures }: Props) {
         {/* No features loaded at all */}
         {features.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-12 text-gray-500">
-            <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+            <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
             <p className="text-sm">Loading features…</p>
           </div>
         )}

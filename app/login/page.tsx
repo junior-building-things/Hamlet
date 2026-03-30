@@ -14,8 +14,8 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 const FEATURES = [
   {
-    icon: <LayoutList className="w-5 h-5 text-purple-400" />,
-    bg:   'bg-purple-400/10',
+    icon: <LayoutList className="w-5 h-5 text-blue-400" />,
+    bg:   'bg-blue-400/10',
     text: 'Track all your features in one place',
   },
   {

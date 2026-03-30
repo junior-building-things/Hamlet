@@ -24,7 +24,7 @@ export function FeatureCard({ feature, syncing, onEdit, onSync }: Props) {
           {feature.meegoUrl && (
             <>
               <a href={feature.meegoUrl} target="_blank" rel="noreferrer"
-                className="text-gray-500 hover:text-purple-400 transition-colors" title="Open in Meego">
+                className="text-gray-500 hover:text-blue-400 transition-colors" title="Open in Meego">
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
               <button onClick={() => onSync(feature)} disabled={syncing}

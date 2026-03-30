@@ -9,7 +9,7 @@ function statusStyle(status: string): string {
   if (s.includes('开发') || s.includes('dev') || s.includes('coding') || s.includes('impl'))
     return 'bg-[#1a2535] text-blue-300';
   if (s.includes('设计') || s.includes('design') || s.includes('走查'))
-    return 'bg-[#1e2240] text-purple-300';
+    return 'bg-[#1e2240] text-blue-300';
   if (s.includes('hold') || s.includes('暂停') || s.includes('搁置'))
     return 'bg-[#221a10] text-amber-400 border border-amber-900';
   return 'bg-[#1e2240] text-gray-300';
