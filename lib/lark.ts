@@ -566,16 +566,18 @@ export async function editDocSection(docUrl: string, sectionHeading: string, new
 }
 
 /**
- * Add a comment to a Lark document, optionally on a specific section.
- * When `section` is provided, the comment quotes the section text.
+ * Add a comment to a Lark document, optionally anchored to a specific section.
+ * When `section` is provided, finds the section heading and first content block,
+ * then creates an inline comment quoting that text and anchored to that block.
  */
 export async function addDocComment(docUrl: string, content: string, section?: string): Promise<void> {
   const docId = await resolveDocId(docUrl);
   const token = await getAccessToken();
 
   let quote: string | undefined;
+  let anchorBlockId: string | undefined;
+
   if (section) {
-    // Find the section and extract its text to use as quote
     const blocks = await getDocBlocks(docId, token);
     const byId   = new Map(blocks.map(b => [b.block_id, b]));
     const pageBlock = blocks.find(b => b.block_type === 1);
@@ -585,17 +587,22 @@ export async function addDocComment(docUrl: string, content: string, section?: s
       const sectionTexts: string[] = [];
       for (const block of topLevel) {
         if (HEADING_BLOCK_TYPES.has(block.block_type)) {
-          if (foundHeading) break; // reached next heading
+          if (foundHeading) break;
           if (blockText(block).toLowerCase().includes(section.toLowerCase())) {
             foundHeading = true;
+            // Use the heading block itself as anchor if no content follows
+            anchorBlockId = block.block_id;
           }
         } else if (foundHeading) {
           const t = blockText(block).trim();
-          if (t) sectionTexts.push(t);
+          if (t) {
+            if (!sectionTexts.length) anchorBlockId = block.block_id; // anchor to first content block
+            sectionTexts.push(t);
+          }
         }
       }
       if (sectionTexts.length > 0) {
-        quote = sectionTexts.join('\n').slice(0, 500); // cap quote length
+        quote = sectionTexts.join('\n').slice(0, 500);
       }
     }
   }
@@ -608,9 +615,11 @@ export async function addDocComment(docUrl: string, content: string, section?: s
       }],
     },
   };
-  if (quote) {
+
+  if (quote && anchorBlockId) {
     body.is_whole = false;
     body.quote = quote;
+    body.extra = JSON.stringify({ block_id: anchorBlockId });
   }
 
   const res = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/comments?file_type=docx`, {
@@ -619,6 +628,29 @@ export async function addDocComment(docUrl: string, content: string, section?: s
     body: JSON.stringify(body),
   });
   const data = await parseJson(res, 'add_comment') as { code: number; msg?: string };
+
+  // If anchored comment fails, fall back to whole-doc comment with quote in text
+  if (data.code !== 0 && quote) {
+    console.warn(`Anchored comment failed (${data.code}), falling back to whole-doc comment`);
+    const fallbackRes = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/comments?file_type=docx`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reply_list: {
+          replies: [{
+            content: { elements: [
+              { type: 'text_run', text_run: { text: `[${section}] ` } },
+              { type: 'text_run', text_run: { text: content } },
+            ] },
+          }],
+        },
+      }),
+    });
+    const fallbackData = await parseJson(fallbackRes, 'add_comment_fallback') as { code: number; msg?: string };
+    if (fallbackData.code !== 0) throw new Error(`Lark comment error ${fallbackData.code}: ${fallbackData.msg}`);
+    return;
+  }
+
   if (data.code !== 0) throw new Error(`Lark comment error ${data.code}: ${data.msg}`);
 }
 
