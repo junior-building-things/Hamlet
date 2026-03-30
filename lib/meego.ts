@@ -311,6 +311,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   daOwner: string;
   uiuxOwner: string;
   contentDesigner: string;
+  iosVersion: string;
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
@@ -364,6 +365,47 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
 
+  // Fetch iOS planned version from qa_test_preparation node
+  let iosVersion = '';
+  try {
+    const relatedRaw = await callMeegoMcp('list_related_workitems', {
+      url: meegoUrl,
+      field_key: 'field_08a9ca',
+    });
+    // Parse version names from the response (markdown table or JSON)
+    try {
+      const parsed = JSON.parse(relatedRaw);
+      if (Array.isArray(parsed)) {
+        iosVersion = parsed.map((item: Record<string, unknown>) => item.name ?? item.work_item_name ?? '').filter(Boolean).join(', ');
+      } else if (parsed?.list && Array.isArray(parsed.list)) {
+        iosVersion = parsed.list.map((item: Record<string, unknown>) => item.name ?? item.work_item_name ?? '').filter(Boolean).join(', ');
+      }
+    } catch {
+      // Try parsing as markdown table
+      const nameMatches = relatedRaw.match(/\|\s*\d+\s*\|\s*([^|]+?)\s*\|/g);
+      if (nameMatches) {
+        const names = nameMatches.map((m: string) => {
+          const parts = m.split('|').map((p: string) => p.trim()).filter(Boolean);
+          return parts.length >= 2 ? parts[1] : '';
+        }).filter(Boolean);
+        if (names.length > 0) iosVersion = names.join(', ');
+      }
+      // Also try simple line-based extraction
+      if (!iosVersion) {
+        const lines = relatedRaw.split('\n').filter((l: string) => l.trim() && !l.includes('---') && !l.includes('ID'));
+        for (const line of lines) {
+          const parts = line.split('|').map((p: string) => p.trim()).filter(Boolean);
+          if (parts.length >= 2) {
+            const name = parts[1];
+            if (name && !name.includes('名称')) {
+              iosVersion = iosVersion ? `${iosVersion}, ${name}` : name;
+            }
+          }
+        }
+      }
+    }
+  } catch { /* ignore — iOS version is optional */ }
+
   // Extract Figma URL from the PRD's "Relevant Links" section (best-effort)
   let figmaUrl = '';
   if (prd) {
@@ -396,6 +438,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
     daOwner,
     uiuxOwner,
     contentDesigner,
+    iosVersion,
   };
 }
 

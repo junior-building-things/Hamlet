@@ -40,4 +40,5 @@ export interface Feature {
   daOwner?: string;
   uiuxOwner?: string;
   contentDesigner?: string;
+  iosVersion?: string;
 }
