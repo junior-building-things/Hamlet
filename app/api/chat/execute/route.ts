@@ -42,6 +42,8 @@ const NODE_TRANSLATIONS: Record<string, string> = {
   '合规评估':    'Compliance Review',
 };
 
+export const maxDuration = 30; // seconds — needed for AI generation + Lark API calls
+
 export async function POST(req: NextRequest) {
   const { action, params } = await req.json() as {
     action: string;
@@ -211,35 +213,29 @@ ${brief}`;
 
     // ── Add Section ──────────────────────────────────────────────────────────
     if (action === 'add_section' && params.docUrl && params.section) {
-      let sectionContent = params.content ?? '';
+      let sectionContent = params.content?.trim() ?? '';
 
       // If no content provided, generate it with AI based on the doc
-      if (!sectionContent.trim()) {
+      if (!sectionContent) {
         const apiKey = process.env.GOOGLE_AI_API_KEY;
         if (apiKey) {
-          let docContext = '';
-          try {
-            docContext = await readDocContent(params.docUrl);
-            docContext = docContext.slice(0, 6000);
-          } catch { /* best effort */ }
-
+          // Read doc and generate content in parallel to save time
           const genAI = new GoogleGenerativeAI(apiKey);
           const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
-          const prompt = `You are a senior TikTok product manager. Based on the document below, write concise, professional content for a new section titled "${params.section}".
 
-Document:
-${docContext}
+          let docContext = '';
+          try {
+            docContext = (await readDocContent(params.docUrl)).slice(0, 4000);
+          } catch { /* best effort */ }
 
-Rules:
-- Write 2-5 sentences of plain text (no markdown, no bullet points)
-- Make it relevant to the document's topic
-- Return ONLY the section content text, nothing else`;
-          const result = await model.generateContent(prompt);
-          sectionContent = result.response.text().trim();
+          const prompt = `Write 2-4 sentences for a PRD section titled "${params.section}". ${docContext ? `Context:\n${docContext}` : ''}\nReturn ONLY plain text.`;
+          try {
+            const result = await model.generateContent(prompt);
+            sectionContent = result.response.text().trim();
+          } catch { /* fallback below */ }
         }
+        if (!sectionContent) sectionContent = '(To be filled in)';
       }
-
-      if (!sectionContent.trim()) sectionContent = '(To be filled in)';
 
       await addDocSection(params.docUrl, params.section, sectionContent, params.afterSection);
       return NextResponse.json({

@@ -120,8 +120,9 @@ export function ChatView({ onFeatureCreated }: Props) {
         }
         await saveToHistory([userMsg, { ...phase1Msg, links: data1.links }]);
       }
-    } catch {
-      const errMsg: Msg = { role: 'assistant', content: 'Something went wrong. Please try again.' };
+    } catch (err) {
+      console.error('[ChatView] Error:', err);
+      const errMsg: Msg = { role: 'assistant', content: `Something went wrong: ${err instanceof Error ? err.message : 'Please try again.'}` };
       setMessages(prev => [...prev, errMsg]);
     } finally {
       setLoading(false);
