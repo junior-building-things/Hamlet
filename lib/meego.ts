@@ -318,7 +318,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
     });
 }
 
-export async function syncFeatureStatus(meegoUrl: string): Promise<{
+export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: string): Promise<{
   status: string;
   name: string;
   owner: string;
@@ -483,8 +483,10 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   let abReportUrl = '';
   if (workItemName) {
     try {
-      abReportUrl = await searchAbReport(workItemName);
-    } catch { /* ignore — AB report is optional */ }
+      abReportUrl = await searchAbReport(workItemName, userAccessToken);
+    } catch (e) {
+      console.warn('[sync] AB report search error:', e);
+    }
   }
 
   return {

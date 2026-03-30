@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncFeatureStatus } from '@/lib/meego';
 import { batchFetchAvatars } from '@/lib/lark';
+import { getSession } from '@/lib/session';
 
 export async function POST(req: NextRequest) {
   const { meegoUrl } = await req.json() as { meegoUrl?: string };
@@ -10,7 +11,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await syncFeatureStatus(meegoUrl);
+    const session = await getSession();
+    const userToken = session?.larkAccessToken;
+
+    const result = await syncFeatureStatus(meegoUrl, userToken);
 
     // Resolve POC avatars from Lark (best-effort, don't block on failure)
     let pocAvatars: Record<string, string> = {};

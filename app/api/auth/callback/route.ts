@@ -88,11 +88,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=no_user`);
   }
 
+  const refreshToken = (inner.refresh_token as string | undefined) ?? '';
+
   const sessionToken = await createSession({
     userId:    u.user_id ?? u.open_id ?? 'unknown',
     name:      u.en_name ?? u.name ?? 'Unknown',
     email:     u.enterprise_email ?? u.email ?? '',
     avatarUrl: u.avatar_url ?? '',
+    larkAccessToken:  accessToken,
+    larkRefreshToken: refreshToken,
   });
 
   jar.set(COOKIE_NAME, sessionToken, {

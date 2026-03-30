@@ -324,9 +324,10 @@ async function addCollaborator(fileToken: string, token: string): Promise<void> 
  * combined with the feature name (or key words from it).
  * Returns the URL of the best match, or '' if nothing found.
  */
-export async function searchAbReport(featureName: string): Promise<string> {
+export async function searchAbReport(featureName: string, userAccessToken?: string): Promise<string> {
   if (!featureName) return '';
-  const token = await getAccessToken();
+  // Drive search requires user_access_token; fall back to tenant token (may not return results)
+  const token = userAccessToken || await getAccessToken();
 
   // Extract meaningful words from the feature name (skip very short/common words)
   const words = featureName

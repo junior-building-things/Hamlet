@@ -15,6 +15,8 @@ export interface SessionUser {
   name:      string;
   email:     string;
   avatarUrl: string;
+  larkAccessToken?:  string;
+  larkRefreshToken?: string;
 }
 
 export async function createSession(user: SessionUser): Promise<string> {
