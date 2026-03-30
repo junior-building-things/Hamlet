@@ -1042,22 +1042,12 @@ export async function joinFeatureChat(featureName: string): Promise<boolean> {
     return false;
   }
 
-  // Find best match — look for a chat whose name contains significant words from the feature name
-  const nameTokens = featureName.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  let bestChat: { chat_id: string; name: string } | null = null;
-  let bestScore = 0;
+  // Find exact match — chat name must contain the full feature name
+  const nameLower = featureName.toLowerCase().trim();
+  const bestChat = chats.find(c => c.name.toLowerCase().includes(nameLower));
 
-  for (const chat of chats) {
-    const chatLower = chat.name.toLowerCase();
-    const score = nameTokens.filter(w => chatLower.includes(w)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      bestChat = chat;
-    }
-  }
-
-  if (!bestChat || bestScore < Math.max(2, Math.ceil(nameTokens.length * 0.4))) {
-    console.log('[lark] no close chat match for:', featureName, '— best:', bestChat?.name, 'score:', bestScore);
+  if (!bestChat) {
+    console.log('[lark] no exact chat match for:', featureName, '— candidates:', chats.map(c => c.name));
     return false;
   }
 
