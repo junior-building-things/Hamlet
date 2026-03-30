@@ -207,19 +207,11 @@ async function updateInitialVersionDate(docId: string, date: string, token: stri
 // Heading block types in Lark Docx (Heading1–Heading9)
 const HEADING_BLOCK_TYPES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
-// Keywords that identify PRD sections worth filling (English + Chinese)
-const PRD_KEYWORDS = [
-  // English
-  'background', 'problem', 'goal', 'objective', 'metric', 'requirement',
-  'scope', 'overview', 'summary', 'context', 'why', 'what', 'how', 'impact', 'success',
-  'solution', 'description', 'motivation', 'hypothesis', 'building', 'build',
-  'purpose', 'rationale', 'approach', 'design', 'user stor', 'acceptance',
-  'stakeholder', 'timeline', 'milestone', 'risk', 'dependency', 'dependencies',
-  'assumption', 'constraint', 'out of scope', 'in scope', 'non-goal',
-  // Chinese
-  '背景', '问题', '目标', '需求', '方案', '范围', '概述', '影响',
-  '成功', '指标', '动机', '分析', '用户', '场景', '描述', '假设',
-  '构建', '设计', '风险', '依赖', '时间', '里程碑',
+// Headings to SKIP when auto-filling (these are structural, not content sections)
+const PRD_SKIP_HEADINGS = [
+  'version', 'changelog', 'appendix', 'reference', 'table of content',
+  'revision', 'approval', 'sign-off', 'reviewer', 'stakeholder list',
+  '版本', '修订', '附录', '参考', '目录', '审批',
 ];
 
 async function fillPrdSections(
@@ -257,14 +249,16 @@ async function fillPrdSections(
   }
   if (current) sections.push(current);
 
-  // Find relevant sections — use the first paragraph block regardless of existing content
+  // Find fillable sections — include all heading sections that have a paragraph block,
+  // EXCEPT known structural/non-content sections (version history, appendix, etc.)
   type Target = { headingText: string; blockId: string };
   const targets: Target[] = [];
 
   for (const section of sections) {
     const ht = section.headingText.toLowerCase();
-    if (!PRD_KEYWORDS.some(kw => ht.includes(kw))) continue;
-    // paragraph block_type = 2; pick the first one (empty or with placeholder text)
+    if (!ht.trim()) continue; // skip empty headings
+    if (PRD_SKIP_HEADINGS.some(kw => ht.includes(kw))) continue; // skip structural sections
+    // paragraph block_type = 2; pick the first one
     const para = section.contentBlocks.find(b => b.block_type === 2);
     if (para) targets.push({ headingText: section.headingText, blockId: para.block_id });
   }
