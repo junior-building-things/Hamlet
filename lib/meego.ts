@@ -405,7 +405,14 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
         const m = n.match(/(\d+\.\d+)(?:\.\d+)?$/);
         return m ? m[1] : n;
       });
-      if (shortNames.length > 0) iosVersion = shortNames.join(', ');
+      if (shortNames.length > 0) {
+        shortNames.sort((a, b) => {
+          const [aMaj, aMin] = a.split('.').map(Number);
+          const [bMaj, bMin] = b.split('.').map(Number);
+          return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
+        });
+        iosVersion = shortNames[0];
+      }
     }
   } catch (e) {
     console.log('[meego] iOS version fetch failed:', e);
