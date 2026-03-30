@@ -572,13 +572,15 @@ export async function addDocComment(docUrl: string, content: string): Promise<vo
   const docId = await resolveDocId(docUrl);
 
   const token = await getAccessToken();
-  // Use the file comment API — add a whole-file comment
-  const res = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/comments`, {
+  const res = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/comments?file_type=docx`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      file_type: 'docx',
-      comment: { content: [{ type: 'text', text: content }] },
+      reply_list: {
+        replies: [{
+          content: { elements: [{ type: 'text_run', text_run: { text: content } }] },
+        }],
+      },
     }),
   });
   const data = await parseJson(res, 'add_comment') as { code: number; msg?: string };
