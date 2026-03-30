@@ -568,6 +568,77 @@ export async function editDocSection(docUrl: string, sectionHeading: string, new
 }
 
 /**
+ * Add a new section (heading + paragraph) to a Lark doc.
+ * Inserts at the end of the document by default, or after a specific section if `afterSection` is provided.
+ */
+export async function addDocSection(
+  docUrl: string,
+  sectionTitle: string,
+  sectionContent: string,
+  afterSection?: string,
+): Promise<void> {
+  const docId = await resolveDocId(docUrl);
+  const token = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock) throw new Error('Empty document');
+
+  // Determine insert index (-1 = end of document)
+  let insertIndex = -1;
+  if (afterSection && pageBlock.children) {
+    const byId = new Map(blocks.map(b => [b.block_id, b]));
+    const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
+    let foundTarget = false;
+    for (let i = 0; i < topLevel.length; i++) {
+      const b = topLevel[i];
+      if (HEADING_BLOCK_TYPES.has(b.block_type) && blockText(b).toLowerCase().includes(afterSection.toLowerCase())) {
+        foundTarget = true;
+      } else if (foundTarget && HEADING_BLOCK_TYPES.has(b.block_type)) {
+        // Found the next heading after target section — insert before it
+        insertIndex = i;
+        break;
+      }
+    }
+    // If we found the target but no next heading, insert at end
+  }
+
+  const children = [
+    {
+      block_type: 4, // Heading 2
+      heading2: {
+        elements: [{ text_run: { content: sectionTitle, text_element_style: {} } }],
+      },
+    },
+    {
+      block_type: 2, // Paragraph
+      paragraph: {
+        elements: [{ text_run: { content: sectionContent, text_element_style: {} } }],
+      },
+    },
+  ];
+
+  const body: Record<string, unknown> = {
+    children,
+    document_revision_id: -1,
+  };
+  if (insertIndex >= 0) {
+    body.index = insertIndex;
+  }
+
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  const data = await parseJson(res, 'create_blocks') as { code: number; msg?: string };
+  if (data.code !== 0) throw new Error(`Lark create blocks error ${data.code}: ${data.msg}`);
+}
+
+/**
  * Add a comment to a Lark document, optionally referencing a specific section.
  * When `section` is provided, quotes the section content in the comment body.
  */

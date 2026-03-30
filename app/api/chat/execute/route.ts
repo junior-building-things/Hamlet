@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
-import { copyPrdTemplate, readDocContent, editDocSection, addDocComment, listDocComments, replyToComment, duplicateDoc } from '@/lib/lark';
+import { copyPrdTemplate, readDocContent, editDocSection, addDocSection, addDocComment, listDocComments, replyToComment, duplicateDoc } from '@/lib/lark';
 import type { Feature } from '@/lib/types';
 
 const PROJECT_KEY   = '5f105019a8b9a853da64767f';
@@ -196,6 +196,15 @@ ${brief}`;
       await editDocSection(params.docUrl, params.section, params.content);
       return NextResponse.json({
         reply: `Updated the "${params.section}" section!`,
+        links: [{ label: '📄 Doc', url: params.docUrl }],
+      });
+    }
+
+    // ── Add Section ──────────────────────────────────────────────────────────
+    if (action === 'add_section' && params.docUrl && params.section && params.content) {
+      await addDocSection(params.docUrl, params.section, params.content, params.afterSection);
+      return NextResponse.json({
+        reply: `Added the "${params.section}" section!`,
         links: [{ label: '📄 Doc', url: params.docUrl }],
       });
     }

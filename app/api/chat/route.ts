@@ -5,8 +5,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface ChatMsg { role: 'user' | 'assistant'; content: string }
 interface Intent {
-  action: 'create_feature' | 'create_prd' | 'update_prd' | 'complete_node' | 'query_meego' | 'read_doc' | 'edit_doc' | 'comment_doc' | 'reply_comment' | 'duplicate_doc' | 'chat' | 'unsupported';
-  params: { featureName?: string; featureId?: string; nodeName?: string; section?: string; content?: string; query?: string; docUrl?: string; commentText?: string; commentSearch?: string; replyText?: string; useHalfDayPrd?: boolean };
+  action: 'create_feature' | 'create_prd' | 'update_prd' | 'complete_node' | 'query_meego' | 'read_doc' | 'edit_doc' | 'add_section' | 'comment_doc' | 'reply_comment' | 'duplicate_doc' | 'chat' | 'unsupported';
+  params: { featureName?: string; featureId?: string; nodeName?: string; section?: string; content?: string; afterSection?: string; query?: string; docUrl?: string; commentText?: string; commentSearch?: string; replyText?: string; useHalfDayPrd?: boolean };
   reply: string;
 }
 
@@ -21,22 +21,24 @@ Classify the user's message into one of these actions:
 4. complete_node    – User wants to mark a workflow node done    (needs: featureName or featureId, nodeName)
 5. query_meego      – User asks a question about a specific feature that requires live data: who owns a node, what is the status of a node, who is on the team, what nodes are in progress, etc. (needs: featureName or featureId, query)
 6. read_doc         – User shares a Lark doc URL and wants to read, summarize, or ask about its contents (needs: docUrl)
-7. edit_doc         – User wants to edit/update a specific section of a Lark doc (needs: docUrl, section, content)
-8. comment_doc      – User wants to add a comment to a Lark doc (needs: docUrl, commentText, optionally section to comment on a specific section)
-9. reply_comment    – User wants to reply to an existing comment on a Lark doc (needs: docUrl, replyText, and commentSearch — a keyword/phrase to find the target comment)
-10. duplicate_doc    – User wants to duplicate/copy a Lark doc (needs: docUrl, optionally featureName for the new name)
-11. chat            – General conversation, greetings, questions, small talk, or requests for clarification
-12. unsupported     – User is asking for a SPECIFIC action that is not in the list above (e.g. "create a compliance ticket", "send an email")
+7. edit_doc         – User wants to edit/update the content of an EXISTING section of a Lark doc (needs: docUrl, section, content)
+8. add_section      – User wants to ADD a NEW section to a Lark doc (needs: docUrl, section for the new heading title, content for the section body; optionally afterSection to insert after a specific existing section)
+9. comment_doc      – User wants to add a comment to a Lark doc (needs: docUrl, commentText, optionally section to comment on a specific section)
+10. reply_comment    – User wants to reply to an existing comment on a Lark doc (needs: docUrl, replyText, and commentSearch — a keyword/phrase to find the target comment)
+11. duplicate_doc    – User wants to duplicate/copy a Lark doc (needs: docUrl, optionally featureName for the new name)
+12. chat            – General conversation, greetings, questions, small talk, or requests for clarification
+13. unsupported     – User is asking for a SPECIFIC action that is not in the list above (e.g. "create a compliance ticket", "send an email")
 
 Respond with ONLY valid JSON — no markdown fences, no extra text:
 {
-  "action": "create_feature|create_prd|update_prd|complete_node|query_meego|read_doc|edit_doc|comment_doc|reply_comment|duplicate_doc|chat|unsupported",
+  "action": "create_feature|create_prd|update_prd|complete_node|query_meego|read_doc|edit_doc|add_section|comment_doc|reply_comment|duplicate_doc|chat|unsupported",
   "params": {
     "featureName": "exact name if mentioned",
     "featureId": "numeric Meego ID if mentioned",
     "nodeName": "e.g. Tech Assessment, iOS Development, Requirements Prep",
     "section": "PRD section heading for update_prd or edit_doc",
-    "content": "new text for update_prd or edit_doc",
+    "content": "new text for update_prd, edit_doc, or add_section",
+    "afterSection": "existing section heading to insert after (for add_section, optional)",
     "query": "the user's exact question verbatim, for query_meego",
     "docUrl": "full Lark doc URL if shared by user",
     "commentText": "the comment text for comment_doc",
@@ -59,13 +61,14 @@ Rules:
 - For query_meego: start reply with "Let me look that up in Meego…"
 - For read_doc: start reply with "Reading the doc…"
 - For edit_doc: start reply with "Updating the doc…"
+- For add_section: start reply with "Adding the section…"
 - For comment_doc: start reply with "Adding your comment…"
 - For reply_comment: start reply with "Replying to the comment…"
 - For duplicate_doc: start reply with "Duplicating the doc…"`;
 
 // ── Actionable intents that trigger a two-phase response ──────────────────────
 
-const ACTIONABLE = new Set(['create_feature', 'create_prd', 'complete_node', 'query_meego', 'read_doc', 'edit_doc', 'comment_doc', 'reply_comment', 'duplicate_doc']);
+const ACTIONABLE = new Set(['create_feature', 'create_prd', 'complete_node', 'query_meego', 'read_doc', 'edit_doc', 'add_section', 'comment_doc', 'reply_comment', 'duplicate_doc']);
 
 function isReady(intent: Intent): boolean {
   const { action, params } = intent;
@@ -75,6 +78,7 @@ function isReady(intent: Intent): boolean {
   if (action === 'query_meego')    return !!(params.featureName || params.featureId) && !!params.query;
   if (action === 'read_doc')       return !!params.docUrl;
   if (action === 'edit_doc')       return !!params.docUrl && !!params.section && !!params.content;
+  if (action === 'add_section')    return !!params.docUrl && !!params.section && !!params.content;
   if (action === 'comment_doc')    return !!params.docUrl && !!params.commentText;
   if (action === 'reply_comment')  return !!params.docUrl && !!params.replyText && !!params.commentSearch;
   if (action === 'duplicate_doc')  return !!params.docUrl;
