@@ -129,26 +129,26 @@ export function TodoView({ features, setFeatures }: Props) {
             <button
               onClick={() => bulkComplete('PM Acceptance', pmAcceptanceTodos)}
               disabled={!!bulkRunning}
-              className="flex items-center gap-2.5 px-4 py-2.5 bg-[#0e1120] border border-[#1e2240] rounded-xl hover:border-blue-500/40 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
             >
               {bulkRunning === 'PM Acceptance'
-                ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                : <CheckCircle2 className="w-4 h-4 text-blue-400" />}
-              <span className="text-sm text-white font-medium">Complete All PM Acceptance</span>
-              <span className="text-xs text-gray-500">{pmAcceptanceTodos.length}</span>
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <CheckCircle2 className="w-3 h-3" />}
+              Complete All PM Acceptance
+              <span className="text-blue-300 font-normal">{pmAcceptanceTodos.length}</span>
             </button>
           )}
           {uiuxAcceptanceTodos.length > 0 && (
             <button
               onClick={() => bulkComplete('UI/UX Acceptance', uiuxAcceptanceTodos)}
               disabled={!!bulkRunning}
-              className="flex items-center gap-2.5 px-4 py-2.5 bg-[#0e1120] border border-[#1e2240] rounded-xl hover:border-blue-500/40 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
             >
               {bulkRunning === 'UI/UX Acceptance'
-                ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                : <CheckCircle2 className="w-4 h-4 text-blue-400" />}
-              <span className="text-sm text-white font-medium">Complete All UI/UX Acceptance</span>
-              <span className="text-xs text-gray-500">{uiuxAcceptanceTodos.length}</span>
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <CheckCircle2 className="w-3 h-3" />}
+              Complete All UI/UX Acceptance
+              <span className="text-blue-300 font-normal">{uiuxAcceptanceTodos.length}</span>
             </button>
           )}
         </div>
