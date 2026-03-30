@@ -1,10 +1,25 @@
 'use client';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { FeatureListHeader } from './FeatureListHeader';
 import { FeatureListItem } from './FeatureListItem';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
+function statusChipCls(key: string): string {
+  const s = key.toLowerCase();
+  if (s.includes('上线') || s.includes('launch') || s.includes('灰度') || s.includes('已发布') || s.includes('已完成') || s.includes('验收'))
+    return 'bg-[#0d2b1f] border border-emerald-900 text-emerald-400';
+  if (s.includes('ab') || s.includes('测试') || s.includes('testing'))
+    return 'bg-[#1e2240] border border-yellow-900/50 text-yellow-300';
+  if (s.includes('开发') || s.includes('dev') || s.includes('coding') || s.includes('impl'))
+    return 'bg-[#1a2535] border border-blue-900/50 text-blue-300';
+  if (s.includes('设计') || s.includes('design') || s.includes('走查'))
+    return 'bg-[#1e2240] border border-blue-900/50 text-blue-300';
+  if (s.includes('hold') || s.includes('暂停') || s.includes('搁置'))
+    return 'bg-[#221a10] border border-amber-900 text-amber-400';
+  return 'bg-[#1e2240] border border-[#2e3460] text-gray-300';
+}
 
 interface Props {
   features: Feature[];
@@ -165,23 +180,43 @@ export function TodoView({ features, setFeatures }: Props) {
           </div>
         )}
 
-        {/* Todo list — same layout as Project View */}
-        {todos.length > 0 && (
-          <div className={listGridCls}>
-            <FeatureListHeader />
-            {todos.map(f => (
-              <FeatureListItem
-                key={f.id}
-                feature={f}
-                syncing={false}
-                onEdit={() => {}}
-                onSync={() => {}}
-                completing={completingId === f.id}
-                onComplete={handleComplete}
-              />
-            ))}
-          </div>
-        )}
+        {/* Todo list — grouped by status */}
+        {todos.length > 0 && (() => {
+          const grouped = new Map<string, Feature[]>();
+          for (const f of todos) {
+            const key = f.status || '—';
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key)!.push(f);
+          }
+          const groups = Array.from(grouped.entries());
+
+          return (
+            <div className={listGridCls}>
+              <FeatureListHeader />
+              {groups.map(([status, items], gi) => (
+                <React.Fragment key={status}>
+                  <div className={`sm:col-span-full flex items-center gap-2.5 px-1 ${gi === 0 ? 'mt-2' : 'mt-5'}`}>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${statusChipCls(status)}`}>
+                      {status}
+                    </span>
+                    <span className="text-xs text-gray-600">{items.length}</span>
+                  </div>
+                  {items.map(f => (
+                    <FeatureListItem
+                      key={f.id}
+                      feature={f}
+                      syncing={false}
+                      onEdit={() => {}}
+                      onSync={() => {}}
+                      completing={completingId === f.id}
+                      onComplete={handleComplete}
+                    />
+                  ))}
+                </React.Fragment>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Recently completed (this session) */}
         {completed.size > 0 && (
