@@ -343,7 +343,7 @@ export function ProjectView({ features, setFeatures }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,450px)_auto_auto_auto_auto_auto_auto] sm:gap-x-4 sm:gap-y-2';
+  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,450px)_auto_auto_auto_auto_auto_auto] sm:gap-x-[10px] sm:gap-y-2';
 
   async function handleComplete(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
