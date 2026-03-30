@@ -188,7 +188,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
   });
   const [prdBuilder, setPrdBuilder]         = useState(false);
   const [prdBuilderText, setPrdBuilderText] = useState('');
-  const [useHalfDayPrd, setUseHalfDayPrd]   = useState(false);
+  const [prdType, setPrdType]               = useState<'regular' | 'halfday'>('regular');
 
   const isMeego     = !!(feature?.meegoUrl);
   const canComplete = feature?.canCompleteNode === true;
@@ -262,7 +262,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
         socialComponentOptionId: form.socialComponent || undefined,
         roles,
         prdBuilderText:          prdBuilder && prdBuilderText.trim() ? prdBuilderText.trim() : undefined,
-        useHalfDayPrd:           prdBuilder && useHalfDayPrd ? true : undefined,
+        useHalfDayPrd:           prdBuilder && prdType === 'halfday' ? true : undefined,
       }),
     })
       .then(res => res.json().then(data => ({ ok: res.ok, data })))
@@ -338,10 +338,10 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
           <form onSubmit={handleCreate} className="flex flex-col min-h-0 flex-1">
             <div className="px-6 py-5 flex flex-col gap-0 overflow-y-auto flex-1 divide-y divide-[#1e2240]">
 
-              {/* Feature name + PRD Builder */}
+              {/* Feature Name + PRD Builder */}
               <div className="pb-5 flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <FormLabel required>Feature name</FormLabel>
+                  <FormLabel required>Feature Name</FormLabel>
                   <div className="flex items-center gap-3">
                     <input autoFocus type="text" className={inputCls}
                       placeholder="Enter feature name…"
@@ -359,9 +359,9 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                 </div>
 
                 {prdBuilder && (
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-[11px] text-gray-400 font-semibold">Feature Details</span>
+                      <FormLabel>Feature Description</FormLabel>
                       <textarea
                         className={`${inputCls} resize-none`}
                         rows={3}
@@ -370,15 +370,17 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                         onChange={e => setPrdBuilderText(e.target.value)}
                       />
                     </div>
-                    <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-                      <input
-                        type="checkbox"
-                        checked={useHalfDayPrd}
-                        onChange={e => setUseHalfDayPrd(e.target.checked)}
-                        className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
+                    <div className="flex flex-col gap-1.5">
+                      <FormLabel>PRD Type</FormLabel>
+                      <CustomSelect
+                        options={[
+                          { value: 'regular', label: 'Regular PRD' },
+                          { value: 'halfday', label: 'Half-Day PRD' },
+                        ]}
+                        value={prdType}
+                        onChange={v => setPrdType(v as 'regular' | 'halfday')}
                       />
-                      <span className="text-[11px] text-gray-500 font-medium">Use Half-Day PRD</span>
-                    </label>
+                    </div>
                   </div>
                 )}
               </div>
