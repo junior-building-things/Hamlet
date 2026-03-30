@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
-import { X, Loader2, CheckCircle2, WandSparkles, FlaskConical } from 'lucide-react';
+import { X, Loader2, CheckCircle2, WandSparkles } from 'lucide-react';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
@@ -561,7 +561,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
               {feature?.abReportUrl && (
                 <a href={feature.abReportUrl} target="_blank" rel="noopener noreferrer"
                   className="text-xs flex items-center gap-1 hover:brightness-125 transition-all" style={{ color: '#F59E0B' }}>
-                  <FlaskConical className="w-3.5 h-3.5 shrink-0" /> AB
+                  <Image src="/ab.png" alt="" width={14} height={14} className="shrink-0" /> AB
                 </a>
               )}
             </div>
