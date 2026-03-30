@@ -57,7 +57,6 @@ function GroupHeader({ label, count, first, groupBy }: { label: string; count: n
         {label || '—'}
       </span>
       <span className="text-xs text-gray-600">{count}</span>
-      <div className="flex-1 h-px bg-[#1e2240]" />
     </div>
   );
 }
