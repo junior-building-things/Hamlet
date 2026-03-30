@@ -485,6 +485,131 @@ export async function extractFigmaUrlFromPrd(prdUrl: string): Promise<string> {
   return '';
 }
 
+// ─── Doc helpers for chat actions ────────────────────────────────────────────
+
+/** Extract doc token from a Lark URL (docx or wiki). */
+function extractDocToken(url: string): string | null {
+  const m = url.match(/\/docx\/([A-Za-z0-9]+)/) ?? url.match(/\/wiki\/([A-Za-z0-9]+)/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Read a Lark document and return a plain-text representation with headings.
+ */
+export async function readDocContent(docUrl: string): Promise<string> {
+  const docId = extractDocToken(docUrl);
+  if (!docId) throw new Error('Invalid Lark doc URL');
+
+  const token  = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+  const byId   = new Map(blocks.map(b => [b.block_id, b]));
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) return '(empty document)';
+
+  const lines: string[] = [];
+  for (const childId of pageBlock.children) {
+    const b = byId.get(childId);
+    if (!b) continue;
+    const text = blockText(b);
+    if (!text.trim()) continue;
+    if (HEADING_BLOCK_TYPES.has(b.block_type)) {
+      const level = b.block_type - 2; // block_type 3 = H1, 4 = H2, etc.
+      lines.push(`${'#'.repeat(level)} ${text}`);
+    } else {
+      lines.push(text);
+    }
+  }
+  return lines.join('\n') || '(empty document)';
+}
+
+/**
+ * Edit a specific section (by heading) in a Lark doc, replacing its first
+ * paragraph content with new text.
+ */
+export async function editDocSection(docUrl: string, sectionHeading: string, newContent: string): Promise<void> {
+  const docId = extractDocToken(docUrl);
+  if (!docId) throw new Error('Invalid Lark doc URL');
+
+  const token  = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+  const byId   = new Map(blocks.map(b => [b.block_id, b]));
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) throw new Error('Empty document');
+
+  const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
+
+  // Find the heading that matches, then get the first paragraph after it
+  let foundHeading = false;
+  for (const block of topLevel) {
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      const ht = blockText(block).toLowerCase();
+      if (ht.includes(sectionHeading.toLowerCase())) {
+        foundHeading = true;
+      } else if (foundHeading) {
+        break; // reached next heading
+      }
+    } else if (foundHeading && block.block_type === 2) {
+      await batchUpdateBlocks(docId, [{
+        block_id: block.block_id,
+        update_text_elements: { elements: [{ text_run: { content: newContent, text_element_style: {} } }] },
+      }], token);
+      return;
+    }
+  }
+  throw new Error(`Section "${sectionHeading}" not found in document`);
+}
+
+/**
+ * Add a comment to a Lark document (whole-doc comment).
+ */
+export async function addDocComment(docUrl: string, content: string): Promise<void> {
+  const docId = extractDocToken(docUrl);
+  if (!docId) throw new Error('Invalid Lark doc URL');
+
+  const token = await getAccessToken();
+  // Use the file comment API — add a whole-file comment
+  const res = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/comments`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      file_type: 'docx',
+      comment: { content: [{ type: 'text', text: content }] },
+    }),
+  });
+  const data = await parseJson(res, 'add_comment') as { code: number; msg?: string };
+  if (data.code !== 0) throw new Error(`Lark comment error ${data.code}: ${data.msg}`);
+}
+
+/**
+ * Duplicate a Lark doc, returning the new doc URL.
+ */
+export async function duplicateDoc(docUrl: string, newName?: string): Promise<string> {
+  const docId = extractDocToken(docUrl);
+  if (!docId) throw new Error('Invalid Lark doc URL');
+
+  const token = await getAccessToken();
+  const folderToken = await getRootFolderToken(token);
+
+  const res = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/copy`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: newName ?? 'Copy', type: 'docx', folder_token: folderToken }),
+  });
+  const data = await parseJson(res, 'drive_copy') as {
+    code: number; msg?: string;
+    data?: { file?: { token?: string; url?: string } };
+  };
+  if (data.code !== 0) throw new Error(`Lark copy error ${data.code}: ${data.msg ?? 'unknown'}`);
+
+  const fileToken = data.data?.file?.token;
+  if (!fileToken) throw new Error('Lark response missing file token');
+
+  await addCollaborator(fileToken, token);
+  return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;
+}
+
 /**
  * Copies the PRD wiki template, names it "[PRD] {featureName}", updates the
  * "Initial version" date, optionally fills PRD sections with AI-generated

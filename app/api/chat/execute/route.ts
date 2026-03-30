@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
-import { copyPrdTemplate } from '@/lib/lark';
+import { copyPrdTemplate, readDocContent, editDocSection, addDocComment, duplicateDoc } from '@/lib/lark';
 import type { Feature } from '@/lib/types';
 
 const PROJECT_KEY   = '5f105019a8b9a853da64767f';
@@ -172,6 +172,48 @@ ${brief}`;
       await completeNode(PROJECT_KEY, workItemId!, node.key);
       const displayName = NODE_TRANSLATIONS[node.name] ?? node.name;
       return NextResponse.json({ reply: `"${displayName}" has been marked as complete! ✅`, action: 'complete_node' });
+    }
+
+    // ── Read Doc ──────────────────────────────────────────────────────────────
+    if (action === 'read_doc' && params.docUrl) {
+      const content = await readDocContent(params.docUrl);
+
+      const apiKey = process.env.GOOGLE_AI_API_KEY;
+      if (!apiKey) return NextResponse.json({ reply: content, links: [{ label: '📄 Doc', url: params.docUrl }] });
+
+      const genAI  = new GoogleGenerativeAI(apiKey);
+      const model  = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+      const prompt = `You are Hamlet, a helpful PM assistant. Below is the content of a Lark document. Provide a clear, concise summary highlighting the key points, structure, and any action items.\n\nDocument content:\n${content.slice(0, 8000)}`;
+      const result = await model.generateContent(prompt);
+      const summary = result.response.text().trim();
+      return NextResponse.json({ reply: summary, links: [{ label: '📄 Doc', url: params.docUrl }] });
+    }
+
+    // ── Edit Doc ─────────────────────────────────────────────────────────────
+    if (action === 'edit_doc' && params.docUrl && params.section && params.content) {
+      await editDocSection(params.docUrl, params.section, params.content);
+      return NextResponse.json({
+        reply: `Updated the "${params.section}" section!`,
+        links: [{ label: '📄 Doc', url: params.docUrl }],
+      });
+    }
+
+    // ── Comment Doc ──────────────────────────────────────────────────────────
+    if (action === 'comment_doc' && params.docUrl && params.commentText) {
+      await addDocComment(params.docUrl, params.commentText);
+      return NextResponse.json({
+        reply: `Comment added!`,
+        links: [{ label: '📄 Doc', url: params.docUrl }],
+      });
+    }
+
+    // ── Duplicate Doc ────────────────────────────────────────────────────────
+    if (action === 'duplicate_doc' && params.docUrl) {
+      const newUrl = await duplicateDoc(params.docUrl, params.featureName);
+      return NextResponse.json({
+        reply: `Doc duplicated!`,
+        links: [{ label: '📄 Copy', url: newUrl }],
+      });
     }
 
   } catch (err) {
