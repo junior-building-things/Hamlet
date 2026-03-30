@@ -316,6 +316,48 @@ async function addCollaborator(fileToken: string, token: string): Promise<void> 
  * Extracts the Figma URL from the "Relevant Links" section of a Lark PRD doc.
  * Returns an empty string if not found or if the PRD URL is invalid.
  */
+// ─── User token refresh ──────────────────────────────────────────────────────
+
+/**
+ * Refresh an expired Lark user_access_token using its refresh_token.
+ * Returns { accessToken, refreshToken } or null if refresh fails.
+ */
+export async function refreshUserToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string } | null> {
+  const appId     = process.env.LARK_APP_ID;
+  const appSecret = process.env.LARK_APP_SECRET;
+  if (!appId || !appSecret || !refreshToken) return null;
+
+  // Get app_access_token first
+  const appRes  = await fetch(`${LARK_BASE_URL}/open-apis/auth/v3/app_access_token/internal`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ app_id: appId, app_secret: appSecret }),
+  });
+  const appData = await parseJson(appRes, 'app_token') as { code: number; app_access_token?: string };
+  if (appData.code !== 0 || !appData.app_access_token) return null;
+
+  // Refresh the user token
+  const res  = await fetch(`${LARK_BASE_URL}/open-apis/authen/v1/refresh_access_token`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      app_access_token: appData.app_access_token,
+      grant_type:       'refresh_token',
+      refresh_token:    refreshToken,
+    }),
+  });
+  const data = await parseJson(res, 'refresh_token') as {
+    code: number;
+    data?: { access_token?: string; refresh_token?: string };
+  };
+  if (data.code !== 0 || !data.data?.access_token) return null;
+
+  return {
+    accessToken:  data.data.access_token,
+    refreshToken: data.data.refresh_token ?? refreshToken,
+  };
+}
+
 // ─── Search for AB Report on Lark Drive ──────────────────────────────────────
 
 /**
@@ -374,12 +416,15 @@ export async function searchAbReport(featureName: string, userAccessToken?: stri
       };
     };
 
+    console.log('[AB search] query:', JSON.stringify(query), 'code:', data.code, 'msg:', data.msg);
+
     if (data.code !== 0) {
       console.warn('[lark] drive search failed:', data.code, data.msg);
       continue;
     }
 
     const docs = data.data?.docs_entities ?? [];
+    console.log('[AB search] found:', docs.length, 'docs:', docs.map(d => d.title));
     if (docs.length === 0) continue;
 
     // Score each result by how well it matches an AB report for this feature
