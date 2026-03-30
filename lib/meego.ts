@@ -369,39 +369,29 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   let iosVersion = '';
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const nodeData = JSON.parse(nodeRaw) as { list?: Array<{ basic?: { node_key?: string; name?: string }; fields?: Record<string, unknown> | Array<{ field_key?: string; field_value?: unknown; field_name?: string }> }> };
+    interface NodeFormItem { field_key?: string; field_name?: string; field_value?: unknown }
+    interface NodeEntry { basic?: { node_key?: string; name?: string }; form_items?: NodeFormItem[] }
+    const nodeData = JSON.parse(nodeRaw) as { list?: NodeEntry[] };
     for (const node of nodeData.list ?? []) {
-      // Search all nodes for field_08a9ca
-      const fields = node.fields;
-      if (Array.isArray(fields)) {
-        const vField = fields.find((f: { field_key?: string; field_name?: string }) => f.field_key === 'field_08a9ca' || f.field_name === 'iOS预计上车版本');
-        if (vField) {
-          const val = vField.field_value;
+      for (const fi of node.form_items ?? []) {
+        if (fi.field_key === 'field_08a9ca' || fi.field_name === 'iOS预计上车版本') {
+          const val = fi.field_value;
           if (typeof val === 'string' && val && val !== '未填写') {
             iosVersion = val;
           } else if (Array.isArray(val)) {
-            // Could be array of work item references
             iosVersion = val.map((v: Record<string, unknown>) => String(v.name ?? v.work_item_name ?? v.label ?? '')).filter(Boolean).join(', ');
           }
           if (iosVersion) break;
         }
-      } else if (fields && typeof fields === 'object') {
-        // fields might be a key-value map
-        const val = (fields as Record<string, unknown>)['field_08a9ca'];
-        if (val) {
-          if (typeof val === 'string' && val !== '未填写') iosVersion = val;
-          else if (Array.isArray(val)) {
-            iosVersion = val.map((v: Record<string, unknown>) => String(v.name ?? v.label ?? '')).filter(Boolean).join(', ');
-          }
-          if (iosVersion) break;
-        }
       }
+      if (iosVersion) break;
     }
     if (!iosVersion) {
-      // Log a sample node structure to understand the shape
-      const sample = nodeData.list?.[0];
-      console.log('[meego] iOS version not found. Sample node keys:', sample ? Object.keys(sample) : 'no nodes');
-      if (sample) console.log('[meego] Sample node:', JSON.stringify(sample).slice(0, 500));
+      // Log all form_item field_keys from every node to help debug
+      const allKeys = (nodeData.list ?? []).flatMap(n => (n.form_items ?? []).map(fi => `${n.basic?.name}:${fi.field_key}(${fi.field_name})`));
+      const matching = allKeys.filter(k => k.includes('版本') || k.includes('version') || k.includes('08a9ca'));
+      console.log('[meego] iOS version not found. Version-related fields:', matching.length ? matching : 'none');
+      console.log('[meego] Total form_items across all nodes:', allKeys.length);
     }
   } catch (e) {
     console.log('[meego] iOS version fetch failed:', e);
