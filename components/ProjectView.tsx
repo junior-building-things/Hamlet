@@ -82,6 +82,7 @@ export function ProjectView({ features, setFeatures }: Props) {
   const [detailSyncTotal, setDetailSyncTotal] = useState(0);
   const [modalMode,      setModalMode]      = useState<'edit' | null>(null);
   const [editingFeature, setEditing]        = useState<Feature | undefined>();
+  const [completingId,   setCompletingId]   = useState<string | null>(null);
 
   // ── Persisted group + sort preferences ───────────────────────────────────
 
@@ -342,12 +343,62 @@ export function ProjectView({ features, setFeatures }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[2fr_auto_auto_220px_auto_1fr] sm:gap-x-4 sm:gap-y-2';
+  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[2fr_auto_auto_220px_auto_1fr_auto] sm:gap-x-4 sm:gap-y-2';
+
+  async function handleComplete(feature: Feature) {
+    if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
+      toast.error('Missing node info — try syncing first.');
+      return;
+    }
+    setCompletingId(feature.id);
+    try {
+      const res = await fetch('/api/meego/complete-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectKey: feature.meegoProjectKey,
+          workItemId: feature.meegoIssueId,
+          nodeKey:    feature.meegoNodeKey,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json() as { error?: string };
+        throw new Error(d.error ?? 'Failed');
+      }
+      toast.success(`"${feature.status}" marked as complete`);
+      // Background re-sync
+      if (feature.meegoUrl) {
+        fetch('/api/meego/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ meegoUrl: feature.meegoUrl }),
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then((d: Record<string, unknown> | null) => {
+            if (!d) return;
+            setFeatures(prev => prev.map(f => f.id !== feature.id ? f : {
+              ...f,
+              status:          (d.status as string) || f.status,
+              canCompleteNode: d.canCompleteNode as boolean,
+              meegoNodeKey:    (d.meegoNodeKey as string) || f.meegoNodeKey,
+              priority:        ((d.priority as Priority) ?? f.priority),
+              lastUpdated:     new Date().toISOString().split('T')[0],
+            }));
+          })
+          .catch(() => {});
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to complete node');
+    } finally {
+      setCompletingId(null);
+    }
+  }
 
   function renderListRows(items: Feature[]) {
     return items.map(f => (
       <FeatureListItem key={f.id} feature={f} syncing={syncingId === f.id}
-        onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne} />
+        onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne}
+        completing={completingId === f.id} onComplete={handleComplete} />
     ));
   }
 

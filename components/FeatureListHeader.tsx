@@ -9,6 +9,7 @@ export function FeatureListHeader() {
       <span>Links</span>
       <span>Team</span>
       <span>Last Updated</span>
+      <span>Action</span>
     </div>
   );
 }

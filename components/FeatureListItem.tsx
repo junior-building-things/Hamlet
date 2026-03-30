@@ -3,16 +3,18 @@ import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
 import { TeamAvatars } from './TeamAvatars';
-import { RefreshCw, Calendar, ExternalLink, Pen } from 'lucide-react';
+import { RefreshCw, Calendar, ExternalLink, Pen, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface Props {
   feature: Feature;
   syncing: boolean;
   onEdit: (feature: Feature) => void;
   onSync: (feature: Feature) => void;
+  completing?: boolean;
+  onComplete?: (feature: Feature) => void;
 }
 
-export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete }: Props) {
   return (
     <div className="bg-[#13162a] border border-[#1e2240] rounded-xl hover:border-[#2e3460] transition-colors
                     sm:col-span-full sm:grid sm:[grid-template-columns:subgrid] sm:items-center">
@@ -58,6 +60,16 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
             </a>
           )}
         </div>
+        {feature.canCompleteNode && onComplete && (
+          <button
+            onClick={() => onComplete(feature)}
+            disabled={completing}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors self-start"
+          >
+            {completing ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+            Complete: {feature.status}
+          </button>
+        )}
       </div>
 
       {/* Desktop cells — direct subgrid children */}
@@ -104,10 +116,26 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
         <TeamAvatars feature={feature} ringColor="#13162a" />
       </div>
 
-      <span className="hidden sm:flex items-center gap-1 pr-4 py-3 text-xs text-gray-400 truncate">
+      <span className="hidden sm:flex items-center gap-1 py-3 text-xs text-gray-400 truncate">
         <Calendar className="w-3 h-3 shrink-0" />
         {new Date(feature.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
       </span>
+
+      {/* Action */}
+      <div className="hidden sm:flex items-center pr-4 py-3">
+        {feature.canCompleteNode && onComplete && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onComplete(feature); }}
+            disabled={completing}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+          >
+            {completing
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : <CheckCircle2 className="w-3 h-3" />}
+            Complete
+          </button>
+        )}
+      </div>
     </div>
   );
 }
