@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { ExternalLink } from 'lucide-react';
 import { Feature } from '@/lib/types';
 import Image from 'next/image';
 
@@ -56,10 +57,10 @@ function Bubble({ link, anchor, onEnter, onLeave }: BubbleProps) {
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      <Image src={link.icon} alt="" width={link.iconW} height={link.iconH} className="shrink-0" />
       <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: link.color }}>
         {link.label}
       </span>
+      <ExternalLink className="w-3 h-3 text-gray-400 shrink-0" />
       {/* Arrow */}
       <div
         className="absolute top-full left-1/2 -translate-x-1/2
