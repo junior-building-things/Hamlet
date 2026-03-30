@@ -10,15 +10,38 @@ interface Props {
 }
 
 export function TodoView({ features, setFeatures }: Props) {
-  const [completing, setCompleting] = useState<string | null>(null);
-  const [completed,  setCompleted]  = useState<Set<string>>(new Set());
-  const [errors,     setErrors]     = useState<Record<string, string>>({});
+  const [completing, setCompleting]     = useState<string | null>(null);
+  const [completed,  setCompleted]      = useState<Set<string>>(new Set());
+  const [errors,     setErrors]         = useState<Record<string, string>>({});
+  const [bulkRunning, setBulkRunning]   = useState<string | null>(null);
+  const [bulkDone,    setBulkDone]      = useState<Record<string, number>>({});
 
   // Features where the user is the assignee on an active node
   const todos = features.filter(f => f.canCompleteNode === true && !completed.has(f.id));
 
   // Features still syncing (canCompleteNode not yet determined)
   const syncing = features.filter(f => f.canCompleteNode === undefined && f.meegoUrl);
+
+  // Bulk completion groups
+  const pmAcceptanceTodos   = todos.filter(f => f.status === 'PM Acceptance');
+  const uiuxAcceptanceTodos = todos.filter(f => f.status === 'UI/UX Acceptance');
+
+  async function bulkComplete(nodeType: string, items: Feature[]) {
+    if (items.length === 0 || bulkRunning) return;
+    setBulkRunning(nodeType);
+    let count = 0;
+    for (const feature of items) {
+      try {
+        await completeNode(feature);
+        count++;
+      } catch {
+        // individual errors are already handled by completeNode
+      }
+    }
+    setBulkDone(prev => ({ ...prev, [nodeType]: count }));
+    setBulkRunning(null);
+    toast.success(`Completed ${count}/${items.length} ${nodeType} nodes`);
+  }
 
   async function completeNode(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
@@ -107,6 +130,54 @@ export function TodoView({ features, setFeatures }: Props) {
           <CheckCircle2 className="w-10 h-10 text-emerald-500/60" />
           <p className="text-sm font-medium text-gray-400">You&apos;re all caught up!</p>
           <p className="text-xs text-gray-600">No pending nodes assigned to you.</p>
+        </div>
+      )}
+
+      {/* Bulk completion cards */}
+      {(pmAcceptanceTodos.length > 0 || uiuxAcceptanceTodos.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-5xl mb-6">
+          {pmAcceptanceTodos.length > 0 && (
+            <button
+              onClick={() => bulkComplete('PM Acceptance', pmAcceptanceTodos)}
+              disabled={!!bulkRunning}
+              className="bg-[#0e1120] border border-[#1e2240] rounded-2xl p-5 flex items-center gap-4 hover:border-purple-500/40 transition-colors text-left disabled:opacity-50"
+            >
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
+                {bulkRunning === 'PM Acceptance'
+                  ? <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+                  : <CheckCircle2 className="w-5 h-5 text-purple-400" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white">Complete All PM Acceptance</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {bulkDone['PM Acceptance'] != null
+                    ? `${bulkDone['PM Acceptance']} completed`
+                    : `${pmAcceptanceTodos.length} node${pmAcceptanceTodos.length === 1 ? '' : 's'} pending`}
+                </p>
+              </div>
+            </button>
+          )}
+          {uiuxAcceptanceTodos.length > 0 && (
+            <button
+              onClick={() => bulkComplete('UI/UX Acceptance', uiuxAcceptanceTodos)}
+              disabled={!!bulkRunning}
+              className="bg-[#0e1120] border border-[#1e2240] rounded-2xl p-5 flex items-center gap-4 hover:border-blue-500/40 transition-colors text-left disabled:opacity-50"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                {bulkRunning === 'UI/UX Acceptance'
+                  ? <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                  : <CheckCircle2 className="w-5 h-5 text-blue-400" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white">Complete All UI/UX Acceptance</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {bulkDone['UI/UX Acceptance'] != null
+                    ? `${bulkDone['UI/UX Acceptance']} completed`
+                    : `${uiuxAcceptanceTodos.length} node${uiuxAcceptanceTodos.length === 1 ? '' : 's'} pending`}
+                </p>
+              </div>
+            </button>
+          )}
         </div>
       )}
 
