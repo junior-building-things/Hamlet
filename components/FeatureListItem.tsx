@@ -3,7 +3,7 @@ import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
 import { TeamAvatars } from './TeamAvatars';
-import { RefreshCw, Calendar, ExternalLink, Pen, CheckCircle2, Loader2 } from 'lucide-react';
+import { RefreshCw, Calendar, ExternalLink, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface Props {
   feature: Feature;
@@ -55,8 +55,8 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
             </a>
           )}
           {feature.figmaUrl && (
-            <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-              Figma <Pen className="w-3 h-3" />
+            <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
+              Figma <ExternalLink className="w-3 h-3" />
             </a>
           )}
         </div>
@@ -105,8 +105,8 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
           </a>
         )}
         {feature.figmaUrl && (
-          <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-            Figma <Pen className="w-3 h-3" />
+          <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
+            Figma <ExternalLink className="w-3 h-3" />
           </a>
         )}
       </div>
