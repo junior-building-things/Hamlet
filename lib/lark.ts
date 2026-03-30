@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const LARK_BASE_URL          = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 const WIKI_NODE_TOKEN        = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
@@ -202,114 +201,8 @@ async function updateInitialVersionDate(docId: string, date: string, token: stri
   );
 }
 
-// ─── PRD Builder: fill sections with AI-generated content ────────────────────
-
 // Heading block types in Lark Docx (Heading1–Heading9)
 const HEADING_BLOCK_TYPES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11]);
-
-// Headings to SKIP when auto-filling (these are structural, not content sections)
-const PRD_SKIP_HEADINGS = [
-  'version', 'changelog', 'appendix', 'reference', 'table of content',
-  'revision', 'approval', 'sign-off', 'reviewer', 'stakeholder list',
-  '版本', '修订', '附录', '参考', '目录', '审批',
-];
-
-async function fillPrdSections(
-  docId:       string,
-  featureName: string,
-  description: string,
-  token:       string,
-): Promise<void> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) return; // skip silently if no key configured
-
-  const blocks  = await getDocBlocks(docId, token);
-  const byId    = new Map(blocks.map(b => [b.block_id, b]));
-
-  // Find the page block and walk its top-level children in order
-  const pageBlock = blocks.find(b => b.block_type === 1);
-  if (!pageBlock?.children) return;
-
-  const topLevel = pageBlock.children
-    .map(id => byId.get(id))
-    .filter((b): b is LarkBlock => b !== undefined);
-
-  // Build sections: heading → following sibling blocks (until next heading)
-  type Section = { headingText: string; contentBlocks: LarkBlock[] };
-  const sections: Section[] = [];
-  let current: Section | null = null;
-
-  for (const block of topLevel) {
-    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
-      if (current) sections.push(current);
-      current = { headingText: blockText(block), contentBlocks: [] };
-    } else if (current) {
-      current.contentBlocks.push(block);
-    }
-  }
-  if (current) sections.push(current);
-
-  // Find fillable sections — include all heading sections that have a paragraph block,
-  // EXCEPT known structural/non-content sections (version history, appendix, etc.)
-  type Target = { headingText: string; blockId: string };
-  const targets: Target[] = [];
-
-  for (const section of sections) {
-    const ht = section.headingText.toLowerCase();
-    if (!ht.trim()) continue; // skip empty headings
-    if (PRD_SKIP_HEADINGS.some(kw => ht.includes(kw))) continue; // skip structural sections
-    // paragraph block_type = 2; pick the first one
-    const para = section.contentBlocks.find(b => b.block_type === 2);
-    if (para) targets.push({ headingText: section.headingText, blockId: para.block_id });
-  }
-
-  console.log('[PRD Builder] Found sections:', sections.map(s => s.headingText));
-  console.log('[PRD Builder] Matched targets:', targets.map(t => t.headingText));
-  if (targets.length === 0) return;
-
-  // Generate content with Gemini
-  const genAI      = new GoogleGenerativeAI(apiKey);
-  const model      = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
-  const headingList = targets.map(t => `"${t.headingText}"`).join(', ');
-
-  const result = await model.generateContent(
-    `You are a senior product manager at TikTok writing a PRD for the Direct Messaging (DM) team.
-
-Feature: "${featureName}"
-What we're building: "${description}"
-
-Write concise, professional content for these PRD sections: ${headingList}
-
-Rules:
-- Return ONLY a valid JSON object — no markdown, no extra text
-- Keys must exactly match the section names listed above
-- Values are 2–4 sentence plain-text paragraphs (no bullet points, no formatting)`,
-  );
-
-  const raw = result.response.text().trim();
-  let content: Record<string, string>;
-  try {
-    // Strip any accidental markdown code fences
-    const cleaned = raw.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '');
-    content = JSON.parse(cleaned) as Record<string, string>;
-    console.log('[PRD Builder] Gemini returned keys:', Object.keys(content));
-  } catch {
-    console.warn('PRD Builder: failed to parse Gemini response', raw.slice(0, 300));
-    return;
-  }
-
-  const requests: UpdateRequest[] = targets
-    .filter(t => content[t.headingText]?.trim())
-    .map(t => ({
-      block_id:             t.blockId,
-      update_text_elements: {
-        elements: [{ text_run: { content: content[t.headingText].trim(), text_element_style: {} } }],
-      },
-    }));
-
-  console.log('[PRD Builder] Updating', requests.length, 'blocks');
-  if (requests.length > 0) await batchUpdateBlocks(docId, requests, token);
-}
 
 // ─── PRD basic info: fill Meego URL + Compliance URL ─────────────────────────
 
@@ -786,14 +679,56 @@ export async function duplicateDoc(docUrl: string, newName?: string): Promise<st
   return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;
 }
 
+// ─── Fill "What are we building" section ──────────────────────────────────────
+
+async function fillWhatWeAreBuilding(
+  docId: string,
+  description: string,
+  token: string,
+): Promise<void> {
+  const blocks   = await getDocBlocks(docId, token);
+  const byId     = new Map(blocks.map(b => [b.block_id, b]));
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) return;
+
+  const topLevel = pageBlock.children
+    .map(id => byId.get(id))
+    .filter((b): b is LarkBlock => b !== undefined);
+
+  // Walk top-level blocks to find the "What are we building" heading,
+  // then pick the first paragraph block after it.
+  let foundHeading = false;
+  for (const block of topLevel) {
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      const text = blockText(block).toLowerCase();
+      if (text.includes('what are we building') || text.includes('what we are building')) {
+        foundHeading = true;
+        continue;
+      }
+      if (foundHeading) break; // next heading — stop
+    }
+    if (foundHeading && block.block_type === 2) {
+      // Found the first paragraph under the heading — update it
+      await batchUpdateBlocks(docId, [{
+        block_id: block.block_id,
+        update_text_elements: {
+          elements: [{ text_run: { content: description, text_element_style: {} } }],
+        },
+      }], token);
+      return;
+    }
+  }
+  console.warn('[lark] "What are we building" section not found in PRD template');
+}
+
 /**
  * Copies the PRD wiki template, names it "[PRD] {featureName}", updates the
- * "Initial version" date, optionally fills PRD sections with AI-generated
- * content, adds Thomas as full-access collaborator, and returns the doc URL.
+ * "Initial version" date, optionally fills the "What are we building" section
+ * with the feature description, adds Thomas as full-access collaborator, and returns the doc URL.
  */
 export async function copyPrdTemplate(
   featureName: string,
-  prdBuilderText?: string,
+  featureDescription?: string,
   options?: { useHalfDayPrd?: boolean; meegoUrl?: string; complianceUrl?: string },
 ): Promise<string> {
   const token = await getAccessToken();
@@ -830,9 +765,9 @@ export async function copyPrdTemplate(
         meegoUrl: options?.meegoUrl,
         complianceUrl: options?.complianceUrl,
       }, token).catch(e => console.warn('PRD basic info fill failed:', e));
-      if (prdBuilderText?.trim()) {
-        await fillPrdSections(fileToken, featureName, prdBuilderText.trim(), token)
-          .catch(e => console.warn('PRD Builder fill failed:', e));
+      if (featureDescription?.trim()) {
+        await fillWhatWeAreBuilding(fileToken, featureDescription.trim(), token)
+          .catch(e => console.warn('Fill "What are we building" failed:', e));
       }
     })(),
     addCollaborator(fileToken, token),

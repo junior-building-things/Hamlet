@@ -187,9 +187,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     contentDesigner: CONTENT_OPTIONS[0].value,
     qa:              QA_OPTIONS[0].value,
   });
-  const [prdBuilder, setPrdBuilder]         = useState(false);
-  const [prdBuilderText, setPrdBuilderText] = useState('');
   const [prdType, setPrdType]               = useState<'regular' | 'halfday'>('regular');
+  const [featureDescription, setFeatureDescription] = useState('');
 
   const isMeego     = !!(feature?.meegoUrl);
   const canComplete = feature?.canCompleteNode === true;
@@ -262,8 +261,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
         businessLineOptionId:    form.businessLine    || undefined,
         socialComponentOptionId: form.socialComponent || undefined,
         roles,
-        prdBuilderText:          prdBuilder && prdBuilderText.trim() ? prdBuilderText.trim() : undefined,
-        useHalfDayPrd:           prdBuilder && prdType === 'halfday' ? true : undefined,
+        featureDescription:      featureDescription.trim() || undefined,
+        useHalfDayPrd:           prdType === 'halfday' ? true : undefined,
       }),
     })
       .then(res => res.json().then(data => ({ ok: res.ok, data })))
@@ -339,56 +338,44 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
           <form onSubmit={handleCreate} className="flex flex-col min-h-0 flex-1">
             <div className="px-6 py-5 flex flex-col gap-0 overflow-y-auto flex-1 divide-y divide-[#1e2240]">
 
-              {/* Feature Name + PRD Builder */}
+              {/* PRD Details */}
               <div className="pb-5 flex flex-col gap-4">
+                <SectionHeader title="PRD Details" />
+
                 <div className="flex flex-col gap-1.5">
                   <FormLabel required>Feature Name</FormLabel>
-                  <div className="flex items-center gap-3">
-                    <input autoFocus type="text" className={inputCls}
-                      placeholder="Enter feature name…"
-                      value={form.name} onChange={e => setField('name', e.target.value)} />
-                    <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={prdBuilder}
-                        onChange={e => setPrdBuilder(e.target.checked)}
-                        className="w-3.5 h-3.5 accent-blue-500 cursor-pointer"
-                      />
-                      <span className="text-[11px] text-gray-500 font-medium">PRD Builder</span>
-                    </label>
-                  </div>
+                  <input autoFocus type="text" className={inputCls}
+                    placeholder="Enter feature name…"
+                    value={form.name} onChange={e => setField('name', e.target.value)} />
                 </div>
 
-                {prdBuilder && (
-                  <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-1.5">
-                      <FormLabel>Feature Description</FormLabel>
-                      <textarea
-                        className={`${inputCls} resize-none`}
-                        rows={3}
-                        placeholder="What are you building?"
-                        value={prdBuilderText}
-                        onChange={e => setPrdBuilderText(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <FormLabel>PRD Type</FormLabel>
-                      <CustomSelect
-                        options={[
-                          { value: 'regular', label: 'Regular PRD' },
-                          { value: 'halfday', label: 'Half-Day PRD' },
-                        ]}
-                        value={prdType}
-                        onChange={v => setPrdType(v as 'regular' | 'halfday')}
-                      />
-                    </div>
-                  </div>
-                )}
+                <div className="flex flex-col gap-1.5">
+                  <FormLabel required>PRD Type</FormLabel>
+                  <CustomSelect
+                    options={[
+                      { value: 'regular', label: 'Regular PRD' },
+                      { value: 'halfday', label: 'Half-Day PRD' },
+                    ]}
+                    value={prdType}
+                    onChange={v => setPrdType(v as 'regular' | 'halfday')}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <FormLabel>Feature Description</FormLabel>
+                  <textarea
+                    className={`${inputCls} resize-none`}
+                    rows={3}
+                    placeholder="What are we building?"
+                    value={featureDescription}
+                    onChange={e => setFeatureDescription(e.target.value)}
+                  />
+                </div>
               </div>
 
-              {/* Feature Details */}
+              {/* Project Details */}
               <div className="py-5 flex flex-col gap-4">
-                <SectionHeader title="Feature Details" />
+                <SectionHeader title="Project Details" />
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
@@ -559,7 +546,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
           </div>
 
           <div className="py-5">
-            <SectionHeader title="Feature Details" />
+            <SectionHeader title="Project Details" />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-4">
               <InfoField label="Priority"         value={feature?.priority} />
               <InfoField label="Business Line"    value={feature?.businessLine} />
