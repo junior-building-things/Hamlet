@@ -1042,12 +1042,16 @@ export async function joinFeatureChat(featureName: string): Promise<boolean> {
     return false;
   }
 
-  // Find exact match — chat name must contain the full feature name
+  // Exact match — chat name should be "{featureName}–[Features group]"
   const nameLower = featureName.toLowerCase().trim();
-  const bestChat = chats.find(c => c.name.toLowerCase().includes(nameLower));
+  const bestChat = chats.find(c => {
+    const chatLower = c.name.toLowerCase();
+    // Match: "Feature Name–[Features group]" or "Feature Name -[Features group]" etc.
+    return chatLower.startsWith(nameLower) && chatLower.includes('features group');
+  });
 
   if (!bestChat) {
-    console.log('[lark] no exact chat match for:', featureName, '— candidates:', chats.map(c => c.name));
+    console.log('[lark] no chat match for:', featureName, '— candidates:', chats.map(c => c.name));
     return false;
   }
 
