@@ -404,12 +404,19 @@ export async function completeNode(
   workItemId: string,
   nodeKey: string,
 ): Promise<void> {
-  await callMeegoMcp('transition_node', {
+  const response = await callMeegoMcp('transition_node', {
     project_key: projectKey,
+    work_item_type: 'story',
     work_item_id: workItemId,
     node_id: nodeKey,
     action: 'confirm',
   });
+  console.log('[meego] transition_node response:', response);
+  // Check if the response text indicates an error
+  const lower = response.toLowerCase();
+  if (lower.includes('error') || lower.includes('fail') || lower.includes('不能') || lower.includes('无法')) {
+    throw new Error(response.slice(0, 300));
+  }
 }
 
 export interface CreateFeatureParams {

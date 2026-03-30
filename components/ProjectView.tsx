@@ -362,14 +362,22 @@ export function ProjectView({ features, setFeatures }: Props) {
           </h1>
           <p className="text-sm text-gray-500 mt-1">{features.length} features</p>
         </div>
-        <button
-          onClick={syncAll}
-          disabled={syncingAll}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1e2240] hover:bg-[#252a4a] text-gray-300 hover:text-white text-sm rounded-xl transition-colors disabled:opacity-50"
-        >
-          {syncingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          Sync All
-        </button>
+        <div className="flex items-center gap-3">
+          {detailSyncTotal > 0 && (
+            <div className="flex items-center gap-1.5 text-gray-500">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
+              <span className="text-xs">Syncing...{detailSyncCount}/{detailSyncTotal}</span>
+            </div>
+          )}
+          <button
+            onClick={syncAll}
+            disabled={syncingAll}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1e2240] hover:bg-[#252a4a] text-gray-300 hover:text-white text-sm rounded-xl transition-colors disabled:opacity-50"
+          >
+            {syncingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Sync All
+          </button>
+        </div>
       </div>
 
       <FilterBar
@@ -427,12 +435,6 @@ export function ProjectView({ features, setFeatures }: Props) {
           </div>
         )}
 
-        {detailSyncTotal > 0 && (
-          <div className="flex items-center justify-center gap-2 mt-6 text-gray-500">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
-            <p className="text-xs">Syncing details… {detailSyncCount}/{detailSyncTotal}</p>
-          </div>
-        )}
       </div>
 
       {modalMode === 'edit' && editingFeature && (
