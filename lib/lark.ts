@@ -603,21 +603,15 @@ export async function addDocSection(
     // If we found the target but no next heading, insert at end
   }
 
-  const headingBlockId = `heading_${Date.now()}`;
-  const paraBlockId    = `para_${Date.now()}`;
-
   const body: Record<string, unknown> = {
-    children_id: [headingBlockId, paraBlockId],
-    descendants: [
+    children: [
       {
-        block_id:   headingBlockId,
         block_type: 4,
         heading2: {
           elements: [{ text_run: { content: sectionTitle } }],
         },
       },
       {
-        block_id:   paraBlockId,
         block_type: 2,
         text: {
           elements: [{ text_run: { content: sectionContent } }],
@@ -629,9 +623,8 @@ export async function addDocSection(
     body.index = insertIndex;
   }
 
-  const qs = `document_revision_id=-1`;
   const res = await fetch(
-    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?${qs}`,
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?document_revision_id=-1`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
