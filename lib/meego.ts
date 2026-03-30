@@ -365,53 +365,43 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
 
-  // Fetch iOS planned version from the node detail (node-level field on qa_test_preparation)
+  // Fetch iOS planned version from node detail JSON (node-level field field_08a9ca)
   let iosVersion = '';
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    console.log('[meego] get_node_detail response length:', nodeRaw.length, 'first 300 chars:', nodeRaw.slice(0, 300));
-    // Look for iOS预计上车版本 field in the response
-    const versionMatch = nodeRaw.match(/iOS预计上车版本\s*\|\s*([^|\n]+)/);
-    if (versionMatch) {
-      const val = versionMatch[1].trim();
-      if (val && val !== '未填写') iosVersion = val;
-    }
-    // Also try field_08a9ca
-    if (!iosVersion) {
-      const fieldMatch = nodeRaw.match(/field_08a9ca\s*\|\s*([^|\n]+)/);
-      if (fieldMatch) {
-        const val = fieldMatch[1].trim();
-        if (val && val !== '未填写') iosVersion = val;
-      }
-    }
-    // Fallback: try list_related_workitems to resolve work item IDs to names
-    if (!iosVersion) {
-      try {
-        const relatedRaw = await callMeegoMcp('list_related_workitems', {
-          url: meegoUrl,
-          field_key: 'field_08a9ca',
-        });
-        console.log('[meego] list_related_workitems response:', relatedRaw.slice(0, 300));
-        if (relatedRaw) {
-          // Try JSON
-          try {
-            const parsed = JSON.parse(relatedRaw);
-            const items = Array.isArray(parsed) ? parsed : parsed?.list ?? [];
-            iosVersion = items.map((i: Record<string, unknown>) => i.name ?? i.work_item_name ?? '').filter(Boolean).join(', ');
-          } catch {
-            // Try markdown table
-            const lines = relatedRaw.split('\n').filter((l: string) => l.startsWith('|') && !l.includes('---') && !l.includes('名称') && !l.includes('ID'));
-            for (const line of lines) {
-              const parts = line.split('|').map((p: string) => p.trim()).filter(Boolean);
-              if (parts.length >= 2 && parts[1]) {
-                iosVersion = iosVersion ? `${iosVersion}, ${parts[1]}` : parts[1];
-              }
-            }
+    const nodeData = JSON.parse(nodeRaw) as { list?: Array<{ basic?: { node_key?: string; name?: string }; fields?: Record<string, unknown> | Array<{ field_key?: string; field_value?: unknown; field_name?: string }> }> };
+    for (const node of nodeData.list ?? []) {
+      // Search all nodes for field_08a9ca
+      const fields = node.fields;
+      if (Array.isArray(fields)) {
+        const vField = fields.find((f: { field_key?: string; field_name?: string }) => f.field_key === 'field_08a9ca' || f.field_name === 'iOS预计上车版本');
+        if (vField) {
+          const val = vField.field_value;
+          if (typeof val === 'string' && val && val !== '未填写') {
+            iosVersion = val;
+          } else if (Array.isArray(val)) {
+            // Could be array of work item references
+            iosVersion = val.map((v: Record<string, unknown>) => String(v.name ?? v.work_item_name ?? v.label ?? '')).filter(Boolean).join(', ');
           }
+          if (iosVersion) break;
         }
-      } catch (e) {
-        console.log('[meego] list_related_workitems failed:', e);
+      } else if (fields && typeof fields === 'object') {
+        // fields might be a key-value map
+        const val = (fields as Record<string, unknown>)['field_08a9ca'];
+        if (val) {
+          if (typeof val === 'string' && val !== '未填写') iosVersion = val;
+          else if (Array.isArray(val)) {
+            iosVersion = val.map((v: Record<string, unknown>) => String(v.name ?? v.label ?? '')).filter(Boolean).join(', ');
+          }
+          if (iosVersion) break;
+        }
       }
+    }
+    if (!iosVersion) {
+      // Log a sample node structure to understand the shape
+      const sample = nodeData.list?.[0];
+      console.log('[meego] iOS version not found. Sample node keys:', sample ? Object.keys(sample) : 'no nodes');
+      if (sample) console.log('[meego] Sample node:', JSON.stringify(sample).slice(0, 500));
     }
   } catch (e) {
     console.log('[meego] iOS version fetch failed:', e);
