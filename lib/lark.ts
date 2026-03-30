@@ -367,7 +367,7 @@ export async function searchAbReport(featureName: string): Promise<string> {
           docs_token: string;
           docs_type: string;
           title: string;
-          url: string;
+          owner_id?: string;
         }>;
         has_more?: boolean;
       };
@@ -392,7 +392,9 @@ export async function searchAbReport(featureName: string): Promise<string> {
       if (!hasAb) continue;
       // Must share at least one significant word with the feature name
       const nameOverlap = nameTokens.some(w => t.includes(w));
-      if (nameOverlap) return doc.url;
+      if (nameOverlap) {
+        return `https://bytedance.sg.larkoffice.com/${doc.docs_type}/${doc.docs_token}`;
+      }
     }
   }
 
