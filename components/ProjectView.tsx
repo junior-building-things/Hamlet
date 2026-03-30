@@ -411,7 +411,7 @@ export function ProjectView({ features, setFeatures }: Props) {
           <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
             Project View
           </h1>
-          <p className="text-sm text-gray-500 mt-1">{features.length} features</p>
+          <p className="text-sm text-gray-500 mt-1">An overview of your projects</p>
         </div>
         <button
           onClick={syncAll}
