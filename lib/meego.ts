@@ -1,5 +1,5 @@
 import { Priority, Feature } from './types';
-import { extractFigmaUrlFromPrd } from './lark';
+import { extractFigmaUrlFromPrd, searchAbReport } from './lark';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const MY_EMAIL = process.env.OWNER_EMAIL!;
@@ -343,6 +343,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   uiuxOwner: string;
   contentDesigner: string;
   iosVersion: string;
+  abReportUrl: string;
   pocEmails: Record<string, string>;
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
@@ -470,12 +471,20 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
     console.log('[meego] version fetch failed:', e);
   }
 
-  // Extract Figma URL from the PRD's "Relevant Links" section (best-effort)
+  // Extract Figma URL from the PRD (best-effort)
   let figmaUrl = '';
   if (prd) {
     try {
       figmaUrl = await extractFigmaUrlFromPrd(prd);
     } catch { /* ignore — Figma link is optional */ }
+  }
+
+  // Search for AB report on Lark Drive (best-effort)
+  let abReportUrl = '';
+  if (workItemName) {
+    try {
+      abReportUrl = await searchAbReport(workItemName);
+    } catch { /* ignore — AB report is optional */ }
   }
 
   return {
@@ -503,6 +512,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
     uiuxOwner,
     contentDesigner,
     iosVersion,
+    abReportUrl,
     pocEmails,
   };
 }

@@ -316,6 +316,89 @@ async function addCollaborator(fileToken: string, token: string): Promise<void> 
  * Extracts the Figma URL from the "Relevant Links" section of a Lark PRD doc.
  * Returns an empty string if not found or if the PRD URL is invalid.
  */
+// ─── Search for AB Report on Lark Drive ──────────────────────────────────────
+
+/**
+ * Search Lark Drive for an AB report matching a feature name.
+ * Uses flexible keyword matching: tries multiple AB-related prefixes
+ * combined with the feature name (or key words from it).
+ * Returns the URL of the best match, or '' if nothing found.
+ */
+export async function searchAbReport(featureName: string): Promise<string> {
+  if (!featureName) return '';
+  const token = await getAccessToken();
+
+  // Extract meaningful words from the feature name (skip very short/common words)
+  const words = featureName
+    .replace(/[\[\](){}]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 2)
+    .slice(0, 5);
+
+  if (words.length === 0) return '';
+  const nameQuery = words.join(' ');
+
+  // Try multiple search queries with different AB patterns
+  const queries = [
+    `AB Report ${nameQuery}`,
+    `A/B ${nameQuery}`,
+    `AB ${nameQuery}`,
+  ];
+
+  for (const query of queries) {
+    const res = await fetch(`${LARK_BASE_URL}/open-apis/suite/docs-api/search/object`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        search_key: query,
+        count: 5,
+        offset: 0,
+        owner_ids: [],
+        docs_types: [
+          'doc', 'docx', 'sheet', 'bitable',
+        ],
+      }),
+    });
+
+    const data = await parseJson(res, 'drive_search') as {
+      code: number; msg?: string;
+      data?: {
+        docs_entities?: Array<{
+          docs_token: string;
+          docs_type: string;
+          title: string;
+          url: string;
+        }>;
+        has_more?: boolean;
+      };
+    };
+
+    if (data.code !== 0) {
+      console.warn('[lark] drive search failed:', data.code, data.msg);
+      continue;
+    }
+
+    const docs = data.data?.docs_entities ?? [];
+    if (docs.length === 0) continue;
+
+    // Score each result by how well it matches an AB report for this feature
+    const lowerName = featureName.toLowerCase();
+    const nameTokens = lowerName.split(/\s+/).filter(w => w.length > 2);
+
+    for (const doc of docs) {
+      const t = doc.title.toLowerCase();
+      // Must contain some AB indicator
+      const hasAb = /\bab\b|a\/b|ab\s*report|ab\s*test|实验报告/.test(t);
+      if (!hasAb) continue;
+      // Must share at least one significant word with the feature name
+      const nameOverlap = nameTokens.some(w => t.includes(w));
+      if (nameOverlap) return doc.url;
+    }
+  }
+
+  return '';
+}
+
 export async function extractFigmaUrlFromPrd(prdUrl: string): Promise<string> {
   if (!prdUrl) return '';
   // Extract doc token from URLs like https://*.larkoffice.com/docx/TOKEN
