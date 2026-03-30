@@ -487,18 +487,23 @@ export async function extractFigmaUrlFromPrd(prdUrl: string): Promise<string> {
 
 // ─── Doc helpers for chat actions ────────────────────────────────────────────
 
-/** Extract doc token from a Lark URL (docx or wiki). */
-function extractDocToken(url: string): string | null {
-  const m = url.match(/\/docx\/([A-Za-z0-9]+)/) ?? url.match(/\/wiki\/([A-Za-z0-9]+)/);
-  return m ? m[1] : null;
+/** Resolve a Lark URL to a docx token. Wiki URLs need a node→obj_token lookup. */
+async function resolveDocId(url: string): Promise<string> {
+  const wikiMatch = url.match(/\/wiki\/([A-Za-z0-9]+)/);
+  if (wikiMatch) {
+    const token = await getAccessToken();
+    return getWikiObjToken(token, wikiMatch[1]);
+  }
+  const docxMatch = url.match(/\/docx\/([A-Za-z0-9]+)/);
+  if (docxMatch) return docxMatch[1];
+  throw new Error('Invalid Lark doc URL — expected a /docx/ or /wiki/ link');
 }
 
 /**
  * Read a Lark document and return a plain-text representation with headings.
  */
 export async function readDocContent(docUrl: string): Promise<string> {
-  const docId = extractDocToken(docUrl);
-  if (!docId) throw new Error('Invalid Lark doc URL');
+  const docId = await resolveDocId(docUrl);
 
   const token  = await getAccessToken();
   const blocks = await getDocBlocks(docId, token);
@@ -528,8 +533,7 @@ export async function readDocContent(docUrl: string): Promise<string> {
  * paragraph content with new text.
  */
 export async function editDocSection(docUrl: string, sectionHeading: string, newContent: string): Promise<void> {
-  const docId = extractDocToken(docUrl);
-  if (!docId) throw new Error('Invalid Lark doc URL');
+  const docId = await resolveDocId(docUrl);
 
   const token  = await getAccessToken();
   const blocks = await getDocBlocks(docId, token);
@@ -565,8 +569,7 @@ export async function editDocSection(docUrl: string, sectionHeading: string, new
  * Add a comment to a Lark document (whole-doc comment).
  */
 export async function addDocComment(docUrl: string, content: string): Promise<void> {
-  const docId = extractDocToken(docUrl);
-  if (!docId) throw new Error('Invalid Lark doc URL');
+  const docId = await resolveDocId(docUrl);
 
   const token = await getAccessToken();
   // Use the file comment API — add a whole-file comment
@@ -586,8 +589,7 @@ export async function addDocComment(docUrl: string, content: string): Promise<vo
  * Duplicate a Lark doc, returning the new doc URL.
  */
 export async function duplicateDoc(docUrl: string, newName?: string): Promise<string> {
-  const docId = extractDocToken(docUrl);
-  if (!docId) throw new Error('Invalid Lark doc URL');
+  const docId = await resolveDocId(docUrl);
 
   const token = await getAccessToken();
   const folderToken = await getRootFolderToken(token);
