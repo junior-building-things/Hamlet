@@ -101,7 +101,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <PriorityBadge priority={feature.priority} />
       </div>
 
-      <div className="hidden sm:flex items-center py-3 pl-4">
+      <div className="hidden sm:flex items-center py-3 pl-4 overflow-visible relative">
         <LinkIcons feature={feature} ringColor="#13162a" />
       </div>
 

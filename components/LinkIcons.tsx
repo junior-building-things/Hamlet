@@ -28,21 +28,18 @@ function buildLinks(feature: Feature): LinkDef[] {
   return links;
 }
 
-/* Each icon sits inside a fixed-width slot (24px collapsed, overlapping by 4px).
-   On hover the slot widens to fit the label — the icon stays pinned at the left
-   edge of its slot so it doesn't move; only slots to the right get pushed. */
+const ICON_SIZE = 28;
+const OVERLAP   = 4;
+const SLOT_W    = ICON_SIZE - OVERLAP; // 24px
 
-const ICON_SIZE = 28;   // circle diameter
-const OVERLAP   = 4;    // negative overlap between icons
-const SLOT_W    = ICON_SIZE - OVERLAP; // 24px collapsed slot width
-
-function LinkChip({ link, isLast }: { link: LinkDef; isLast: boolean; ringColor: string }) {
+function LinkChip({ link, index, total, ringColor }: { link: LinkDef; index: number; total: number; ringColor: string }) {
   const [hovered, setHovered] = useState(false);
+  const isLast = index === total - 1;
 
   return (
     <div
-      className="relative flex items-center shrink-0"
-      style={{ width: hovered ? undefined : isLast ? ICON_SIZE : SLOT_W, zIndex: hovered ? 20 : 1 }}
+      className="shrink-0"
+      style={{ width: isLast ? ICON_SIZE : SLOT_W }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -50,10 +47,12 @@ function LinkChip({ link, isLast }: { link: LinkDef; isLast: boolean; ringColor:
         href={link.url}
         target="_blank"
         rel="noreferrer"
-        className="flex items-center h-7 rounded-full bg-[#1a1d32] hover:brightness-125 cursor-pointer"
+        className="flex items-center h-7 rounded-full bg-[#1a1d32] hover:brightness-125 cursor-pointer relative"
         style={{
-          outline: '2px solid var(--ring-color)',
+          outline: `2px solid ${ringColor}`,
           outlineOffset: '-1px',
+          zIndex: hovered ? 30 : total - index,
+          width: hovered ? 'max-content' : ICON_SIZE,
         }}
       >
         <span className="w-7 h-7 flex items-center justify-center shrink-0">
@@ -90,9 +89,9 @@ export function LinkIcons({ feature, ringColor = '#13162a' }: Props) {
   if (links.length === 0) return <span className="text-gray-600 text-xs">—</span>;
 
   return (
-    <div className="flex items-center" style={{ '--ring-color': ringColor } as React.CSSProperties}>
+    <div className="flex items-center">
       {links.map((link, i) => (
-        <LinkChip key={link.key} link={link} isLast={i === links.length - 1} ringColor={ringColor} />
+        <LinkChip key={link.key} link={link} index={i} total={links.length} ringColor={ringColor} />
       ))}
     </div>
   );
