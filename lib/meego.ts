@@ -2,7 +2,7 @@ import { Priority, Feature } from './types';
 import { extractFigmaUrlFromPrd } from './lark';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
-const MY_EMAIL = 'thomas.oefverstroem@bytedance.com';
+const MY_EMAIL = process.env.OWNER_EMAIL!;
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
 // Ordered priority list — when multiple nodes are active, pick the highest one

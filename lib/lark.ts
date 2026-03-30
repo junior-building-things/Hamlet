@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const LARK_BASE_URL   = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 const WIKI_NODE_TOKEN = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
-const OWNER_EMAIL     = 'thomas.oefverstroem@bytedance.com';
+const OWNER_EMAIL     = process.env.OWNER_EMAIL!;
 
 // ─── JSON parsing helper ──────────────────────────────────────────────────────
 
