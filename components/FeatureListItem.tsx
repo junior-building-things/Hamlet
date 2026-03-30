@@ -89,7 +89,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <PriorityBadge priority={feature.priority} />
       </div>
 
-      <div className="hidden sm:flex items-center gap-3 py-3 whitespace-nowrap">
+      <div className="hidden sm:flex items-center gap-3 py-3 pl-4 whitespace-nowrap">
         {feature.meegoUrl && (
           <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs hover:brightness-125 transition-all" style={{ color: '#B291F7' }}>
             <Image src="/meego.png" alt="" width={16} height={16} className="shrink-0" /> Meego

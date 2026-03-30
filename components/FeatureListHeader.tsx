@@ -6,7 +6,7 @@ export function FeatureListHeader() {
       <span>Feature</span>
       <span>Status</span>
       <span>Priority</span>
-      <span>Links</span>
+      <span className="pl-4">Links</span>
       <span>Team</span>
       <span>Last Updated</span>
       <span>Action</span>
