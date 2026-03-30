@@ -29,17 +29,32 @@ async function callMeegoMcp(toolName: string, args: Record<string, unknown>) {
 
 export async function GET() {
   try {
-    // Get a sample work item brief — request ALL fields by omitting fields param
-    const raw = await callMeegoMcp('get_workitem_brief', {
-      url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/3752309`,
-    });
+    // Step 1: Get a real TikTok story ID from list_todo
+    const todoRaw = await callMeegoMcp('list_todo', { action: 'todo', page_num: 1 });
+    const todoData = JSON.parse(todoRaw);
+    const tiktokItem = (todoData.list ?? []).find(
+      (item: { project_key: string; work_item_info: { work_item_type_key: string } }) =>
+        item.project_key === TIKTOK_PROJECT_KEY &&
+        item.work_item_info.work_item_type_key === 'story'
+    );
 
-    // Extract lines containing "版本" (version) or "iOS" or "version"
+    if (!tiktokItem) {
+      return NextResponse.json({ error: 'No TikTok story found in todo list' });
+    }
+
+    const workItemId = tiktokItem.work_item_info.work_item_id;
+    const url = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/${workItemId}`;
+
+    // Step 2: Get full brief for this actual TikTok story
+    const raw = await callMeegoMcp('get_workitem_brief', { url });
+
+    // Extract lines containing version/iOS related content
     const versionLines = raw.split('\n').filter((l: string) =>
-      l.includes('版本') || l.toLowerCase().includes('version') || l.toLowerCase().includes('ios')
+      l.includes('版本') || l.toLowerCase().includes('version') || l.toLowerCase().includes('ios') || l.toLowerCase().includes('planned')
     );
 
     return NextResponse.json({
+      workItemId,
       versionRelatedLines: versionLines,
       fullBrief: raw,
     });
