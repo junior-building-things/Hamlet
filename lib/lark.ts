@@ -1,8 +1,9 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const LARK_BASE_URL   = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
-const WIKI_NODE_TOKEN = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
-const OWNER_EMAIL     = process.env.OWNER_EMAIL!;
+const LARK_BASE_URL          = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
+const WIKI_NODE_TOKEN        = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
+const HALF_DAY_WIKI_NODE_TOKEN = 'WcZtwCKifiRyxqkDeMtcE6n3ntb';
+const OWNER_EMAIL            = process.env.OWNER_EMAIL!;
 
 // ─── JSON parsing helper ──────────────────────────────────────────────────────
 
@@ -64,10 +65,11 @@ async function getRootFolderToken(accessToken: string): Promise<string> {
 let cachedObjToken    = '';
 let objTokenFetchedAt = 0;
 
-async function getWikiObjToken(accessToken: string): Promise<string> {
-  if (cachedObjToken && Date.now() - objTokenFetchedAt < 3_600_000) return cachedObjToken;
+async function getWikiObjToken(accessToken: string, nodeToken = WIKI_NODE_TOKEN): Promise<string> {
+  // Use separate cache slot for half-day template
+  if (nodeToken === WIKI_NODE_TOKEN && cachedObjToken && Date.now() - objTokenFetchedAt < 3_600_000) return cachedObjToken;
 
-  const res  = await fetch(`${LARK_BASE_URL}/open-apis/wiki/v2/spaces/get_node?token=${WIKI_NODE_TOKEN}`, {
+  const res  = await fetch(`${LARK_BASE_URL}/open-apis/wiki/v2/spaces/get_node?token=${nodeToken}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const data = await parseJson(res, 'wiki_node') as {
@@ -79,9 +81,11 @@ async function getWikiObjToken(accessToken: string): Promise<string> {
   const objToken = data.data?.node?.obj_token;
   if (!objToken) throw new Error('Lark wiki node missing obj_token');
 
-  cachedObjToken    = objToken;
-  objTokenFetchedAt = Date.now();
-  return cachedObjToken;
+  if (nodeToken === WIKI_NODE_TOKEN) {
+    cachedObjToken    = objToken;
+    objTokenFetchedAt = Date.now();
+  }
+  return objToken;
 }
 
 // ─── Block types ──────────────────────────────────────────────────────────────
@@ -305,6 +309,99 @@ Rules:
   await batchUpdateBlocks(docId, requests, token);
 }
 
+// ─── PRD basic info: fill Meego URL + Compliance URL ─────────────────────────
+
+async function updatePrdBasicInfo(
+  docId: string,
+  fields: { meegoUrl?: string; complianceUrl?: string },
+  token: string,
+): Promise<void> {
+  if (!fields.meegoUrl && !fields.complianceUrl) return;
+
+  const blocks = await getDocBlocks(docId, token);
+  const byId   = new Map(blocks.map(b => [b.block_id, b]));
+
+  // Build parent map and collect all table cells
+  const parentOf = new Map<string, string>();
+  for (const b of blocks) {
+    for (const childId of b.children ?? []) parentOf.set(childId, b.block_id);
+  }
+
+  // For each target label, find the value cell in the same row (col_index + 1)
+  // and update the first paragraph block inside it.
+  const LABEL_MAP: Array<{ keywords: string[]; value: string }> = [
+    { keywords: ['meego', 'meego ticket', 'meego url'], value: fields.meegoUrl ?? '' },
+    { keywords: ['compliance', 'compliance ticket', 'compliance url', '合规评估工单'], value: fields.complianceUrl ?? '' },
+  ];
+
+  // Build a map: tableId -> rowIndex -> colIndex -> cellBlockId
+  type CellKey = `${string}:${number}:${number}`;
+  const cellMap = new Map<CellKey, string>();
+  for (const b of blocks) {
+    if (b.table_cell) {
+      const tableId = parentOf.get(b.block_id) ?? '';
+      if (tableId) {
+        cellMap.set(`${tableId}:${b.table_cell.row_index}:${b.table_cell.col_index}`, b.block_id);
+      }
+    }
+  }
+
+  const requests: UpdateRequest[] = [];
+
+  for (const entry of LABEL_MAP) {
+    if (!entry.value) continue;
+
+    // Find a block whose text matches one of the label keywords
+    for (const block of blocks) {
+      const text = blockText(block).toLowerCase().trim();
+      if (!entry.keywords.some(kw => text === kw || text.includes(kw))) continue;
+
+      // Walk up to find the enclosing table_cell
+      let id: string | undefined = parentOf.get(block.block_id);
+      let labelCell: LarkBlock | undefined;
+      while (id) {
+        const b = byId.get(id);
+        if (!b) break;
+        if (b.table_cell) { labelCell = b; break; }
+        id = parentOf.get(id);
+      }
+      if (!labelCell?.table_cell) continue;
+
+      const tableId  = parentOf.get(labelCell.block_id) ?? '';
+      const valueKey: CellKey = `${tableId}:${labelCell.table_cell.row_index}:${labelCell.table_cell.col_index + 1}`;
+      const valueCellId = cellMap.get(valueKey);
+      if (!valueCellId) continue;
+
+      const valueCell = byId.get(valueCellId);
+      if (!valueCell?.children?.length) continue;
+
+      // Find the first paragraph (block_type 2) inside the value cell (may be nested)
+      function findFirstParagraph(cellId: string): LarkBlock | undefined {
+        const cell = byId.get(cellId);
+        for (const childId of cell?.children ?? []) {
+          const child = byId.get(childId);
+          if (!child) continue;
+          if (child.block_type === 2) return child;
+          const nested = findFirstParagraph(childId);
+          if (nested) return nested;
+        }
+        return undefined;
+      }
+
+      const para = findFirstParagraph(valueCellId);
+      if (para) {
+        requests.push({
+          block_id:             para.block_id,
+          update_text_elements: { elements: [{ text_run: { content: entry.value, text_element_style: {} } }] },
+        });
+        break; // found a match for this entry, move on
+      }
+    }
+  }
+
+  await batchUpdateBlocks(docId, requests, token);
+}
+
 // ─── Add collaborator helper ──────────────────────────────────────────────────
 
 async function addCollaborator(fileToken: string, token: string): Promise<void> {
@@ -393,11 +490,16 @@ export async function extractFigmaUrlFromPrd(prdUrl: string): Promise<string> {
  * "Initial version" date, optionally fills PRD sections with AI-generated
  * content, adds Thomas as full-access collaborator, and returns the doc URL.
  */
-export async function copyPrdTemplate(featureName: string, prdBuilderText?: string): Promise<string> {
+export async function copyPrdTemplate(
+  featureName: string,
+  prdBuilderText?: string,
+  options?: { useHalfDayPrd?: boolean; meegoUrl?: string; complianceUrl?: string },
+): Promise<string> {
   const token = await getAccessToken();
+  const templateToken = options?.useHalfDayPrd ? HALF_DAY_WIKI_NODE_TOKEN : WIKI_NODE_TOKEN;
   const [folderToken, objToken] = await Promise.all([
     getRootFolderToken(token),
-    getWikiObjToken(token),
+    getWikiObjToken(token, templateToken),
   ]);
 
   const res  = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${objToken}/copy`, {
@@ -420,6 +522,10 @@ export async function copyPrdTemplate(featureName: string, prdBuilderText?: stri
   await Promise.all([
     (async () => {
       await updateInitialVersionDate(fileToken, today, token);
+      await updatePrdBasicInfo(fileToken, {
+        meegoUrl: options?.meegoUrl,
+        complianceUrl: options?.complianceUrl,
+      }, token).catch(e => console.warn('PRD basic info fill failed:', e));
       if (prdBuilderText?.trim()) {
         await fillPrdSections(fileToken, featureName, prdBuilderText.trim(), token)
           .catch(e => console.warn('PRD Builder fill failed:', e));

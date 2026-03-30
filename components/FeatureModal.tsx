@@ -188,6 +188,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
   });
   const [prdBuilder, setPrdBuilder]         = useState(false);
   const [prdBuilderText, setPrdBuilderText] = useState('');
+  const [useHalfDayPrd, setUseHalfDayPrd]   = useState(false);
 
   const isMeego     = !!(feature?.meegoUrl);
   const canComplete = feature?.canCompleteNode === true;
@@ -261,6 +262,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
         socialComponentOptionId: form.socialComponent || undefined,
         roles,
         prdBuilderText:          prdBuilder && prdBuilderText.trim() ? prdBuilderText.trim() : undefined,
+        useHalfDayPrd:           prdBuilder && useHalfDayPrd ? true : undefined,
       }),
     })
       .then(res => res.json().then(data => ({ ok: res.ok, data })))
@@ -340,31 +342,45 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
               <div className="pb-5 flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
                   <FormLabel required>Feature name</FormLabel>
-                  <input autoFocus type="text" className={inputCls}
-                    placeholder="Enter feature name…"
-                    value={form.name} onChange={e => setField('name', e.target.value)} />
+                  <div className="flex items-center gap-3">
+                    <input autoFocus type="text" className={inputCls}
+                      placeholder="Enter feature name…"
+                      value={form.name} onChange={e => setField('name', e.target.value)} />
+                    <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={prdBuilder}
+                        onChange={e => setPrdBuilder(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
+                      />
+                      <span className="text-[11px] text-gray-500 font-medium">PRD Builder</span>
+                    </label>
+                  </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-                    <input
-                      type="checkbox"
-                      checked={prdBuilder}
-                      onChange={e => setPrdBuilder(e.target.checked)}
-                      className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
-                    />
-                    <span className="text-[11px] text-gray-500 font-medium">PRD Builder</span>
-                  </label>
-                  {prdBuilder && (
-                    <textarea
-                      className={`${inputCls} resize-none`}
-                      rows={3}
-                      placeholder="What are you building?"
-                      value={prdBuilderText}
-                      onChange={e => setPrdBuilderText(e.target.value)}
-                    />
-                  )}
-                </div>
+                {prdBuilder && (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[11px] text-gray-400 font-semibold">Feature Details</span>
+                      <textarea
+                        className={`${inputCls} resize-none`}
+                        rows={3}
+                        placeholder="What are you building?"
+                        value={prdBuilderText}
+                        onChange={e => setPrdBuilderText(e.target.value)}
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+                      <input
+                        type="checkbox"
+                        checked={useHalfDayPrd}
+                        onChange={e => setUseHalfDayPrd(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
+                      />
+                      <span className="text-[11px] text-gray-500 font-medium">Use Half-Day PRD</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Feature Details */}

@@ -276,14 +276,22 @@ export function ProjectView({ features, setFeatures }: Props) {
     [features],
   );
 
-  const filtered = useMemo(() => features.filter(f => {
-    const q = search.toLowerCase();
-    return (
-      (!q || f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q) || f.owner.toLowerCase().includes(q)) &&
-      (statusFilter   === 'All' || f.status   === statusFilter) &&
-      (priorityFilter === 'All' || f.priority === priorityFilter)
-    );
-  }), [features, search, statusFilter, priorityFilter]);
+  const filtered = useMemo(() => {
+    const result = features.filter(f => {
+      const q = search.toLowerCase();
+      return (
+        (!q || f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q) || f.owner.toLowerCase().includes(q)) &&
+        (statusFilter   === 'All' || f.status   === statusFilter) &&
+        (priorityFilter === 'All' || f.priority === priorityFilter)
+      );
+    });
+    if (priorityFilter !== 'All' && result.some(f => f.priority !== priorityFilter)) {
+      console.warn('[ProjectView] Filter bug detected: filtered array contains wrong priority', {
+        priorityFilter, features: result.map(f => ({ id: f.id, name: f.name, priority: f.priority }))
+      });
+    }
+    return result;
+  }, [features, search, statusFilter, priorityFilter]);
 
   // ── Sort ───────────────────────────────────────────────────────────────────
 

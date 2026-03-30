@@ -28,7 +28,7 @@ interface Props {
 }
 
 const priorities: Priority[] = ['P0', 'P1', 'P2', 'P3'];
-const selectCls = 'min-w-[130px] max-w-[180px]';
+const selectCls = 'min-w-[100px]';
 
 export function FilterBar({
   search, statusFilter, statuses, priorityFilter, view,
