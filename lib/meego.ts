@@ -365,46 +365,57 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
 
-  // Fetch iOS planned version from qa_test_preparation node
+  // Fetch iOS planned version from the node detail (node-level field on qa_test_preparation)
   let iosVersion = '';
   try {
-    const relatedRaw = await callMeegoMcp('list_related_workitems', {
-      url: meegoUrl,
-      field_key: 'field_08a9ca',
-    });
-    // Parse version names from the response (markdown table or JSON)
-    try {
-      const parsed = JSON.parse(relatedRaw);
-      if (Array.isArray(parsed)) {
-        iosVersion = parsed.map((item: Record<string, unknown>) => item.name ?? item.work_item_name ?? '').filter(Boolean).join(', ');
-      } else if (parsed?.list && Array.isArray(parsed.list)) {
-        iosVersion = parsed.list.map((item: Record<string, unknown>) => item.name ?? item.work_item_name ?? '').filter(Boolean).join(', ');
+    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+    console.log('[meego] get_node_detail response length:', nodeRaw.length, 'first 300 chars:', nodeRaw.slice(0, 300));
+    // Look for iOS预计上车版本 field in the response
+    const versionMatch = nodeRaw.match(/iOS预计上车版本\s*\|\s*([^|\n]+)/);
+    if (versionMatch) {
+      const val = versionMatch[1].trim();
+      if (val && val !== '未填写') iosVersion = val;
+    }
+    // Also try field_08a9ca
+    if (!iosVersion) {
+      const fieldMatch = nodeRaw.match(/field_08a9ca\s*\|\s*([^|\n]+)/);
+      if (fieldMatch) {
+        const val = fieldMatch[1].trim();
+        if (val && val !== '未填写') iosVersion = val;
       }
-    } catch {
-      // Try parsing as markdown table
-      const nameMatches = relatedRaw.match(/\|\s*\d+\s*\|\s*([^|]+?)\s*\|/g);
-      if (nameMatches) {
-        const names = nameMatches.map((m: string) => {
-          const parts = m.split('|').map((p: string) => p.trim()).filter(Boolean);
-          return parts.length >= 2 ? parts[1] : '';
-        }).filter(Boolean);
-        if (names.length > 0) iosVersion = names.join(', ');
-      }
-      // Also try simple line-based extraction
-      if (!iosVersion) {
-        const lines = relatedRaw.split('\n').filter((l: string) => l.trim() && !l.includes('---') && !l.includes('ID'));
-        for (const line of lines) {
-          const parts = line.split('|').map((p: string) => p.trim()).filter(Boolean);
-          if (parts.length >= 2) {
-            const name = parts[1];
-            if (name && !name.includes('名称')) {
-              iosVersion = iosVersion ? `${iosVersion}, ${name}` : name;
+    }
+    // Fallback: try list_related_workitems to resolve work item IDs to names
+    if (!iosVersion) {
+      try {
+        const relatedRaw = await callMeegoMcp('list_related_workitems', {
+          url: meegoUrl,
+          field_key: 'field_08a9ca',
+        });
+        console.log('[meego] list_related_workitems response:', relatedRaw.slice(0, 300));
+        if (relatedRaw) {
+          // Try JSON
+          try {
+            const parsed = JSON.parse(relatedRaw);
+            const items = Array.isArray(parsed) ? parsed : parsed?.list ?? [];
+            iosVersion = items.map((i: Record<string, unknown>) => i.name ?? i.work_item_name ?? '').filter(Boolean).join(', ');
+          } catch {
+            // Try markdown table
+            const lines = relatedRaw.split('\n').filter((l: string) => l.startsWith('|') && !l.includes('---') && !l.includes('名称') && !l.includes('ID'));
+            for (const line of lines) {
+              const parts = line.split('|').map((p: string) => p.trim()).filter(Boolean);
+              if (parts.length >= 2 && parts[1]) {
+                iosVersion = iosVersion ? `${iosVersion}, ${parts[1]}` : parts[1];
+              }
             }
           }
         }
+      } catch (e) {
+        console.log('[meego] list_related_workitems failed:', e);
       }
     }
-  } catch { /* ignore — iOS version is optional */ }
+  } catch (e) {
+    console.log('[meego] iOS version fetch failed:', e);
+  }
 
   // Extract Figma URL from the PRD's "Relevant Links" section (best-effort)
   let figmaUrl = '';
