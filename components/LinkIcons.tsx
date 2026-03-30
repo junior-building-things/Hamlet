@@ -29,8 +29,8 @@ function buildLinks(feature: Feature): LinkDef[] {
   return links;
 }
 
-const ICON_SIZE = 28;
-const OVERLAP   = 4;
+const ICON_SIZE = 24;  // matches profile pic size (w-6 h-6)
+const OVERLAP   = 5;  // matches profile pic overlap (-5px)
 const SLOT_W    = ICON_SIZE - OVERLAP;
 
 interface BubbleProps {
@@ -100,7 +100,7 @@ function LinkChip({ link, index, total, ringColor }: { link: LinkDef; index: num
         href={link.url}
         target="_blank"
         rel="noreferrer"
-        className="flex items-center justify-center w-7 h-7 rounded-full bg-[#1a1d32] cursor-pointer hover:brightness-125 relative"
+        className="flex items-center justify-center w-6 h-6 rounded-full bg-[#1a1d32] cursor-pointer hover:brightness-125 relative"
         style={{
           outline: `2px solid ${ringColor}`,
           outlineOffset: '-1px',
