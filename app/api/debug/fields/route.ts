@@ -24,42 +24,30 @@ async function callTool(toolName: string, args: Record<string, unknown>) {
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const storyId = url.searchParams.get('id') || '15547111';
+  const storyId = url.searchParams.get('id') || '6740389019';
 
   try {
-    // Get all field keys from config
-    const raw = await callTool('list_workitem_field_config', {
-      project_key: TIKTOK_PROJECT_KEY,
-      work_item_type: 'story',
-    });
-    const parsed = JSON.parse(raw);
-    const configKeys = (parsed.list ?? parsed).map((f: { field_key: string }) => f.field_key);
-
-    // Also include the known custom fields that aren't in the config
-    const knownCustom = ['field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'field_675419',
-      'field_40694f', 'field_2177d5', 'field_894cbf', 'field_391771'];
-
-    // Get brief with ALL fields
-    const allKeys = [...new Set([...configKeys, ...knownCustom])];
-    const briefRaw = await callTool('get_workitem_brief', {
+    // 1. Get node details for the iOS development node
+    const nodeDetail = await callTool('get_node_detail', {
       url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/${storyId}`,
-      fields: allKeys,
+      node_id: 'state_41',  // iOS 开发 node from previous response
     });
 
-    // Extract the 工作项字段 section
-    const fieldSection = briefRaw.split('# 工作项字段')[1]?.split('# 进行中')[0] ?? '(empty)';
+    // 2. Also try getting ALL nodes to see all fields
+    const allNodes = await callTool('get_node_detail', {
+      url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/${storyId}`,
+    });
 
-    // Filter for version/iOS lines
-    const allLines = briefRaw.split('\n');
-    const versionLines = allLines.filter((l: string) =>
-      l.includes('版本') || l.includes('version') || l.includes('Version') || l.includes('iOS')
+    // Filter for version-related content
+    const versionLines = allNodes.split('\n').filter((l: string) =>
+      l.includes('版本') || l.includes('version') || l.includes('Version') || l.includes('预计上车')
     );
 
     return NextResponse.json({
       storyId,
-      fieldSection: fieldSection.trim(),
+      iosNodeDetail: nodeDetail,
       versionLines,
-      totalKeysRequested: allKeys.length,
+      allNodesRaw: allNodes,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
