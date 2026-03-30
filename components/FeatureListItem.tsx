@@ -51,12 +51,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
             </a>
           )}
           {feature.complianceUrl && (
-            <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+            <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
               <Image src="/compliance.png" alt="" width={14} height={14} className="shrink-0" /> Compliance
             </a>
           )}
           {feature.figmaUrl && (
-            <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
+            <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
               <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
             </a>
           )}
@@ -101,12 +101,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
           </a>
         )}
         {feature.complianceUrl && (
-          <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+          <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
             <Image src="/compliance.png" alt="" width={14} height={14} className="shrink-0" /> Compliance
           </a>
         )}
         {feature.figmaUrl && (
-          <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
+          <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
             <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
           </a>
         )}

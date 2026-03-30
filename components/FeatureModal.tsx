@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
-import { X, ExternalLink, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, Loader2, CheckCircle2 } from 'lucide-react';
+import Image from 'next/image';
 import { toast } from 'sonner';
 import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
 import { AV } from '@/lib/avatars';
@@ -509,19 +510,25 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
           {isMeego && (
             <div className="flex items-center gap-4 mt-1.5">
               <a href={feature?.meegoUrl} target="_blank" rel="noopener noreferrer"
-                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                Meego <ExternalLink className="w-3 h-3" />
+                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                <Image src="/meego.png" alt="" width={16} height={16} className="shrink-0" /> Meego
               </a>
               {feature?.prd && (
                 <a href={feature.prd} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                  PRD <ExternalLink className="w-3 h-3" />
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                  <Image src="/prd.png" alt="" width={14} height={14} className="shrink-0" /> PRD
                 </a>
               )}
               {feature?.complianceUrl && (
                 <a href={feature.complianceUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
-                  Compliance <ExternalLink className="w-3 h-3" />
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                  <Image src="/compliance.png" alt="" width={14} height={14} className="shrink-0" /> Compliance
+                </a>
+              )}
+              {feature?.figmaUrl && (
+                <a href={feature.figmaUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                  <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
                 </a>
               )}
             </div>
