@@ -211,11 +211,15 @@ const HEADING_BLOCK_TYPES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11]);
 const PRD_KEYWORDS = [
   // English
   'background', 'problem', 'goal', 'objective', 'metric', 'requirement',
-  'scope', 'overview', 'summary', 'context', 'why', 'impact', 'success',
-  'solution', 'description', 'motivation', 'hypothesis',
+  'scope', 'overview', 'summary', 'context', 'why', 'what', 'how', 'impact', 'success',
+  'solution', 'description', 'motivation', 'hypothesis', 'building', 'build',
+  'purpose', 'rationale', 'approach', 'design', 'user stor', 'acceptance',
+  'stakeholder', 'timeline', 'milestone', 'risk', 'dependency', 'dependencies',
+  'assumption', 'constraint', 'out of scope', 'in scope', 'non-goal',
   // Chinese
   '背景', '问题', '目标', '需求', '方案', '范围', '概述', '影响',
   '成功', '指标', '动机', '分析', '用户', '场景', '描述', '假设',
+  '构建', '设计', '风险', '依赖', '时间', '里程碑',
 ];
 
 async function fillPrdSections(
@@ -265,6 +269,8 @@ async function fillPrdSections(
     if (para) targets.push({ headingText: section.headingText, blockId: para.block_id });
   }
 
+  console.log('[PRD Builder] Found sections:', sections.map(s => s.headingText));
+  console.log('[PRD Builder] Matched targets:', targets.map(t => t.headingText));
   if (targets.length === 0) return;
 
   // Generate content with Gemini
@@ -292,8 +298,9 @@ Rules:
     // Strip any accidental markdown code fences
     const cleaned = raw.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '');
     content = JSON.parse(cleaned) as Record<string, string>;
+    console.log('[PRD Builder] Gemini returned keys:', Object.keys(content));
   } catch {
-    console.warn('PRD Builder: failed to parse Claude response', raw.slice(0, 200));
+    console.warn('PRD Builder: failed to parse Gemini response', raw.slice(0, 300));
     return;
   }
 
@@ -306,7 +313,8 @@ Rules:
       },
     }));
 
-  await batchUpdateBlocks(docId, requests, token);
+  console.log('[PRD Builder] Updating', requests.length, 'blocks');
+  if (requests.length > 0) await batchUpdateBlocks(docId, requests, token);
 }
 
 // ─── PRD basic info: fill Meego URL + Compliance URL ─────────────────────────
