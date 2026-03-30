@@ -376,7 +376,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
       for (const fi of node.form_items ?? []) {
         if (fi.field_key === 'field_08a9ca' || fi.field_name === 'iOS预计上车版本') {
           const val = fi.field_value;
-          console.log('[meego] Found field_08a9ca, type:', typeof val, 'value:', JSON.stringify(val)?.slice(0, 500));
+          console.log('[meego] Found field_08a9ca, full item:', JSON.stringify(fi).slice(0, 800));
           if (typeof val === 'string' && val && val !== '未填写') {
             iosVersion = val;
           } else if (Array.isArray(val)) {
