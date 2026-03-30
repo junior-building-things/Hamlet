@@ -66,8 +66,9 @@ async function parseIntent(messages: ChatMsg[], userMessage: string): Promise<In
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) throw new Error('GOOGLE_AI_API_KEY not set');
 
-  const history = messages.length
-    ? '\n\nPrevious conversation:\n' + messages.map(m => `${m.role === 'user' ? 'User' : 'Hamlet'}: ${m.content}`).join('\n')
+  const recent = messages.slice(-5);
+  const history = recent.length
+    ? '\n\nPrevious conversation:\n' + recent.map(m => `${m.role === 'user' ? 'User' : 'Hamlet'}: ${m.content}`).join('\n')
     : '';
 
   const genAI  = new GoogleGenerativeAI(apiKey);
