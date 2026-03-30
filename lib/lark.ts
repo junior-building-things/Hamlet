@@ -584,12 +584,6 @@ export async function addDocSection(
   const pageBlock = blocks.find(b => b.block_type === 1);
   if (!pageBlock) throw new Error('Empty document');
 
-  // Log a sample heading block to verify structure
-  const sampleHeading = blocks.find(b => HEADING_BLOCK_TYPES.has(b.block_type));
-  if (sampleHeading) {
-    console.log('[addDocSection] Sample heading block:', JSON.stringify(sampleHeading).slice(0, 500));
-  }
-
   // Determine insert index (-1 = end of document)
   let insertIndex = -1;
   if (afterSection && pageBlock.children) {
@@ -609,40 +603,42 @@ export async function addDocSection(
     // If we found the target but no next heading, insert at end
   }
 
-  const children = [
-    {
-      block_type: 4, // Heading 2
-      heading2: {
-        elements: [{ text_run: { content: sectionTitle, text_element_style: {} } }],
-      },
-    },
-    {
-      block_type: 2, // Paragraph
-      paragraph: {
-        elements: [{ text_run: { content: sectionContent, text_element_style: {} } }],
-      },
-    },
-  ];
+  const headingBlockId = `heading_${Date.now()}`;
+  const paraBlockId    = `para_${Date.now()}`;
 
   const body: Record<string, unknown> = {
-    children,
-    document_revision_id: -1,
+    children_id: [headingBlockId, paraBlockId],
+    descendants: [
+      {
+        block_id:   headingBlockId,
+        block_type: 4,
+        heading2: {
+          elements: [{ text_run: { content: sectionTitle } }],
+        },
+      },
+      {
+        block_id:   paraBlockId,
+        block_type: 2,
+        text: {
+          elements: [{ text_run: { content: sectionContent } }],
+        },
+      },
+    ],
   };
   if (insertIndex >= 0) {
     body.index = insertIndex;
   }
 
-  console.log('[addDocSection] Request body:', JSON.stringify(body).slice(0, 500));
+  const qs = `document_revision_id=-1`;
   const res = await fetch(
-    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children`,
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?${qs}`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     },
   );
-  const data = await parseJson(res, 'create_blocks') as { code: number; msg?: string; data?: unknown };
-  console.log('[addDocSection] API response:', JSON.stringify(data).slice(0, 500));
+  const data = await parseJson(res, 'create_blocks') as { code: number; msg?: string };
   if (data.code !== 0) throw new Error(`Lark create blocks error ${data.code}: ${data.msg}`);
 }
 
