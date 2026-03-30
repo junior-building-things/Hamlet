@@ -675,7 +675,10 @@ export async function copyPrdTemplate(
     code: number; msg?: string;
     data?: { file?: { token?: string; url?: string } };
   };
-  if (data.code !== 0) throw new Error(`Lark copy error ${data.code}: ${data.msg ?? 'unknown'}`);
+  if (data.code !== 0) {
+    console.error('[lark] PRD copy failed:', { templateToken, objToken, folderToken, code: data.code, msg: data.msg });
+    throw new Error(`Lark copy error ${data.code}: ${data.msg ?? 'unknown'}`);
+  }
 
   const fileToken = data.data?.file?.token;
   if (!fileToken) throw new Error('Lark response missing file token');
