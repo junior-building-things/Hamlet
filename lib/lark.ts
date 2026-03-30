@@ -389,41 +389,54 @@ export async function searchAbReport(featureName: string, userAccessToken?: stri
   ];
 
   for (const query of queries) {
-    const res = await fetch(`${LARK_BASE_URL}/open-apis/suite/docs-api/search/object`, {
+    let docs: Array<{ token: string; type: string; title: string; url?: string }> = [];
+
+    // Try the legacy search endpoint first (works with user_access_token + docs:doc scope)
+    const searchRes = await fetch(`${LARK_BASE_URL}/open-apis/suite/docs-api/search/object`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        search_key: query,
-        count: 5,
-        offset: 0,
-        owner_ids: [],
-        docs_types: [
-          'doc', 'docx', 'sheet', 'bitable',
-        ],
+        search_key: query, count: 5, offset: 0, owner_ids: [],
+        docs_types: ['doc', 'docx', 'sheet', 'bitable'],
       }),
     });
-
-    const data = await parseJson(res, 'drive_search') as {
+    const searchData = await parseJson(searchRes, 'drive_search') as {
       code: number; msg?: string;
-      data?: {
-        docs_entities?: Array<{
-          docs_token: string;
-          docs_type: string;
-          title: string;
-          owner_id?: string;
-        }>;
-        has_more?: boolean;
-      };
+      data?: { docs_entities?: Array<{ docs_token: string; docs_type: string; title: string }> };
     };
+    console.log('[AB search] query:', JSON.stringify(query), 'code:', searchData.code, 'msg:', searchData.msg);
 
-    console.log('[AB search] query:', JSON.stringify(query), 'code:', data.code, 'msg:', data.msg);
-
-    if (data.code !== 0) {
-      console.warn('[lark] drive search failed:', data.code, data.msg);
-      continue;
+    if (searchData.code === 0) {
+      docs = (searchData.data?.docs_entities ?? []).map(d => ({
+        token: d.docs_token, type: d.docs_type, title: d.title,
+      }));
+    } else {
+      console.warn('[lark] drive search failed:', searchData.code, searchData.msg);
+      // If unauthorized, try the tenant token as fallback (limited results)
+      if (searchData.code === 99991679 && userAccessToken) {
+        const tenantToken = await getAccessToken();
+        const fallbackRes = await fetch(`${LARK_BASE_URL}/open-apis/suite/docs-api/search/object`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tenantToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            search_key: query, count: 5, offset: 0, owner_ids: [],
+            docs_types: ['doc', 'docx', 'sheet', 'bitable'],
+          }),
+        });
+        const fallbackData = await parseJson(fallbackRes, 'drive_search_tenant') as {
+          code: number; msg?: string;
+          data?: { docs_entities?: Array<{ docs_token: string; docs_type: string; title: string }> };
+        };
+        console.log('[AB search] tenant fallback code:', fallbackData.code, 'msg:', fallbackData.msg);
+        if (fallbackData.code === 0) {
+          docs = (fallbackData.data?.docs_entities ?? []).map(d => ({
+            token: d.docs_token, type: d.docs_type, title: d.title,
+          }));
+        }
+      }
+      if (docs.length === 0) continue;
     }
 
-    const docs = data.data?.docs_entities ?? [];
     console.log('[AB search] found:', docs.length, 'docs:', docs.map(d => d.title));
     if (docs.length === 0) continue;
 
@@ -439,7 +452,8 @@ export async function searchAbReport(featureName: string, userAccessToken?: stri
       // Must share at least one significant word with the feature name
       const nameOverlap = nameTokens.some(w => t.includes(w));
       if (nameOverlap) {
-        return `https://bytedance.sg.larkoffice.com/${doc.docs_type}/${doc.docs_token}`;
+        if (doc.url) return doc.url;
+        return `https://bytedance.sg.larkoffice.com/${doc.type}/${doc.token}`;
       }
     }
   }

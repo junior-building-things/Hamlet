@@ -11,12 +11,17 @@ let cachedUserTokenExp = 0;
 /** Get a fresh user access token, refreshing if needed. */
 async function getFreshUserToken(): Promise<string | undefined> {
   // Return cached token if still fresh (refresh every 30 min)
-  if (cachedUserToken && Date.now() < cachedUserTokenExp) return cachedUserToken;
+  if (cachedUserToken && Date.now() < cachedUserTokenExp) {
+    console.log('[sync] using cached user token (expires in', Math.round((cachedUserTokenExp - Date.now()) / 1000), 's)');
+    return cachedUserToken;
+  }
 
   const session = await getSession();
+  console.log('[sync] session has larkAccessToken:', !!session?.larkAccessToken, 'larkRefreshToken:', !!session?.larkRefreshToken);
   if (!session?.larkRefreshToken) return session?.larkAccessToken;
 
   const refreshed = await refreshUserToken(session.larkRefreshToken);
+  console.log('[sync] token refresh result:', refreshed ? 'success' : 'failed');
   if (!refreshed) return session.larkAccessToken;
 
   // Persist the new tokens in the session cookie
