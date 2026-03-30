@@ -441,17 +441,30 @@ export async function searchAbReport(featureName: string, userAccessToken?: stri
     if (docs.length === 0) continue;
 
     // Score each result by how well it matches an AB report for this feature
+    const stopWords = new Set([
+      'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'were',
+      'not', 'but', 'have', 'has', 'had', 'will', 'can', 'may', 'new', 'add',
+      'update', 'fix', 'bug', 'feature', 'report', 'test', 'user', 'users',
+    ]);
     const lowerName = featureName.toLowerCase();
-    const nameTokens = lowerName.split(/\s+/).filter(w => w.length > 2);
+    const nameTokens = lowerName
+      .replace(/[\[\](){}]/g, '')
+      .split(/[\s\-_]+/)
+      .filter(w => w.length > 2 && !stopWords.has(w));
+
+    if (nameTokens.length === 0) continue;
+    // Require at least half of significant tokens (min 2) to match
+    const minMatches = Math.max(2, Math.ceil(nameTokens.length * 0.5));
 
     for (const doc of docs) {
       const t = doc.title.toLowerCase();
       // Must contain some AB indicator
       const hasAb = /\bab\b|a\/b|ab\s*report|ab\s*test|实验报告/.test(t);
       if (!hasAb) continue;
-      // Must share at least one significant word with the feature name
-      const nameOverlap = nameTokens.some(w => t.includes(w));
-      if (nameOverlap) {
+      // Count how many significant words from the feature name appear in the title
+      const matchCount = nameTokens.filter(w => t.includes(w)).length;
+      console.log('[AB match]', JSON.stringify(doc.title), 'matches:', matchCount, '/', nameTokens.length, 'need:', minMatches);
+      if (matchCount >= minMatches) {
         if (doc.url) return doc.url;
         return `https://bytedance.sg.larkoffice.com/${doc.type}/${doc.token}`;
       }
