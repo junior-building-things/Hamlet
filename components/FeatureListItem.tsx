@@ -81,7 +81,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         {feature.name}
       </button>
 
-      <div className="hidden sm:flex py-3">
+      <div className="hidden sm:flex py-3 pl-4">
         <StatusBadge status={feature.status} />
       </div>
 
@@ -113,17 +113,17 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       {/* Team avatars */}
-      <div className="hidden sm:flex items-center py-3">
+      <div className="hidden sm:flex items-center py-3 pl-4">
         <TeamAvatars feature={feature} ringColor="#13162a" />
       </div>
 
-      <span className="hidden sm:flex items-center gap-1 py-3 text-xs text-gray-400 truncate">
+      <span className="hidden sm:flex items-center gap-1 py-3 pl-4 text-xs text-gray-400 truncate">
         <Calendar className="w-3 h-3 shrink-0" />
         {new Date(feature.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
       </span>
 
       {/* Action */}
-      <div className="hidden sm:flex items-center pr-4 py-3">
+      <div className="hidden sm:flex items-center pr-4 py-3 pl-4">
         {feature.canCompleteNode && onComplete && (
           <button
             onClick={(e) => { e.stopPropagation(); onComplete(feature); }}
