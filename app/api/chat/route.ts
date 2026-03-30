@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
 
   // Actionable intent with all required params → reply immediately, let client execute
   if (ACTIONABLE.has(action) && isReady(intent)) {
-    return NextResponse.json({ reply: 'On it!', action, params, executing: true });
+    return NextResponse.json({ reply, action, params, executing: true });
   }
 
   // chat, unsupported, or missing params → reply from Gemini directly
