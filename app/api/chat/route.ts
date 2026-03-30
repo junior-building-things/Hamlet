@@ -5,8 +5,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface ChatMsg { role: 'user' | 'assistant'; content: string }
 interface Intent {
-  action: 'create_feature' | 'create_prd' | 'update_prd' | 'complete_node' | 'query_meego' | 'read_doc' | 'edit_doc' | 'comment_doc' | 'duplicate_doc' | 'chat' | 'unsupported';
-  params: { featureName?: string; featureId?: string; nodeName?: string; section?: string; content?: string; query?: string; docUrl?: string; commentText?: string; useHalfDayPrd?: boolean };
+  action: 'create_feature' | 'create_prd' | 'update_prd' | 'complete_node' | 'query_meego' | 'read_doc' | 'edit_doc' | 'comment_doc' | 'reply_comment' | 'duplicate_doc' | 'chat' | 'unsupported';
+  params: { featureName?: string; featureId?: string; nodeName?: string; section?: string; content?: string; query?: string; docUrl?: string; commentText?: string; commentSearch?: string; replyText?: string; useHalfDayPrd?: boolean };
   reply: string;
 }
 
@@ -23,13 +23,14 @@ Classify the user's message into one of these actions:
 6. read_doc         – User shares a Lark doc URL and wants to read, summarize, or ask about its contents (needs: docUrl)
 7. edit_doc         – User wants to edit/update a specific section of a Lark doc (needs: docUrl, section, content)
 8. comment_doc      – User wants to add a comment to a Lark doc (needs: docUrl, commentText, optionally section to comment on a specific section)
-9. duplicate_doc    – User wants to duplicate/copy a Lark doc (needs: docUrl, optionally featureName for the new name)
-10. chat            – General conversation, greetings, questions, small talk, or requests for clarification
-11. unsupported     – User is asking for a SPECIFIC action that is not in the list above (e.g. "create a compliance ticket", "send an email")
+9. reply_comment    – User wants to reply to an existing comment on a Lark doc (needs: docUrl, replyText, and commentSearch — a keyword/phrase to find the target comment)
+10. duplicate_doc    – User wants to duplicate/copy a Lark doc (needs: docUrl, optionally featureName for the new name)
+11. chat            – General conversation, greetings, questions, small talk, or requests for clarification
+12. unsupported     – User is asking for a SPECIFIC action that is not in the list above (e.g. "create a compliance ticket", "send an email")
 
 Respond with ONLY valid JSON — no markdown fences, no extra text:
 {
-  "action": "create_feature|create_prd|update_prd|complete_node|query_meego|read_doc|edit_doc|comment_doc|duplicate_doc|chat|unsupported",
+  "action": "create_feature|create_prd|update_prd|complete_node|query_meego|read_doc|edit_doc|comment_doc|reply_comment|duplicate_doc|chat|unsupported",
   "params": {
     "featureName": "exact name if mentioned",
     "featureId": "numeric Meego ID if mentioned",
@@ -39,6 +40,8 @@ Respond with ONLY valid JSON — no markdown fences, no extra text:
     "query": "the user's exact question verbatim, for query_meego",
     "docUrl": "full Lark doc URL if shared by user",
     "commentText": "the comment text for comment_doc",
+    "commentSearch": "keyword or phrase to find the target comment for reply_comment",
+    "replyText": "the reply text for reply_comment",
     "useHalfDayPrd": "true if user wants a half-day PRD template, omit otherwise"
   },
   "reply": "warm, natural response"
@@ -57,11 +60,12 @@ Rules:
 - For read_doc: start reply with "Reading the doc…"
 - For edit_doc: start reply with "Updating the doc…"
 - For comment_doc: start reply with "Adding your comment…"
+- For reply_comment: start reply with "Replying to the comment…"
 - For duplicate_doc: start reply with "Duplicating the doc…"`;
 
 // ── Actionable intents that trigger a two-phase response ──────────────────────
 
-const ACTIONABLE = new Set(['create_feature', 'create_prd', 'complete_node', 'query_meego', 'read_doc', 'edit_doc', 'comment_doc', 'duplicate_doc']);
+const ACTIONABLE = new Set(['create_feature', 'create_prd', 'complete_node', 'query_meego', 'read_doc', 'edit_doc', 'comment_doc', 'reply_comment', 'duplicate_doc']);
 
 function isReady(intent: Intent): boolean {
   const { action, params } = intent;
@@ -72,6 +76,7 @@ function isReady(intent: Intent): boolean {
   if (action === 'read_doc')       return !!params.docUrl;
   if (action === 'edit_doc')       return !!params.docUrl && !!params.section && !!params.content;
   if (action === 'comment_doc')    return !!params.docUrl && !!params.commentText;
+  if (action === 'reply_comment')  return !!params.docUrl && !!params.replyText && !!params.commentSearch;
   if (action === 'duplicate_doc')  return !!params.docUrl;
   return false;
 }

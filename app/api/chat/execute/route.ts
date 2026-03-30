@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
-import { copyPrdTemplate, readDocContent, editDocSection, addDocComment, duplicateDoc } from '@/lib/lark';
+import { copyPrdTemplate, readDocContent, editDocSection, addDocComment, listDocComments, replyToComment, duplicateDoc } from '@/lib/lark';
 import type { Feature } from '@/lib/types';
 
 const PROJECT_KEY   = '5f105019a8b9a853da64767f';
@@ -206,6 +206,24 @@ ${brief}`;
       const where = params.section ? ` on the "${params.section}" section` : '';
       return NextResponse.json({
         reply: `Comment added${where}!`,
+        links: [{ label: '📄 Doc', url: params.docUrl }],
+      });
+    }
+
+    // ── Reply to Comment ──────────────────────────────────────────────────────
+    if (action === 'reply_comment' && params.docUrl && params.replyText && params.commentSearch) {
+      const comments = await listDocComments(params.docUrl, params.commentSearch);
+      if (comments.length === 0) {
+        return NextResponse.json({
+          reply: `I couldn't find a comment matching "${params.commentSearch}" on that doc.`,
+          links: [{ label: '📄 Doc', url: params.docUrl }],
+        });
+      }
+      const target = comments[0];
+      await replyToComment(params.docUrl, target.commentId, params.replyText);
+      const preview = target.content.slice(0, 80);
+      return NextResponse.json({
+        reply: `Replied to the comment "${preview}${target.content.length > 80 ? '…' : ''}"!`,
         links: [{ label: '📄 Doc', url: params.docUrl }],
       });
     }

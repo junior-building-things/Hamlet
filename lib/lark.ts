@@ -625,6 +625,78 @@ export async function addDocComment(docUrl: string, content: string, section?: s
 }
 
 /**
+ * List comments on a Lark doc, optionally filtering by search text.
+ */
+export async function listDocComments(
+  docUrl: string,
+  searchText?: string,
+): Promise<Array<{ commentId: string; quote: string; content: string; replies: Array<{ content: string }> }>> {
+  const docId = await resolveDocId(docUrl);
+  const token = await getAccessToken();
+
+  const res = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/comments?file_type=docx&page_size=50`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await parseJson(res, 'list_comments') as {
+    code: number; msg?: string;
+    data?: { items?: Array<{
+      comment_id: string;
+      quote: string;
+      reply_list?: { replies?: Array<{ content?: { elements?: Array<{ text_run?: { text?: string } }> } }> };
+    }> };
+  };
+  if (data.code !== 0) throw new Error(`Lark list comments error ${data.code}: ${data.msg}`);
+
+  const items = (data.data?.items ?? []).map(c => {
+    const replies = (c.reply_list?.replies ?? []).map(r =>
+      ({ content: (r.content?.elements ?? []).map(e => e.text_run?.text ?? '').join('') })
+    );
+    return {
+      commentId: c.comment_id,
+      quote: c.quote ?? '',
+      content: replies[0]?.content ?? '',
+      replies: replies.slice(1),
+    };
+  });
+
+  if (searchText) {
+    const term = searchText.toLowerCase();
+    return items.filter(c =>
+      c.quote.toLowerCase().includes(term) ||
+      c.content.toLowerCase().includes(term)
+    );
+  }
+  return items;
+}
+
+/**
+ * Reply to an existing comment on a Lark doc.
+ */
+export async function replyToComment(
+  docUrl: string,
+  commentId: string,
+  replyText: string,
+): Promise<void> {
+  const docId = await resolveDocId(docUrl);
+  const token = await getAccessToken();
+
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/comments/${commentId}/replies?file_type=docx`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: {
+          elements: [{ type: 'text_run', text_run: { text: replyText } }],
+        },
+      }),
+    },
+  );
+  const data = await parseJson(res, 'reply_comment') as { code: number; msg?: string };
+  if (data.code !== 0) throw new Error(`Lark reply error ${data.code}: ${data.msg}`);
+}
+
+/**
  * Duplicate a Lark doc, returning the new doc URL.
  */
 export async function duplicateDoc(docUrl: string, newName?: string): Promise<string> {
