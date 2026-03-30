@@ -376,10 +376,14 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
       for (const fi of node.form_items ?? []) {
         if (fi.field_key === 'field_08a9ca' || fi.field_name === 'iOS预计上车版本') {
           const val = fi.field_value;
+          console.log('[meego] Found field_08a9ca, type:', typeof val, 'value:', JSON.stringify(val)?.slice(0, 500));
           if (typeof val === 'string' && val && val !== '未填写') {
             iosVersion = val;
           } else if (Array.isArray(val)) {
             iosVersion = val.map((v: Record<string, unknown>) => String(v.name ?? v.work_item_name ?? v.label ?? '')).filter(Boolean).join(', ');
+          } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+            const obj = val as Record<string, unknown>;
+            iosVersion = String(obj.name ?? obj.label ?? obj.value ?? JSON.stringify(val));
           }
           if (iosVersion) break;
         }
@@ -387,11 +391,7 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
       if (iosVersion) break;
     }
     if (!iosVersion) {
-      // Log all form_item field_keys from every node to help debug
-      const allKeys = (nodeData.list ?? []).flatMap(n => (n.form_items ?? []).map(fi => `${n.basic?.name}:${fi.field_key}(${fi.field_name})`));
-      const matching = allKeys.filter(k => k.includes('版本') || k.includes('version') || k.includes('08a9ca'));
-      console.log('[meego] iOS version not found. Version-related fields:', matching.length ? matching : 'none');
-      console.log('[meego] Total form_items across all nodes:', allKeys.length);
+      console.log('[meego] iOS version field found but could not extract value');
     }
   } catch (e) {
     console.log('[meego] iOS version fetch failed:', e);
