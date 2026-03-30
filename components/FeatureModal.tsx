@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
-import { X, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, Loader2, CheckCircle2, WandSparkles } from 'lucide-react';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
@@ -189,6 +189,32 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
   });
   const [prdType, setPrdType]               = useState<'regular' | 'halfday'>('regular');
   const [featureDescription, setFeatureDescription] = useState('');
+  const [rewritingName, setRewritingName]           = useState(false);
+  const [rewritingDesc, setRewritingDesc]           = useState(false);
+
+  async function handleRewrite(field: 'name' | 'description') {
+    const text = field === 'name' ? form.name : featureDescription;
+    if (!text.trim()) return;
+    const setSpin = field === 'name' ? setRewritingName : setRewritingDesc;
+    setSpin(true);
+    try {
+      const res = await fetch('/api/rewrite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, field }),
+      });
+      const data = await res.json() as { rewritten?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Rewrite failed');
+      if (data.rewritten) {
+        if (field === 'name') setField('name', data.rewritten);
+        else setFeatureDescription(data.rewritten);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Rewrite failed');
+    } finally {
+      setSpin(false);
+    }
+  }
 
   const isMeego     = !!(feature?.meegoUrl);
   const canComplete = feature?.canCompleteNode === true;
@@ -344,9 +370,16 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
                 <div className="flex flex-col gap-1.5">
                   <FormLabel required>Feature Name</FormLabel>
-                  <input autoFocus type="text" className={inputCls}
-                    placeholder="Enter feature name…"
-                    value={form.name} onChange={e => setField('name', e.target.value)} />
+                  <div className="flex items-center gap-2">
+                    <input autoFocus type="text" className={inputCls}
+                      placeholder="Enter feature name…"
+                      value={form.name} onChange={e => setField('name', e.target.value)} />
+                    <button type="button" disabled={!form.name.trim() || rewritingName}
+                      onClick={() => handleRewrite('name')}
+                      className="shrink-0 p-2 rounded-lg border border-[#2e3460] text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:text-purple-400 enabled:hover:border-purple-500/50">
+                      {rewritingName ? <Loader2 className="w-4 h-4 animate-spin" /> : <WandSparkles className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -363,13 +396,20 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
                 <div className="flex flex-col gap-1.5">
                   <FormLabel>Feature Description</FormLabel>
-                  <textarea
-                    className={`${inputCls} resize-none`}
-                    rows={3}
-                    placeholder="What are we building?"
-                    value={featureDescription}
-                    onChange={e => setFeatureDescription(e.target.value)}
-                  />
+                  <div className="flex items-start gap-2">
+                    <textarea
+                      className={`${inputCls} resize-none`}
+                      rows={3}
+                      placeholder="What are we building?"
+                      value={featureDescription}
+                      onChange={e => setFeatureDescription(e.target.value)}
+                    />
+                    <button type="button" disabled={!featureDescription.trim() || rewritingDesc}
+                      onClick={() => handleRewrite('description')}
+                      className="shrink-0 p-2 rounded-lg border border-[#2e3460] text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:text-purple-400 enabled:hover:border-purple-500/50 mt-1">
+                      {rewritingDesc ? <Loader2 className="w-4 h-4 animate-spin" /> : <WandSparkles className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
