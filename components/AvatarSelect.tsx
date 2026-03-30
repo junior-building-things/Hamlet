@@ -127,14 +127,15 @@ interface CustomSelectProps {
   placeholder?: string;
   allowDeselect?: boolean;
   icon?: React.ReactNode;
+  className?: string;
 }
 
-export function CustomSelect({ options, value, onChange, placeholder, allowDeselect, icon }: CustomSelectProps) {
+export function CustomSelect({ options, value, onChange, placeholder, allowDeselect, icon, className = 'w-full' }: CustomSelectProps) {
   const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
   const selected = options.find(o => o.value === value);
 
   return (
-    <div ref={ref} className="relative w-full">
+    <div ref={ref} className={`relative ${className}`}>
       <button type="button" onClick={() => open ? setOpen(false) : openDropdown()} className={triggerCls}>
         {icon && <span className="text-gray-500 flex-shrink-0 flex items-center">{icon}</span>}
         <span className={`flex-1 text-left truncate ${!selected && placeholder ? 'text-gray-500' : ''}`}>
