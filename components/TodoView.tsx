@@ -109,7 +109,7 @@ export function TodoView({ features, setFeatures }: Props) {
     toast.success(`Completed ${count}/${items.length} ${nodeType} nodes`);
   }
 
-  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[2fr_auto_auto_220px_auto_1fr_auto] sm:gap-x-4 sm:gap-y-2';
+  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[2fr_auto_auto_220px_auto_auto_auto] sm:gap-x-4 sm:gap-y-2';
 
   return (
     <div className="min-h-screen">
