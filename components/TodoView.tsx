@@ -154,7 +154,7 @@ export function TodoView({ features, setFeatures }: Props) {
         </div>
       )}
 
-      <div className="px-6 pb-16 mt-10">
+      <div className="px-6 pb-16 mt-4">
         {/* Still loading sync data */}
         {todos.length === 0 && syncing.length > 0 && (
           <div className="flex items-center gap-2 text-gray-500 py-12 justify-center">
