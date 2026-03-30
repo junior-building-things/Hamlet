@@ -365,57 +365,74 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
 
-  // Fetch iOS planned version from node detail JSON (node-level field field_08a9ca)
+  // Fetch planned version from node detail JSON
+  // Try iOS (field_08a9ca) first, fall back to Android (field_c88970)
   let iosVersion = '';
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
     interface NodeFormItem { field_key?: string; field_name?: string; value?: string; value_label?: string }
     interface NodeEntry { basic?: { node_key?: string; name?: string }; form_items?: NodeFormItem[] }
     const nodeData = JSON.parse(nodeRaw) as { list?: NodeEntry[] };
-    // Collect work item IDs from field_08a9ca across all nodes
-    const versionIds: number[] = [];
-    for (const node of nodeData.list ?? []) {
-      for (const fi of node.form_items ?? []) {
-        if (fi.field_key === 'field_08a9ca') {
-          // value_label may have the display name directly
-          if (fi.value_label) { iosVersion = fi.value_label; break; }
-          // value is a JSON string of work item IDs like "[3000671006,3000671018]"
-          try {
-            const ids = JSON.parse(fi.value ?? '[]') as number[];
-            for (const id of ids) { if (!versionIds.includes(id)) versionIds.push(id); }
-          } catch { /* skip */ }
+
+    // Collect work item IDs for a given field key across all nodes
+    function collectVersionIds(fieldKey: string): number[] {
+      const ids: number[] = [];
+      for (const node of nodeData.list ?? []) {
+        for (const fi of node.form_items ?? []) {
+          if (fi.field_key === fieldKey) {
+            if (fi.value_label) return []; // handled separately
+            try {
+              const parsed = JSON.parse(fi.value ?? '[]') as number[];
+              for (const id of parsed) { if (!ids.includes(id)) ids.push(id); }
+            } catch { /* skip */ }
+          }
         }
       }
-      if (iosVersion) break;
+      return ids;
     }
-    // Resolve work item IDs to names via get_workitem_brief
-    if (!iosVersion && versionIds.length > 0) {
+
+    function getValueLabel(fieldKey: string): string {
+      for (const node of nodeData.list ?? []) {
+        for (const fi of node.form_items ?? []) {
+          if (fi.field_key === fieldKey && fi.value_label) return fi.value_label;
+        }
+      }
+      return '';
+    }
+
+    // Resolve work item IDs to the lowest short version name
+    async function resolveVersion(fieldKey: string): Promise<string> {
+      const label = getValueLabel(fieldKey);
+      if (label) return label;
+      const ids = collectVersionIds(fieldKey);
+      if (ids.length === 0) return '';
       const names: string[] = [];
-      for (const id of versionIds) {
+      for (const id of ids) {
         try {
           const briefRaw = await callMeegoMcp('get_workitem_brief', {
             url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/version/detail/${id}`,
           });
           const nameMatch = briefRaw.match(/工作项名称\s*\|\s*([^|\n]+)/);
           if (nameMatch) names.push(nameMatch[1].trim());
-        } catch { /* skip individual failures */ }
+        } catch { /* skip */ }
       }
-      // Extract short version number (e.g. "44.9" from "TikTok-M-iOS-44.9.0")
       const shortNames = names.map(n => {
         const m = n.match(/(\d+\.\d+)(?:\.\d+)?$/);
         return m ? m[1] : n;
       });
-      if (shortNames.length > 0) {
-        shortNames.sort((a, b) => {
-          const [aMaj, aMin] = a.split('.').map(Number);
-          const [bMaj, bMin] = b.split('.').map(Number);
-          return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
-        });
-        iosVersion = shortNames[0];
-      }
+      if (shortNames.length === 0) return '';
+      shortNames.sort((a, b) => {
+        const [aMaj, aMin] = a.split('.').map(Number);
+        const [bMaj, bMin] = b.split('.').map(Number);
+        return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
+      });
+      return shortNames[0];
     }
+
+    iosVersion = await resolveVersion('field_08a9ca');
+    if (!iosVersion) iosVersion = await resolveVersion('field_c88970');
   } catch (e) {
-    console.log('[meego] iOS version fetch failed:', e);
+    console.log('[meego] version fetch failed:', e);
   }
 
   // Extract Figma URL from the PRD's "Relevant Links" section (best-effort)

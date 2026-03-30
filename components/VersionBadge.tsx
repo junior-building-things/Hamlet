@@ -20,13 +20,7 @@ function versionColor(version: string) {
 }
 
 export function VersionBadge({ version }: { version?: string }) {
-  if (!version) {
-    return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium whitespace-nowrap bg-gray-800 border border-gray-700 text-gray-500">
-        —
-      </span>
-    );
-  }
+  if (!version) return null;
   const config = versionColor(version);
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${config.bg} ${config.text}`}>
