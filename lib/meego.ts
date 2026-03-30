@@ -369,29 +369,38 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
   let iosVersion = '';
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    interface NodeFormItem { field_key?: string; field_name?: string; field_value?: unknown }
+    interface NodeFormItem { field_key?: string; field_name?: string; value?: string; value_label?: string }
     interface NodeEntry { basic?: { node_key?: string; name?: string }; form_items?: NodeFormItem[] }
     const nodeData = JSON.parse(nodeRaw) as { list?: NodeEntry[] };
+    // Collect work item IDs from field_08a9ca across all nodes
+    const versionIds: number[] = [];
     for (const node of nodeData.list ?? []) {
       for (const fi of node.form_items ?? []) {
-        if (fi.field_key === 'field_08a9ca' || fi.field_name === 'iOS预计上车版本') {
-          const val = fi.field_value;
-          console.log('[meego] Found field_08a9ca, full item:', JSON.stringify(fi).slice(0, 800));
-          if (typeof val === 'string' && val && val !== '未填写') {
-            iosVersion = val;
-          } else if (Array.isArray(val)) {
-            iosVersion = val.map((v: Record<string, unknown>) => String(v.name ?? v.work_item_name ?? v.label ?? '')).filter(Boolean).join(', ');
-          } else if (val && typeof val === 'object' && !Array.isArray(val)) {
-            const obj = val as Record<string, unknown>;
-            iosVersion = String(obj.name ?? obj.label ?? obj.value ?? JSON.stringify(val));
-          }
-          if (iosVersion) break;
+        if (fi.field_key === 'field_08a9ca') {
+          // value_label may have the display name directly
+          if (fi.value_label) { iosVersion = fi.value_label; break; }
+          // value is a JSON string of work item IDs like "[3000671006,3000671018]"
+          try {
+            const ids = JSON.parse(fi.value ?? '[]') as number[];
+            for (const id of ids) { if (!versionIds.includes(id)) versionIds.push(id); }
+          } catch { /* skip */ }
         }
       }
       if (iosVersion) break;
     }
-    if (!iosVersion) {
-      console.log('[meego] iOS version field found but could not extract value');
+    // Resolve work item IDs to names via get_workitem_brief
+    if (!iosVersion && versionIds.length > 0) {
+      const names: string[] = [];
+      for (const id of versionIds) {
+        try {
+          const briefRaw = await callMeegoMcp('get_workitem_brief', {
+            url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/version/detail/${id}`,
+          });
+          const nameMatch = briefRaw.match(/工作项名称\s*\|\s*([^|\n]+)/);
+          if (nameMatch) names.push(nameMatch[1].trim());
+        } catch { /* skip individual failures */ }
+      }
+      if (names.length > 0) iosVersion = names.join(', ');
     }
   } catch (e) {
     console.log('[meego] iOS version fetch failed:', e);
