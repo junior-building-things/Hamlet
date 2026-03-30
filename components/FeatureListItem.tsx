@@ -3,7 +3,7 @@ import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
 import { TeamAvatars } from './TeamAvatars';
-import { RefreshCw, Calendar, ExternalLink, Figma } from 'lucide-react';
+import { RefreshCw, Calendar, ExternalLink, Pen } from 'lucide-react';
 
 interface Props {
   feature: Feature;
@@ -54,7 +54,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
           )}
           {feature.figmaUrl && (
             <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
-              Figma <Figma className="w-3 h-3" />
+              Figma <Pen className="w-3 h-3" />
             </a>
           )}
         </div>
@@ -94,7 +94,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync }: Props) {
         )}
         {feature.figmaUrl && (
           <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
-            Figma <Figma className="w-3 h-3" />
+            Figma <Pen className="w-3 h-3" />
           </a>
         )}
       </div>
