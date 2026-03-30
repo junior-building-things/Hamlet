@@ -434,50 +434,16 @@ export async function extractFigmaUrlFromPrd(prdUrl: string): Promise<string> {
   const blocks = await getDocBlocks(docId, token);
   const byId   = new Map(blocks.map(b => [b.block_id, b]));
 
-  // Walk top-level children of the page block in document order
-  const pageBlock = blocks.find(b => b.block_type === 1);
-  if (!pageBlock?.children) return '';
-
-  const topLevel = pageBlock.children
-    .map(id => byId.get(id))
-    .filter((b): b is LarkBlock => b !== undefined);
-
-  // Collect content blocks that belong to the "Relevant Links" section
-  let capturing = false;
-  const sectionBlocks: LarkBlock[] = [];
-
-  for (const block of topLevel) {
-    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
-      const text = blockText(block).toLowerCase();
-      if (text.includes('relevant link') || text.includes('相关链接')) {
-        capturing = true;
-      } else if (capturing) {
-        break; // reached the next heading — section is over
-      }
-    } else if (capturing) {
-      sectionBlocks.push(block);
-    }
-  }
-
-  if (sectionBlocks.length === 0) return '';
-
-  // Recursively collect all descendant blocks
-  function collectDescendants(blockId: string): LarkBlock[] {
-    const b = byId.get(blockId);
-    if (!b) return [];
-    return [b, ...(b.children ?? []).flatMap(collectDescendants)];
-  }
-
-  const allInSection = sectionBlocks.flatMap(b => collectDescendants(b.block_id));
-
-  // Search for a Figma URL in text element links or plain text
-  for (const block of allInSection) {
+  // Search ALL blocks in the document for a Figma URL
+  for (const block of blocks) {
     for (const el of block.text?.elements ?? []) {
+      // Check hyperlinked text
       const style = el.text_run?.text_element_style as Record<string, unknown> | undefined;
       const link  = style?.link as Record<string, unknown> | undefined;
       if (typeof link?.url === 'string' && link.url.includes('figma.com')) {
         return link.url;
       }
+      // Check plain-text URLs
       const content  = el.text_run?.content ?? '';
       const urlMatch = content.match(/https?:\/\/[^\s]*figma\.com[^\s]*/);
       if (urlMatch) return urlMatch[0];
