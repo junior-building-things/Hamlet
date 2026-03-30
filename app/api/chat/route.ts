@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
   try {
     intent = await parseIntent(messages, userMessage);
   } catch (e) {
-    console.error('[chat] parseIntent failed:', e instanceof Error ? e.message : e);
+    console.error('[chat] parseIntent failed:', e);
     return NextResponse.json({ reply: "I had trouble understanding that. Could you rephrase?" });
   }
 
