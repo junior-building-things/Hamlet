@@ -400,7 +400,12 @@ export async function syncFeatureStatus(meegoUrl: string): Promise<{
           if (nameMatch) names.push(nameMatch[1].trim());
         } catch { /* skip individual failures */ }
       }
-      if (names.length > 0) iosVersion = names.join(', ');
+      // Extract short version number (e.g. "44.9" from "TikTok-M-iOS-44.9.0")
+      const shortNames = names.map(n => {
+        const m = n.match(/(\d+\.\d+)(?:\.\d+)?$/);
+        return m ? m[1] : n;
+      });
+      if (shortNames.length > 0) iosVersion = shortNames.join(', ');
     }
   } catch (e) {
     console.log('[meego] iOS version fetch failed:', e);
