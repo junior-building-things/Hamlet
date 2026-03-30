@@ -3,7 +3,8 @@ import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
 import { TeamAvatars } from './TeamAvatars';
-import { RefreshCw, Calendar, ExternalLink, CheckCircle2, Loader2 } from 'lucide-react';
+import Image from 'next/image';
+import { RefreshCw, Calendar, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface Props {
   feature: Feature;
@@ -41,22 +42,22 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <div className="flex items-center gap-3 flex-wrap">
           {feature.meegoUrl && (
             <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-              Meego <ExternalLink className="w-3 h-3" />
+              <Image src="/meego.png" alt="" width={14} height={14} className="shrink-0" /> Meego
             </a>
           )}
           {feature.prd && (
             <a href={feature.prd} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-              PRD <ExternalLink className="w-3 h-3" />
+              <Image src="/prd.png" alt="" width={14} height={14} className="shrink-0" /> PRD
             </a>
           )}
           {feature.complianceUrl && (
             <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
-              Compliance <ExternalLink className="w-3 h-3" />
+              <Image src="/compliance.png" alt="" width={14} height={14} className="shrink-0" /> Compliance
             </a>
           )}
           {feature.figmaUrl && (
             <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
-              Figma <ExternalLink className="w-3 h-3" />
+              <Image src="/figma.svg" alt="" width={14} height={14} className="shrink-0" /> Figma
             </a>
           )}
         </div>
@@ -91,22 +92,22 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       <div className="hidden sm:flex items-center gap-3 py-3 whitespace-nowrap">
         {feature.meegoUrl && (
           <a href={feature.meegoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-            Meego <ExternalLink className="w-3 h-3" />
+            <Image src="/meego.png" alt="" width={14} height={14} className="shrink-0" /> Meego
           </a>
         )}
         {feature.prd && (
           <a href={feature.prd} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-            PRD <ExternalLink className="w-3 h-3" />
+            <Image src="/prd.png" alt="" width={14} height={14} className="shrink-0" /> PRD
           </a>
         )}
         {feature.complianceUrl && (
           <a href={feature.complianceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
-            Compliance <ExternalLink className="w-3 h-3" />
+            <Image src="/compliance.png" alt="" width={14} height={14} className="shrink-0" /> Compliance
           </a>
         )}
         {feature.figmaUrl && (
           <a href={feature.figmaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors">
-            Figma <ExternalLink className="w-3 h-3" />
+            <Image src="/figma.svg" alt="" width={14} height={14} className="shrink-0" /> Figma
           </a>
         )}
       </div>
