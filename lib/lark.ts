@@ -1025,11 +1025,9 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
   const searchToken = userAccessToken || botToken;
   console.log('[lark] joinFeatureChat:', featureName, 'using', userAccessToken ? 'user token' : 'bot token');
 
-  // Search using a shorter query for broader results (we'll match precisely via description)
-  // Use first few significant words to avoid missing chats with prefixed/truncated names
-  const searchQuery = featureName.split(/\s+/).slice(0, 5).join(' ');
+  // Search with full feature name, fetch more results for description-based matching
   const searchRes = await fetch(
-    `${LARK_BASE_URL}/open-apis/im/v1/chats/search?query=${encodeURIComponent(searchQuery)}&page_size=20`,
+    `${LARK_BASE_URL}/open-apis/im/v1/chats/search?query=${encodeURIComponent(featureName)}&page_size=20`,
     { headers: { Authorization: `Bearer ${searchToken}` } },
   );
   const searchData = await parseJson(searchRes, 'chat_search') as {
