@@ -1061,12 +1061,12 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
 
   console.log('[lark] found chat:', bestChat.name, '— adding bot');
 
-  // Add the bot to the chat (must use bot token)
+  // Use user token to add the bot (user must be in the chat)
   const addRes = await fetch(
     `${LARK_BASE_URL}/open-apis/im/v1/chats/${bestChat.chat_id}/members?member_id_type=app_id`,
     {
       method: 'POST',
-      headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${searchToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ id_list: [appId] }),
     },
   );
