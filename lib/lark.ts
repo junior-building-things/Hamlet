@@ -1023,6 +1023,7 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
 
   // Use user token to search (bot can only find chats it's already in)
   const searchToken = userAccessToken || botToken;
+  console.log('[lark] joinFeatureChat:', featureName, 'using', userAccessToken ? 'user token' : 'bot token');
 
   // Search for group chats matching the feature name
   const searchRes = await fetch(
