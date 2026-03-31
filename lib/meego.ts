@@ -187,26 +187,9 @@ interface MqlResponse {
 
 interface ExtendedFields { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string; name: string; status: string; nodeKey: string }
 
-// List available MCP tools (for debugging)
-async function listMcpTools(): Promise<string> {
-  const token = process.env.MEEGO_USER_TOKEN;
-  if (!token) return 'no token';
-  const res = await fetch(MEEGO_MCP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Mcp-Token': token },
-    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'tools/list', params: {} }),
-  });
-  const data = await res.json();
-  const tools = data.result?.tools ?? [];
-  const mqlTool = tools.find((t: { name: string }) => t.name === 'search_by_mql');
-  return mqlTool ? JSON.stringify(mqlTool, null, 2) : `search_by_mql not found in ${tools.length} tools`;
-}
-
 // Fetch all PM-owned TikTok stories via MQL — returns every story regardless of todo status
 async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
   const map = new Map<string, ExtendedFields>();
-  const toolSchema = await listMcpTools().catch(() => 'failed');
-  console.log('[meego] search_by_mql schema:', toolSchema);
   const MQL = 'SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
   const GROUP_ID = '1';
   let sessionId: string | undefined;
@@ -214,26 +197,10 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
 
   while (true) {
     const args: Record<string, unknown> = sessionId
-      ? { session_id: sessionId, group_pagination_list: [{ group_id: GROUP_ID, page_num: page }] }
+      ? { project_key: 'TikTok', session_id: sessionId, group_pagination_list: [{ group_id: GROUP_ID, page_num: page }] }
       : { project_key: 'TikTok', mql: MQL };
 
-    console.log('[meego] MQL args:', JSON.stringify(args));
-    // Try calling MCP directly to debug — send project_key as top-level
-    const token = process.env.MEEGO_USER_TOKEN!;
-    const directRes = await fetch(MEEGO_MCP_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Mcp-Token': token },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: Date.now(),
-        method: 'tools/call',
-        params: { name: 'search_by_mql', arguments: args },
-      }),
-    });
-    const directData = await directRes.json();
-    console.log('[meego] MQL direct response:', JSON.stringify(directData).slice(0, 500));
-    const raw = directData.result?.content?.[0]?.text ?? '';
-    console.log('[meego] MQL raw text (first 300):', raw.slice(0, 300));
+    const raw = await callMeegoMcp('search_by_mql', args);
     let data: MqlResponse;
     try {
       data = JSON.parse(raw) as MqlResponse;
