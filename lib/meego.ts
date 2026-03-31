@@ -391,12 +391,15 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   const allFieldLines = raw.split('\n').filter((l: string) => l.includes('群') || l.includes('chat') || l.includes('Chat') || l.includes('group'));
   if (allFieldLines.length > 0) console.log('[meego] chat-related fields:', allFieldLines);
 
-  // Also check field config for chat-related fields
+  // Also search node details and full raw for any chat/group references
   try {
-    const configRaw = await callMeegoMcp('list_workitem_field_config', { url: meegoUrl });
-    const chatFields = configRaw.split('\n').filter((l: string) => l.includes('群') || l.includes('chat') || l.includes('Chat'));
-    if (chatFields.length > 0) console.log('[meego] chat-related field configs:', chatFields.slice(0, 10));
+    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+    const chatInNodes = nodeRaw.match(/.{0,30}(群|chat_id|group_id|open_chat).{0,50}/gi);
+    if (chatInNodes?.length) console.log('[meego] chat refs in node detail:', chatInNodes.slice(0, 5));
   } catch { /* ignore */ }
+  // Search raw brief for any chat/group references
+  const chatInBrief = raw.match(/.{0,30}(群|chat_id|group_id|open_chat).{0,50}/gi);
+  if (chatInBrief?.length) console.log('[meego] chat refs in brief:', chatInBrief.slice(0, 5));
 
   const lines = raw.split('\n');
   let workItemName = '';
