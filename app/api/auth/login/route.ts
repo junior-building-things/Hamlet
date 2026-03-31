@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     redirect_uri: redirectUri,
     state,
     // Request scopes needed for Drive search (AB reports), contacts (avatars), and chat search (group join)
-    scope:        'search:docs:read drive:drive.search:readonly contact:user.id:readonly im:chat:read',
+    scope:        'search:docs:read drive:drive.search:readonly contact:user.id:readonly im:chat:read im:chat.members:write_only',
   });
 
   return NextResponse.redirect(`${base}/open-apis/authen/v1/authorize?${params}`);
