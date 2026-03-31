@@ -1174,10 +1174,11 @@ export async function getPackageQrUrl(chatId: string): Promise<string | null> {
 
     // Extract image_key from the content
     // For post messages, images are elements with tag:"img" and image_key
+    console.log('[lark] package message found, type:', msg.msg_type, 'content preview:', content.slice(0, 500));
     const imageKeyMatch = content.match(/"image_key"\s*:\s*"([^"]+)"/);
     if (imageKeyMatch) {
       const imageKey = imageKeyMatch[1];
-      console.log('[lark] found package QR in message:', msg.message_id, 'imageKey:', imageKey);
+      console.log('[lark] found package QR imageKey:', imageKey);
       return `/api/lark/image?messageId=${msg.message_id}&imageKey=${imageKey}`;
     }
   }

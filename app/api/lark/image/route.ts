@@ -26,10 +26,9 @@ export async function GET(req: NextRequest) {
   const token = await getAccessToken();
 
   // Use the image API (works for images in post/rich-text messages)
-  const res = await fetch(
-    `${LARK_BASE_URL}/open-apis/im/v1/images/${imageKey}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const url = `${LARK_BASE_URL}/open-apis/im/v1/images/${imageKey}`;
+  console.log('[lark-image] fetching:', url);
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 
   if (!res.ok) {
     const errText = await res.text();
