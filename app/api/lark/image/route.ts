@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
   );
 
   if (!res.ok) {
-    return NextResponse.json({ error: 'Failed to fetch image' }, { status: 502 });
+    const errText = await res.text();
+    console.error('[lark-image] fetch failed:', res.status, errText.slice(0, 300));
+    return NextResponse.json({ error: 'Failed to fetch image', status: res.status, detail: errText.slice(0, 200) }, { status: 502 });
   }
 
   const contentType = res.headers.get('content-type') ?? 'image/png';
