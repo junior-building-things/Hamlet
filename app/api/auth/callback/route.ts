@@ -56,6 +56,9 @@ export async function GET(req: NextRequest) {
   const inner      = (tokenData.data as Record<string, unknown> | undefined) ?? tokenData;
   const accessToken = inner.access_token as string | undefined;
 
+  const grantedScope = inner.scope as string | undefined;
+  console.log('[auth] granted scope:', grantedScope);
+
   if (!accessToken) {
     console.error('No access token in response:', tokenData);
     return NextResponse.redirect(`${origin}/login?error=no_token`);
