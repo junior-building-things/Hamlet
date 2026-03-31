@@ -185,10 +185,12 @@ interface MqlResponse {
   data: Record<string, MqlItem[]>;
 }
 
-// Fetch priority, PRD and compliance URL for all of Thomas's TikTok stories in one MQL sweep
-async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string }>> {
-  const map = new Map<string, { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string }>();
-  const MQL = 'SELECT `work_item_id`, `priority`, `wiki`, `field_due3fb`, `updated_at` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
+interface ExtendedFields { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string; name: string; status: string; nodeKey: string }
+
+// Fetch all PM-owned TikTok stories via MQL — returns every story regardless of todo status
+async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
+  const map = new Map<string, ExtendedFields>();
+  const MQL = 'SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at`, `current_nodes` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
   const GROUP_ID = '1';
   let sessionId: string | undefined;
   let page = 1;
@@ -196,7 +198,7 @@ async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; 
   while (true) {
     const args: Record<string, unknown> = sessionId
       ? { session_id: sessionId, group_pagination_list: [{ group_id: GROUP_ID, page_num: page }] }
-      : { project_key: TIKTOK_PROJECT_KEY, mql: MQL };
+      : { project_key: 'tiktok', mql: MQL };
 
     const raw = await callMeegoMcp('search_by_mql', args);
     let data: MqlResponse;
@@ -212,14 +214,19 @@ async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; 
 
     for (const item of items) {
       let id = '';
+      let name = '';
       let priority: Priority = 'P2';
       let prd = '';
       let complianceUrl = '';
-
       let lastUpdated = '';
+      let status = 'Unknown';
+      let nodeKey = '';
+
       for (const f of item.moql_field_list ?? []) {
         if (f.key === 'work_item_id') {
           id = String(f.value.long_value ?? '');
+        } else if (f.key === 'name') {
+          name = f.value.varchar_value ?? f.value.string_value ?? '';
         } else if (f.key === 'priority') {
           const label = f.value.key_label_value?.label ?? '';
           if (/^P[0-3]$/.test(label)) priority = label as Priority;
@@ -236,10 +243,17 @@ async function fetchExtendedFields(): Promise<Map<string, { priority: Priority; 
             const ts = f.value.long_value;
             if (ts) lastUpdated = new Date(ts).toISOString().split('T')[0];
           }
+        } else if (f.key === 'current_nodes') {
+          // current_nodes may be a label like "iOS 开发" or a structured value
+          const label = f.value.key_label_value?.label ?? f.value.varchar_value ?? f.value.string_value ?? '';
+          if (label) {
+            status = translateNode(label);
+            nodeKey = f.value.key_label_value?.key ?? '';
+          }
         }
       }
 
-      if (id) map.set(id, { priority, prd, complianceUrl, lastUpdated });
+      if (id) map.set(id, { priority, prd, complianceUrl, lastUpdated, name, status, nodeKey });
     }
 
     if (map.size >= total || items.length === 0) break;
@@ -265,10 +279,10 @@ interface MeegoTodoResponse {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
-  // Fetch todo items and extended fields (priority, PRD, compliance) in parallel.
-  // fetchExtendedFields uses search_by_mql which may not be available on all
-  // MCP server versions — fall back to an empty map if it fails.
-  const [allItems, extendedFields] = await Promise.all([
+  // Fetch todo items and all PM-owned stories in parallel.
+  // MQL returns ALL stories where user is PM (regardless of todo status).
+  // list_todo provides accurate active node info for items with pending actions.
+  const [todoItems, allOwned] = await Promise.all([
     (async () => {
       const items: MeegoTodoItem[] = [];
       let page = 1;
@@ -286,36 +300,61 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       }
       return items;
     })(),
-    fetchExtendedFields().catch((err) => {
-      console.error('[meego] fetchExtendedFields failed:', err);
-      return new Map<string, { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string }>();
+    fetchAllOwnedStories().catch((err) => {
+      console.error('[meego] fetchAllOwnedStories failed:', err);
+      return new Map<string, ExtendedFields>();
     }),
   ]);
 
-  return allItems
-    .filter(item =>
-      item.project_key === projectKey &&
-      item.work_item_info.work_item_type_key === 'story'
-    )
-    .map((item): Feature => {
-      const ext = extendedFields.get(String(item.work_item_info.work_item_id));
-      return {
-        id: String(item.work_item_info.work_item_id),
-        name: item.work_item_info.work_item_name,
-        description: '',
-        status: translateNode(item.node_info?.node_name ?? 'Unknown'),
-        priority: ext?.priority ?? 'P2',
-        owner: 'Thomas',
-        tasks: [],
-        lastUpdated: ext?.lastUpdated || new Date().toISOString().split('T')[0],
-        prd: ext?.prd || undefined,
-        complianceUrl: ext?.complianceUrl || undefined,
-        meegoProjectKey: item.project_key,
-        meegoIssueId: String(item.work_item_info.work_item_id),
-        meegoNodeKey: item.node_info?.node_state_key ?? '',
-        meegoUrl: `https://meego.larkoffice.com/${item.project_key}/story/detail/${item.work_item_info.work_item_id}`,
-      };
+  // Build features from todo items (these have accurate node info)
+  const todoIds = new Set<string>();
+  const features: Feature[] = [];
+
+  for (const item of todoItems) {
+    if (item.project_key !== projectKey || item.work_item_info.work_item_type_key !== 'story') continue;
+    const id = String(item.work_item_info.work_item_id);
+    todoIds.add(id);
+    const ext = allOwned.get(id);
+    features.push({
+      id,
+      name: item.work_item_info.work_item_name,
+      description: '',
+      status: translateNode(item.node_info?.node_name ?? 'Unknown'),
+      priority: ext?.priority ?? 'P2',
+      owner: 'Thomas',
+      tasks: [],
+      lastUpdated: ext?.lastUpdated || new Date().toISOString().split('T')[0],
+      prd: ext?.prd || undefined,
+      complianceUrl: ext?.complianceUrl || undefined,
+      meegoProjectKey: item.project_key,
+      meegoIssueId: id,
+      meegoNodeKey: item.node_info?.node_state_key ?? '',
+      meegoUrl: `https://meego.larkoffice.com/${item.project_key}/story/detail/${item.work_item_info.work_item_id}`,
     });
+  }
+
+  // Add stories from MQL that weren't in the todo list
+  for (const [id, ext] of allOwned) {
+    if (todoIds.has(id)) continue;
+    features.push({
+      id,
+      name: ext.name,
+      description: '',
+      status: ext.status,
+      priority: ext.priority,
+      owner: 'Thomas',
+      tasks: [],
+      lastUpdated: ext.lastUpdated || new Date().toISOString().split('T')[0],
+      prd: ext.prd || undefined,
+      complianceUrl: ext.complianceUrl || undefined,
+      meegoProjectKey: projectKey,
+      meegoIssueId: id,
+      meegoNodeKey: ext.nodeKey,
+      meegoUrl: `https://meego.larkoffice.com/${projectKey}/story/detail/${id}`,
+    });
+  }
+
+  return features;
 }
 
 export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: string): Promise<{
