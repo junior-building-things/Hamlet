@@ -16,13 +16,11 @@ export async function GET(req: NextRequest) {
   jar.set('oauth_state', state, { httpOnly: true, sameSite: 'lax', maxAge: 600, path: '/' });
 
   const params = new URLSearchParams({
-    client_id:     appId,
-    redirect_uri:  redirectUri,
-    response_type: 'code',
+    app_id:       appId,
+    redirect_uri: redirectUri,
     state,
-    // Request scopes needed for Drive search (AB reports), contacts (avatars), chat search and member management
-    scope:         'search:docs:read drive:drive.search:readonly contact:user.id:readonly im:chat:read im:chat.members:write_only',
+    scope:        'search:docs:read drive:drive.search:readonly contact:user.id:readonly im:chat:read im:chat.members:write_only',
   });
 
-  return NextResponse.redirect(`${base}/open-apis/authen/v2/authorize?${params}`);
+  return NextResponse.redirect(`${base}/open-apis/authen/v1/authorize?${params}`);
 }
