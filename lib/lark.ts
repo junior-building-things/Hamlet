@@ -1025,9 +1025,11 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
   const searchToken = userAccessToken || botToken;
   console.log('[lark] joinFeatureChat:', featureName, 'using', userAccessToken ? 'user token' : 'bot token');
 
-  // Search for group chats matching the feature name
+  // Search using a shorter query for broader results (we'll match precisely via description)
+  // Use first few significant words to avoid missing chats with prefixed/truncated names
+  const searchQuery = featureName.split(/\s+/).slice(0, 5).join(' ');
   const searchRes = await fetch(
-    `${LARK_BASE_URL}/open-apis/im/v1/chats/search?query=${encodeURIComponent(featureName)}&page_size=5`,
+    `${LARK_BASE_URL}/open-apis/im/v1/chats/search?query=${encodeURIComponent(searchQuery)}&page_size=20`,
     { headers: { Authorization: `Bearer ${searchToken}` } },
   );
   const searchData = await parseJson(searchRes, 'chat_search') as {
@@ -1049,19 +1051,17 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
   // Extract Meego work item ID for description matching
   const meegoId = meegoUrl?.match(/\/detail\/(\d+)/)?.[1] ?? '';
 
-  // Filter candidates by name
-  const nameLower = featureName.toLowerCase().trim();
+  // Exclude known non-feature groups
   const EXCLUDE_PATTERNS = ['libra', 'checkpoint', '管控'];
   const candidates = chats.filter(c => {
     const chatLower = c.name.toLowerCase();
-    if (!chatLower.includes(nameLower)) return false;
     if (EXCLUDE_PATTERNS.some(p => chatLower.includes(p))) return false;
     return true;
   });
 
   // If we have a Meego ID, check each candidate's description for a match
   let bestChat: { chat_id: string; name: string } | null = null;
-  if (meegoId && candidates.length > 1) {
+  if (meegoId && candidates.length > 0) {
     for (const c of candidates) {
       try {
         const infoRes = await fetch(
@@ -1078,12 +1078,14 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
     }
   }
 
-  // Fallback: prefer chats with known feature group suffixes, then first candidate
+  // Fallback: name-based matching — require feature name in chat name
   if (!bestChat) {
-    bestChat = candidates.find(c => {
+    const nameLower = featureName.toLowerCase().trim();
+    const nameMatches = candidates.filter(c => c.name.toLowerCase().includes(nameLower));
+    bestChat = nameMatches.find(c => {
       const chatLower = c.name.toLowerCase();
       return chatLower.includes('features group') || chatLower.includes('需求同步群');
-    }) ?? candidates[0] ?? null;
+    }) ?? nameMatches[0] ?? null;
   }
 
   if (!bestChat) {
