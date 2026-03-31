@@ -1076,18 +1076,8 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
     }
   }
 
-  // Fallback: name-based matching — require feature name in chat name
   if (!bestChat) {
-    const nameLower = featureName.toLowerCase().trim();
-    const nameMatches = candidates.filter(c => c.name.toLowerCase().includes(nameLower));
-    bestChat = nameMatches.find(c => {
-      const chatLower = c.name.toLowerCase();
-      return chatLower.includes('features group') || chatLower.includes('需求同步群');
-    }) ?? nameMatches[0] ?? null;
-  }
-
-  if (!bestChat) {
-    console.log('[lark] no chat match for:', featureName, '— candidates:', chats.map(c => c.name));
+    console.log('[lark] no chat with Meego ID in description for:', featureName, '— candidates:', chats.map(c => c.name));
     return null;
   }
 
