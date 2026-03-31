@@ -1046,16 +1046,22 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
     return null;
   }
 
-  // Flexible match — chat name contains the feature name and is a feature/sync group
-  // Handles prefixes like "(Android44.7;iOS44.7✅)", "(44.2)", "[42.4]" and
-  // suffixes like "–[Features group]", "- [需求同步群]"
+  // Match chat name containing the feature name
+  // Exclude known non-feature groups (Libra, Checkpoint, etc.)
   const nameLower = featureName.toLowerCase().trim();
-  const bestChat = chats.find(c => {
+  const EXCLUDE_PATTERNS = ['libra', 'checkpoint', '管控'];
+  const candidates = chats.filter(c => {
     const chatLower = c.name.toLowerCase();
-    const containsName = chatLower.includes(nameLower);
-    const isFeatureGroup = chatLower.includes('features group') || chatLower.includes('需求同步群');
-    return containsName && isFeatureGroup;
+    if (!chatLower.includes(nameLower)) return false;
+    if (EXCLUDE_PATTERNS.some(p => chatLower.includes(p))) return false;
+    return true;
   });
+
+  // Prefer chats with known feature group suffixes
+  const bestChat = candidates.find(c => {
+    const chatLower = c.name.toLowerCase();
+    return chatLower.includes('features group') || chatLower.includes('需求同步群');
+  }) ?? candidates[0] ?? null;
 
   if (!bestChat) {
     console.log('[lark] no chat match for:', featureName, '— candidates:', chats.map(c => c.name));
