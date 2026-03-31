@@ -218,8 +218,22 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
       : { project_key: 'TikTok', mql: MQL };
 
     console.log('[meego] MQL args:', JSON.stringify(args));
-    const raw = await callMeegoMcp('search_by_mql', args);
-    console.log('[meego] MQL raw response (first 300):', raw.slice(0, 300));
+    // Try calling MCP directly to debug — send project_key as top-level
+    const token = process.env.MEEGO_USER_TOKEN!;
+    const directRes = await fetch(MEEGO_MCP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Mcp-Token': token },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/call',
+        params: { name: 'search_by_mql', arguments: args },
+      }),
+    });
+    const directData = await directRes.json();
+    console.log('[meego] MQL direct response:', JSON.stringify(directData).slice(0, 500));
+    const raw = directData.result?.content?.[0]?.text ?? '';
+    console.log('[meego] MQL raw text (first 300):', raw.slice(0, 300));
     let data: MqlResponse;
     try {
       data = JSON.parse(raw) as MqlResponse;
