@@ -198,7 +198,7 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
   while (true) {
     const args: Record<string, unknown> = sessionId
       ? { session_id: sessionId, group_pagination_list: [{ group_id: GROUP_ID, page_num: page }] }
-      : { project_key: 'tiktok', mql: MQL };
+      : { project_key: 'TikTok', mql: MQL };
 
     const raw = await callMeegoMcp('search_by_mql', args);
     let data: MqlResponse;
