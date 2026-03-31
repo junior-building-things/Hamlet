@@ -24,5 +24,5 @@ export async function GET(req: NextRequest) {
     scope:         'search:docs:read drive:drive.search:readonly contact:user.id:readonly im:chat:read im:chat.members:write_only',
   });
 
-  return NextResponse.redirect(`${base}/open-apis/authen/v2/index?${params}`);
+  return NextResponse.redirect(`${base}/open-apis/authen/v2/authorize?${params}`);
 }
