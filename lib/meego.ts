@@ -207,7 +207,11 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
     } catch {
       throw new Error(`search_by_mql returned non-JSON: ${raw}`);
     }
-    if (!sessionId) sessionId = data.session_id;
+    if (!sessionId) {
+      sessionId = data.session_id;
+      const total = data.list?.[0]?.count ?? 0;
+      console.log('[meego] MQL returned total:', total, 'stories owned by current user');
+    }
 
     const total = data.list?.[0]?.count ?? 0;
     const items = data.data?.[GROUP_ID] ?? [];
