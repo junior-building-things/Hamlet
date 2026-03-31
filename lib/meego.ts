@@ -190,7 +190,7 @@ interface ExtendedFields { priority: Priority; prd: string; complianceUrl: strin
 // Fetch all PM-owned TikTok stories via MQL — returns every story regardless of todo status
 async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
   const map = new Map<string, ExtendedFields>();
-  const MQL = 'SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at`, `current_nodes` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
+  const MQL = 'SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
   const GROUP_ID = '1';
   let sessionId: string | undefined;
   let page = 1;
@@ -223,9 +223,6 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
       let prd = '';
       let complianceUrl = '';
       let lastUpdated = '';
-      let status = 'Unknown';
-      let nodeKey = '';
-
       for (const f of item.moql_field_list ?? []) {
         if (f.key === 'work_item_id') {
           id = String(f.value.long_value ?? '');
@@ -247,17 +244,10 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
             const ts = f.value.long_value;
             if (ts) lastUpdated = new Date(ts).toISOString().split('T')[0];
           }
-        } else if (f.key === 'current_nodes') {
-          // current_nodes may be a label like "iOS 开发" or a structured value
-          const label = f.value.key_label_value?.label ?? f.value.varchar_value ?? f.value.string_value ?? '';
-          if (label) {
-            status = translateNode(label);
-            nodeKey = f.value.key_label_value?.key ?? '';
-          }
         }
       }
 
-      if (id) map.set(id, { priority, prd, complianceUrl, lastUpdated, name, status, nodeKey });
+      if (id) map.set(id, { priority, prd, complianceUrl, lastUpdated, name, status: 'Unknown', nodeKey: '' });
     }
 
     if (map.size >= total || items.length === 0) break;
