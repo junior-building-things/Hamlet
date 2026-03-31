@@ -531,7 +531,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   if (workItemName) {
     try {
       if (!chatId) {
-        chatId = (await joinFeatureChat(workItemName, userAccessToken)) ?? '';
+        chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl)) ?? '';
       }
       if (chatId) {
         const qrUrl = await getPackageQrUrl(chatId);

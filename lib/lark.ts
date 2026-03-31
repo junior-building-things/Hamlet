@@ -1014,7 +1014,7 @@ export async function batchFetchAvatars(
  * Search for a Lark group chat matching the feature name and add the bot to it.
  * Returns true if the bot was successfully added (or was already a member).
  */
-export async function joinFeatureChat(featureName: string, userAccessToken?: string): Promise<string | null> {
+export async function joinFeatureChat(featureName: string, userAccessToken?: string, meegoUrl?: string): Promise<string | null> {
   if (!featureName) return null;
 
   const botToken = await getAccessToken();
@@ -1046,8 +1046,10 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
     return null;
   }
 
-  // Match chat name containing the feature name
-  // Exclude known non-feature groups (Libra, Checkpoint, etc.)
+  // Extract Meego work item ID for description matching
+  const meegoId = meegoUrl?.match(/\/detail\/(\d+)/)?.[1] ?? '';
+
+  // Filter candidates by name
   const nameLower = featureName.toLowerCase().trim();
   const EXCLUDE_PATTERNS = ['libra', 'checkpoint', '管控'];
   const candidates = chats.filter(c => {
@@ -1057,11 +1059,32 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
     return true;
   });
 
-  // Prefer chats with known feature group suffixes
-  const bestChat = candidates.find(c => {
-    const chatLower = c.name.toLowerCase();
-    return chatLower.includes('features group') || chatLower.includes('需求同步群');
-  }) ?? candidates[0] ?? null;
+  // If we have a Meego ID, check each candidate's description for a match
+  let bestChat: { chat_id: string; name: string } | null = null;
+  if (meegoId && candidates.length > 1) {
+    for (const c of candidates) {
+      try {
+        const infoRes = await fetch(
+          `${LARK_BASE_URL}/open-apis/im/v1/chats/${c.chat_id}`,
+          { headers: { Authorization: `Bearer ${searchToken}` } },
+        );
+        const infoData = await infoRes.json() as { code: number; data?: { description?: string } };
+        if (infoData.code === 0 && infoData.data?.description?.includes(meegoId)) {
+          bestChat = c;
+          console.log('[lark] matched chat by Meego ID in description:', c.name);
+          break;
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  // Fallback: prefer chats with known feature group suffixes, then first candidate
+  if (!bestChat) {
+    bestChat = candidates.find(c => {
+      const chatLower = c.name.toLowerCase();
+      return chatLower.includes('features group') || chatLower.includes('需求同步群');
+    }) ?? candidates[0] ?? null;
+  }
 
   if (!bestChat) {
     console.log('[lark] no chat match for:', featureName, '— candidates:', chats.map(c => c.name));
