@@ -525,7 +525,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat (best-effort, don't block)
   if (workItemName) {
-    joinFeatureChat(workItemName).catch(e =>
+    joinFeatureChat(workItemName, userAccessToken).catch(e =>
       console.warn('[sync] join feature chat error:', e),
     );
   }

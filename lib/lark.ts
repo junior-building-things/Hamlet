@@ -1014,17 +1014,20 @@ export async function batchFetchAvatars(
  * Search for a Lark group chat matching the feature name and add the bot to it.
  * Returns true if the bot was successfully added (or was already a member).
  */
-export async function joinFeatureChat(featureName: string): Promise<boolean> {
+export async function joinFeatureChat(featureName: string, userAccessToken?: string): Promise<boolean> {
   if (!featureName) return false;
 
-  const token = await getAccessToken();
+  const botToken = await getAccessToken();
   const appId = process.env.LARK_APP_ID;
   if (!appId) return false;
+
+  // Use user token to search (bot can only find chats it's already in)
+  const searchToken = userAccessToken || botToken;
 
   // Search for group chats matching the feature name
   const searchRes = await fetch(
     `${LARK_BASE_URL}/open-apis/im/v1/chats/search?query=${encodeURIComponent(featureName)}&page_size=5`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    { headers: { Authorization: `Bearer ${searchToken}` } },
   );
   const searchData = await parseJson(searchRes, 'chat_search') as {
     code: number; msg?: string;
@@ -1057,12 +1060,12 @@ export async function joinFeatureChat(featureName: string): Promise<boolean> {
 
   console.log('[lark] found chat:', bestChat.name, '— adding bot');
 
-  // Add the bot to the chat
+  // Add the bot to the chat (must use bot token)
   const addRes = await fetch(
     `${LARK_BASE_URL}/open-apis/im/v1/chats/${bestChat.chat_id}/members?member_id_type=app_id`,
     {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ id_list: [appId] }),
     },
   );
