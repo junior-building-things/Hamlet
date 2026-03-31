@@ -307,6 +307,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
   for (const item of todoItems) {
     if (item.project_key !== projectKey || item.work_item_info.work_item_type_key !== 'story') continue;
     const id = String(item.work_item_info.work_item_id);
+    if (todoIds.has(id)) continue; // skip duplicates from list_todo
     todoIds.add(id);
     const ext = allOwned.get(id);
     features.push({
