@@ -1046,12 +1046,15 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
     return false;
   }
 
-  // Exact match — chat name should be "{featureName}–[Features group]"
+  // Flexible match — chat name contains the feature name and is a feature/sync group
+  // Handles prefixes like "(Android44.7;iOS44.7✅)", "(44.2)", "[42.4]" and
+  // suffixes like "–[Features group]", "- [需求同步群]"
   const nameLower = featureName.toLowerCase().trim();
   const bestChat = chats.find(c => {
     const chatLower = c.name.toLowerCase();
-    // Match: "Feature Name–[Features group]" or "Feature Name -[Features group]" etc.
-    return chatLower.startsWith(nameLower) && chatLower.includes('features group');
+    const containsName = chatLower.includes(nameLower);
+    const isFeatureGroup = chatLower.includes('features group') || chatLower.includes('需求同步群');
+    return containsName && isFeatureGroup;
   });
 
   if (!bestChat) {
