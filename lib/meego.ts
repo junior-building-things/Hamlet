@@ -352,7 +352,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
   return features;
 }
 
-export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: string): Promise<{
+export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: string, cachedChatId?: string): Promise<{
   status: string;
   name: string;
   owner: string;
@@ -379,6 +379,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   iosVersion: string;
   abReportUrl: string;
   packageQrUrl: string;
+  chatId: string;
   pocEmails: Record<string, string>;
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
@@ -526,9 +527,12 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   let packageQrUrl = '';
+  let chatId = cachedChatId ?? '';
   if (workItemName) {
     try {
-      const chatId = await joinFeatureChat(workItemName, userAccessToken);
+      if (!chatId) {
+        chatId = (await joinFeatureChat(workItemName, userAccessToken)) ?? '';
+      }
       if (chatId) {
         const qrUrl = await getPackageQrUrl(chatId);
         if (qrUrl) packageQrUrl = qrUrl;
@@ -565,6 +569,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     iosVersion,
     abReportUrl,
     packageQrUrl,
+    chatId,
     pocEmails,
   };
 }

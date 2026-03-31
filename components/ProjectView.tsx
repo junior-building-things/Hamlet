@@ -121,7 +121,7 @@ export function ProjectView({ features, setFeatures }: Props) {
         try {
           const res  = await fetch('/api/meego/sync', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ meegoUrl: f.meegoUrl }),
+            body: JSON.stringify({ meegoUrl: f.meegoUrl, chatId: f.chatId }),
           });
           if (!res.ok) return;
           const d = await res.json() as Record<string, unknown>;
@@ -156,6 +156,7 @@ export function ProjectView({ features, setFeatures }: Props) {
             iosVersion:      (d.iosVersion       as string) || p.iosVersion,
             abReportUrl:     (d.abReportUrl      as string) || p.abReportUrl,
             packageQrUrl:    (d.packageQrUrl     as string) || p.packageQrUrl,
+            chatId:          (d.chatId           as string) || p.chatId,
             lastUpdated:     (d.lastUpdated      as string) || new Date().toISOString().split('T')[0],
           }));
         } catch { /* ignore per-card errors */ }
@@ -222,7 +223,7 @@ export function ProjectView({ features, setFeatures }: Props) {
     try {
       const res  = await fetch('/api/meego/sync', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meegoUrl: feature.meegoUrl }),
+        body: JSON.stringify({ meegoUrl: feature.meegoUrl, chatId: feature.chatId }),
       });
       if (!res.ok) throw new Error('Sync failed');
       const d = await res.json() as Record<string, unknown>;
@@ -384,7 +385,7 @@ export function ProjectView({ features, setFeatures }: Props) {
         fetch('/api/meego/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ meegoUrl: feature.meegoUrl }),
+          body: JSON.stringify({ meegoUrl: feature.meegoUrl, chatId: feature.chatId }),
         })
           .then(r => r.ok ? r.json() : null)
           .then((d: Record<string, unknown> | null) => {

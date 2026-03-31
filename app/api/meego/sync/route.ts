@@ -45,7 +45,7 @@ async function getFreshUserToken(): Promise<string | undefined> {
 }
 
 export async function POST(req: NextRequest) {
-  const { meegoUrl } = await req.json() as { meegoUrl?: string };
+  const { meegoUrl, chatId } = await req.json() as { meegoUrl?: string; chatId?: string };
 
   if (!meegoUrl) {
     return NextResponse.json({ error: 'meegoUrl is required' }, { status: 400 });
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const userToken = await getFreshUserToken();
-    const result = await syncFeatureStatus(meegoUrl, userToken);
+    const result = await syncFeatureStatus(meegoUrl, userToken, chatId);
 
     // Resolve POC avatars from Lark (best-effort, don't block on failure)
     let pocAvatars: Record<string, string> = {};
