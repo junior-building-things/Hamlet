@@ -34,12 +34,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=token_exchange`);
   }
 
-  // Step 2: exchange code for user access token
-  const tokenRes = await fetch(`${base}/open-apis/authen/v1/oidc/token`, {
+  // Step 2: exchange code for user access token (classic endpoint)
+  const tokenRes = await fetch(`${base}/open-apis/authen/v1/access_token`, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appTokenData.app_access_token}` },
+    headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({
-      grant_type: 'authorization_code',
+      app_access_token: appTokenData.app_access_token,
+      grant_type:       'authorization_code',
       code,
     }),
   });
