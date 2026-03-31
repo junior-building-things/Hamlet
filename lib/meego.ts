@@ -384,8 +384,19 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
-    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909'],
+    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'chat_group', 'group_chat', 'field_chat'],
   });
+
+  // Debug: search for group chat field
+  const allFieldLines = raw.split('\n').filter((l: string) => l.includes('群') || l.includes('chat') || l.includes('Chat') || l.includes('group'));
+  if (allFieldLines.length > 0) console.log('[meego] chat-related fields:', allFieldLines);
+
+  // Also check field config for chat-related fields
+  try {
+    const configRaw = await callMeegoMcp('list_workitem_field_config', { url: meegoUrl });
+    const chatFields = configRaw.split('\n').filter((l: string) => l.includes('群') || l.includes('chat') || l.includes('Chat'));
+    if (chatFields.length > 0) console.log('[meego] chat-related field configs:', chatFields.slice(0, 10));
+  } catch { /* ignore */ }
 
   const lines = raw.split('\n');
   let workItemName = '';
