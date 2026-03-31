@@ -34,13 +34,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=token_exchange`);
   }
 
-  // Step 2: exchange code for user access token (classic endpoint, not OIDC)
-  const tokenRes = await fetch(`${base}/open-apis/authen/v1/access_token`, {
+  // Step 2: exchange code for user access token via OIDC endpoint (supports scopes + refresh tokens)
+  const tokenRes = await fetch(`${base}/open-apis/authen/v2/oidc/token`, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appTokenData.app_access_token}` },
     body:    JSON.stringify({
-      app_access_token: appTokenData.app_access_token,
-      grant_type:       'authorization_code',
+      grant_type: 'authorization_code',
       code,
     }),
   });
