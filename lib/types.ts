@@ -42,4 +42,5 @@ export interface Feature {
   contentDesigner?: string;
   iosVersion?: string;
   abReportUrl?: string;
+  packageQrUrl?: string;
 }

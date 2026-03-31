@@ -1014,12 +1014,12 @@ export async function batchFetchAvatars(
  * Search for a Lark group chat matching the feature name and add the bot to it.
  * Returns true if the bot was successfully added (or was already a member).
  */
-export async function joinFeatureChat(featureName: string, userAccessToken?: string): Promise<boolean> {
-  if (!featureName) return false;
+export async function joinFeatureChat(featureName: string, userAccessToken?: string): Promise<string | null> {
+  if (!featureName) return null;
 
   const botToken = await getAccessToken();
   const appId = process.env.LARK_APP_ID;
-  if (!appId) return false;
+  if (!appId) return null;
 
   // Use user token to search (bot can only find chats it's already in)
   const searchToken = userAccessToken || botToken;
@@ -1037,13 +1037,13 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
 
   if (searchData.code !== 0) {
     console.warn('[lark] chat search failed:', searchData.code, searchData.msg);
-    return false;
+    return null;
   }
 
   const chats = searchData.data?.items ?? [];
   if (chats.length === 0) {
     console.log('[lark] no chat found for feature:', featureName);
-    return false;
+    return null;
   }
 
   // Flexible match — chat name contains the feature name and is a feature/sync group
@@ -1059,7 +1059,7 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
 
   if (!bestChat) {
     console.log('[lark] no chat match for:', featureName, '— candidates:', chats.map(c => c.name));
-    return false;
+    return null;
   }
 
   console.log('[lark] found chat:', bestChat.name, '— adding bot');
@@ -1081,12 +1081,70 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
     // 230001 = already in group — that's fine
     if (addData.code === 230001) {
       console.log('[lark] bot already in chat:', bestChat.name);
-      return true;
+      return bestChat.chat_id;
     }
     console.warn('[lark] failed to add bot to chat:', addData.code, addData.msg);
-    return false;
+    return null;
   }
 
   console.log('[lark] bot added to chat:', bestChat.name);
-  return true;
+  return bestChat.chat_id;
+}
+
+// ─── Find package QR code from chat messages ─────────────────────────────────
+
+interface LarkMessage {
+  message_id: string;
+  msg_type: string;
+  body?: { content?: string };
+}
+
+/**
+ * Search a chat's recent messages for the latest package release QR code.
+ * Returns a proxy URL like /api/lark/image?messageId=X&imageKey=Y, or null.
+ */
+export async function getPackageQrUrl(chatId: string): Promise<string | null> {
+  const token = await getAccessToken();
+
+  // Fetch recent messages (newest first)
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/im/v1/messages?container_id_type=chat&container_id=${chatId}&page_size=50&sort_type=ByCreateTimeDesc`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const data = await parseJson(res, 'list_messages') as {
+    code: number; msg?: string;
+    data?: { items?: LarkMessage[] };
+  };
+
+  if (data.code !== 0) {
+    console.warn('[lark] list messages failed:', data.code, data.msg);
+    return null;
+  }
+
+  const messages = data.data?.items ?? [];
+
+  for (const msg of messages) {
+    if (!msg.body?.content) continue;
+
+    let content: string;
+    try {
+      // Content is a JSON string for structured messages
+      content = msg.body.content;
+    } catch { continue; }
+
+    // Look for package release messages
+    if (!content.includes('artifacts') && !content.includes('released') && !content.includes('已发布')) continue;
+
+    // Extract image_key from the content
+    // For post messages, images are elements with tag:"img" and image_key
+    const imageKeyMatch = content.match(/"image_key"\s*:\s*"([^"]+)"/);
+    if (imageKeyMatch) {
+      const imageKey = imageKeyMatch[1];
+      console.log('[lark] found package QR in message:', msg.message_id, 'imageKey:', imageKey);
+      return `/api/lark/image?messageId=${msg.message_id}&imageKey=${imageKey}`;
+    }
+  }
+
+  console.log('[lark] no package QR found in', messages.length, 'messages');
+  return null;
 }

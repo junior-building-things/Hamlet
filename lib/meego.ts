@@ -1,5 +1,5 @@
 import { Priority, Feature } from './types';
-import { extractFigmaUrlFromPrd, searchAbReport, joinFeatureChat } from './lark';
+import { extractFigmaUrlFromPrd, searchAbReport, joinFeatureChat, getPackageQrUrl } from './lark';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const MY_EMAIL = process.env.OWNER_EMAIL!;
@@ -378,6 +378,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   contentDesigner: string;
   iosVersion: string;
   abReportUrl: string;
+  packageQrUrl: string;
   pocEmails: Record<string, string>;
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
@@ -523,12 +524,18 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     }
   }
 
-  // Add bot to the feature's group chat (best-effort, don't block)
-  console.log('[meego] joinFeatureChat userAccessToken present:', !!userAccessToken);
+  // Add bot to the feature's group chat and find package QR code
+  let packageQrUrl = '';
   if (workItemName) {
-    joinFeatureChat(workItemName, userAccessToken).catch(e =>
-      console.warn('[sync] join feature chat error:', e),
-    );
+    try {
+      const chatId = await joinFeatureChat(workItemName, userAccessToken);
+      if (chatId) {
+        const qrUrl = await getPackageQrUrl(chatId);
+        if (qrUrl) packageQrUrl = qrUrl;
+      }
+    } catch (e) {
+      console.warn('[sync] join feature chat / package QR error:', e);
+    }
   }
 
   return {
@@ -557,6 +564,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     contentDesigner,
     iosVersion,
     abReportUrl,
+    packageQrUrl,
     pocEmails,
   };
 }

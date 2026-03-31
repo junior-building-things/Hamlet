@@ -105,6 +105,15 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <LinkIcons feature={feature} ringColor="#13162a" />
       </div>
 
+      {/* Package QR */}
+      <div className="hidden sm:flex items-center py-3 pl-4">
+        {feature.packageQrUrl && (
+          <a href={feature.packageQrUrl} target="_blank" rel="noreferrer" className="block">
+            <img src={feature.packageQrUrl} alt="Package QR" className="w-8 h-8 rounded" />
+          </a>
+        )}
+      </div>
+
       {/* Team avatars */}
       <div className="hidden sm:flex items-center py-3 pl-4">
         <TeamAvatars feature={feature} ringColor="#13162a" />
