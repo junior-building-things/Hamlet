@@ -458,62 +458,37 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   // Collect name→email pairs for avatar resolution
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
 
-  // Fetch version from node detail JSON
+  // Fetch version from work item brief (version fields are work-item-level, not node-level)
   // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
   let iosVersion = '';
   try {
-    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    interface NodeFormItem { field_key?: string; field_name?: string; value?: string; value_label?: string }
-    interface NodeEntry { basic?: { node_key?: string; name?: string }; form_items?: NodeFormItem[] }
-    const nodeData = JSON.parse(nodeRaw) as { list?: NodeEntry[] };
+    const versionFields = ['ios_actual_online_version', 'android_actual_online_version', 'field_08a9ca', 'field_c88970'];
+    const versionRaw = await callMeegoMcp('get_workitem_brief', {
+      url: meegoUrl,
+      fields: versionFields,
+    });
 
-    // Collect work item IDs for a given field key across all nodes
-    function collectVersionIds(fieldKey: string): number[] {
-      const ids: number[] = [];
-      for (const node of nodeData.list ?? []) {
-        for (const fi of node.form_items ?? []) {
-          if (fi.field_key === fieldKey) {
-            if (fi.value_label) return []; // handled separately
-            try {
-              const parsed = JSON.parse(fi.value ?? '[]') as number[];
-              for (const id of parsed) { if (!ids.includes(id)) ids.push(id); }
-            } catch { /* skip */ }
-          }
-        }
-      }
-      return ids;
-    }
-
-    function getValueLabel(fieldKey: string): string {
-      for (const node of nodeData.list ?? []) {
-        for (const fi of node.form_items ?? []) {
-          if (fi.field_key === fieldKey && fi.value_label) return fi.value_label;
-        }
-      }
-      return '';
-    }
-
-    // Resolve work item IDs to the lowest short version name
-    async function resolveVersion(fieldKey: string): Promise<string> {
-      const label = getValueLabel(fieldKey);
-      if (label) return label;
-      const ids = collectVersionIds(fieldKey);
-      if (ids.length === 0) return '';
+    // Extract version names from the brief response
+    // Format: | fieldName | [{"工作项 ID":"123","工作项名称":"TikTok-M-iOS-44.6.0"}] |
+    function extractVersionFromBrief(fieldName: string): string {
+      const regex = new RegExp(`${fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\|\\s*([^\\n]+)`);
+      const match = versionRaw.match(regex);
+      if (!match) return '';
+      const val = match[1].trim();
+      if (val === '[]' || !val) return '';
+      // Parse version names from JSON-like array
       const names: string[] = [];
-      for (const id of ids) {
-        try {
-          const briefRaw = await callMeegoMcp('get_workitem_brief', {
-            url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/version/detail/${id}`,
-          });
-          const nameMatch = briefRaw.match(/工作项名称\s*\|\s*([^|\n]+)/);
-          if (nameMatch) names.push(nameMatch[1].trim());
-        } catch { /* skip */ }
+      const nameRegex = /工作项名称[""]\s*[:：]\s*["""]([^""]+)["""]/g;
+      let m: RegExpExecArray | null;
+      while ((m = nameRegex.exec(val)) !== null) {
+        names.push(m[1]);
       }
+      if (names.length === 0) return '';
+      // Extract short version numbers and pick the lowest
       const shortNames = names.map(n => {
-        const m = n.match(/(\d+\.\d+)(?:\.\d+)?$/);
-        return m ? m[1] : n;
+        const vm = n.match(/(\d+\.\d+)(?:\.\d+)?$/);
+        return vm ? vm[1] : n;
       });
-      if (shortNames.length === 0) return '';
       shortNames.sort((a, b) => {
         const [aMaj, aMin] = a.split('.').map(Number);
         const [bMaj, bMin] = b.split('.').map(Number);
@@ -522,8 +497,6 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       return shortNames[0];
     }
 
-    // Collect all available versions, pick the lowest
-    // Priority: launched versions first, then planned as fallback
     function pickLowest(a: string, b: string): string {
       if (!a) return b;
       if (!b) return a;
@@ -533,19 +506,18 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       return cmp <= 0 ? a : b;
     }
 
-    const iosLaunched = await resolveVersion('ios_actual_online_version');
-    const androidLaunched = await resolveVersion('android_actual_online_version');
+    // Prioritize launched, fall back to planned
+    const iosLaunched = extractVersionFromBrief('iOS实际上车版本');
+    const androidLaunched = extractVersionFromBrief('Android实际上车版本');
     const launched = pickLowest(iosLaunched, androidLaunched);
 
     if (launched) {
       iosVersion = launched;
     } else {
-      // Fall back to planned versions
-      const iosPlanned = await resolveVersion('field_08a9ca');
-      const androidPlanned = await resolveVersion('field_c88970');
+      const iosPlanned = extractVersionFromBrief('iOS预计上车版本');
+      const androidPlanned = extractVersionFromBrief('Android预计上车版本');
       iosVersion = pickLowest(iosPlanned, androidPlanned);
     }
-
   } catch (e) {
     console.log('[meego] version fetch failed:', e);
   }
