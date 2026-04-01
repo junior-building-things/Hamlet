@@ -25,11 +25,12 @@ export async function GET(req: NextRequest) {
 
   const token = await getBotToken();
 
-  // For card message images, use the message resource endpoint
-  // The bot must be in the chat to access the resource
   const urls = [
-    messageId ? `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}/resources/${imageKey}?type=image` : '',
+    `${LARK_BASE_URL}/open-apis/im/v1/images/${imageKey}?image_type=message`,
     `${LARK_BASE_URL}/open-apis/im/v1/images/${imageKey}`,
+    messageId ? `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}/resources/${imageKey}?type=image` : '',
+    // Try file download endpoint
+    messageId ? `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}/resources/${imageKey}?type=file` : '',
   ].filter(Boolean);
 
   let res: Response | null = null;
