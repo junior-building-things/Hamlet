@@ -1198,6 +1198,8 @@ export async function getPackageQrUrl(chatId: string): Promise<{ qrUrl: string; 
       const match = content.match(pattern);
       if (match) {
         const downloadUrl = match[0];
+        // Skip TikTok Lite packages
+        if (/ttlite|lite_android|lite_ios|app-lite/i.test(downloadUrl)) continue;
         console.log('[lark] found package URL:', downloadUrl.slice(0, 100));
         return {
           qrUrl: `/api/lark/qr?url=${encodeURIComponent(downloadUrl)}`,
