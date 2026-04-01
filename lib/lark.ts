@@ -1209,6 +1209,32 @@ export async function getPackageQrUrl(chatId: string): Promise<{ qrUrl: string; 
     }
   }
 
+  // Fallback for iOS: extract commit hash from card messages and use Bits API
+  for (const msg of messages) {
+    if (!msg.body?.content) continue;
+    const content = msg.body.content;
+    if (!content.includes('released') && !content.includes('artifacts')) continue;
+
+    // iOS cards have MusicallyInhouse or TikTokInhouse in the title/text
+    if (!/musically|tiktok.*inhouse/i.test(content)) continue;
+
+    // Extract commit hash from code.byted.org URL
+    const commitMatch = content.match(/code\.byted\.org\/[^/]+\/[^/]+\/commit\/([a-f0-9]{40})/);
+    if (!commitMatch) continue;
+
+    const commitHash = commitMatch[1];
+    console.log('[lark] iOS card found, looking up package for commit:', commitHash.slice(0, 8));
+
+    const { getIosPackageUrl } = await import('@/lib/bits');
+    const installUrl = await getIosPackageUrl(commitHash);
+    if (installUrl) {
+      return {
+        qrUrl: `/api/lark/qr?url=${encodeURIComponent(installUrl)}`,
+        downloadUrl: installUrl,
+      };
+    }
+  }
+
   console.log('[lark] no package QR found in', messages.length, 'messages');
   return null;
 }
