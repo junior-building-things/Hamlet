@@ -1159,19 +1159,29 @@ export async function getPackageQrUrl(chatId: string): Promise<string | null> {
 
   const messages = data.data?.items ?? [];
 
+  // First pass: look for install URL in any message
+  for (const msg of messages) {
+    if (!msg.body?.content) continue;
+    const installMatch = msg.body.content.match(/https:\/\/ttidevops\.cn\.goofy\.app\/install\.html\?package_id=\d+/);
+    if (installMatch) {
+      console.log('[lark] found install URL in message:', installMatch[0]);
+      // Generate QR code from this URL
+      return `/api/lark/qr?url=${encodeURIComponent(installMatch[0])}`;
+    }
+  }
+
+  // Second pass: look for artifact card messages
   for (const msg of messages) {
     if (!msg.body?.content) continue;
 
     let content: string;
     try {
-      // Content is a JSON string for structured messages
       content = msg.body.content;
     } catch { continue; }
 
-    // Look for package release messages
     if (!content.includes('artifacts') && !content.includes('released') && !content.includes('已发布')) continue;
 
-    console.log('[lark] package message full content:', content);
+    console.log('[lark] package message content:', content.slice(0, 300));
 
     // Try to find a direct download URL first (some cards include href links)
     const downloadMatch = content.match(/"(https?:\/\/[^"]*(?:download|install|qrcode)[^"]*)"/i);
