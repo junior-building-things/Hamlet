@@ -236,13 +236,18 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
         } else if (f.key === 'field_due3fb') {
           complianceUrl = f.value.varchar_value ?? '';
         } else if (f.key === 'updated_at') {
+          console.log('[meego] MQL updated_at value:', JSON.stringify(f.value));
           const sv = f.value.string_value ?? f.value.varchar_value;
           if (sv) {
             const m = sv.match(/(\d{4}-\d{2}-\d{2})/);
             if (m) lastUpdated = m[1];
           } else {
             const ts = f.value.long_value;
-            if (ts) lastUpdated = new Date(ts).toISOString().split('T')[0];
+            if (ts) {
+              // Detect seconds vs milliseconds
+              const ms = ts > 1e12 ? ts : ts * 1000;
+              lastUpdated = new Date(ms).toISOString().split('T')[0];
+            }
           }
         }
       }
