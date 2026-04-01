@@ -1014,7 +1014,7 @@ export async function batchFetchAvatars(
  * Search for a Lark group chat matching the feature name and add the bot to it.
  * Returns true if the bot was successfully added (or was already a member).
  */
-export async function joinFeatureChat(featureName: string, userAccessToken?: string, meegoUrl?: string): Promise<string | null> {
+export async function joinFeatureChat(featureName: string, userAccessToken?: string, meegoUrl?: string, skipJoin?: boolean): Promise<string | null> {
   if (!featureName) return null;
 
   const botToken = await getAccessToken();
@@ -1093,6 +1093,11 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
   if (!bestChat) {
     console.log('[lark] no chat with Meego ID in description for:', featureName, '— candidates:', chats.map(c => c.name));
     return null;
+  }
+
+  if (skipJoin) {
+    console.log('[lark] found chat:', bestChat.name, '— skip join (old story)');
+    return bestChat.chat_id;
   }
 
   console.log('[lark] found chat:', bestChat.name, '— adding bot');

@@ -551,9 +551,9 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let chatId = cachedChatId ?? '';
   if (workItemName) {
     try {
-      // Only join new groups (2026+), but still use cached chatId for older ones
-      if (!chatId && createdYear >= 2026) {
-        chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl)) ?? '';
+      // Search for chat (and join if 2026+), skip join for older stories
+      if (!chatId) {
+        chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl, createdYear < 2026)) ?? '';
       }
       // Fetch package QR if we have a chatId (regardless of creation year)
       if (chatId) {
