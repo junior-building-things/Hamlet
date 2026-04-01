@@ -534,7 +534,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let abReportUrl = '';
   if (workItemName) {
     try {
-      abReportUrl = await searchAbReport(workItemName, userAccessToken);
+      abReportUrl = await searchAbReport(workItemName, userAccessToken, prd);
     } catch (e) {
       console.warn('[sync] AB report search error:', e);
     }

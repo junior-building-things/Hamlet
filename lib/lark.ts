@@ -369,22 +369,28 @@ export async function refreshUserToken(refreshToken: string): Promise<{ accessTo
  * combined with the feature name (or key words from it).
  * Returns the URL of the best match, or '' if nothing found.
  */
-export async function searchAbReport(featureName: string, userAccessToken?: string): Promise<string> {
-  if (!featureName) return '';
-  // Drive search requires user_access_token; fall back to tenant token (may not return results)
-  const token = userAccessToken || await getAccessToken();
+export async function searchAbReport(featureName: string, userAccessToken?: string, prdUrl?: string): Promise<string> {
+  if (!featureName || !prdUrl) return '';
 
-  // Extract meaningful words from the feature name (skip very short/common words)
+  // Extract doc token from PRD URL to search for inside AB report docs
+  const prdTokenMatch = prdUrl.match(/\/(docx|wiki)\/([A-Za-z0-9]+)/);
+  if (!prdTokenMatch) return '';
+  const prdDocToken = prdTokenMatch[2];
+
+  // Drive search requires user_access_token; fall back to tenant token
+  const searchToken = userAccessToken || await getAccessToken();
+  const readToken = await getAccessToken(); // tenant token for reading doc content
+
+  // Extract keywords from feature name for the search query
   const words = featureName
     .replace(/[\[\](){}]/g, '')
     .split(/\s+/)
     .filter(w => w.length > 2)
     .slice(0, 5);
-
   if (words.length === 0) return '';
   const nameQuery = words.join(' ');
 
-  // Try multiple search queries with different AB patterns
+  // Search for AB-related docs mentioning the feature
   const queries = [
     `AB Report ${nameQuery}`,
     `A/B ${nameQuery}`,
@@ -392,12 +398,9 @@ export async function searchAbReport(featureName: string, userAccessToken?: stri
   ];
 
   for (const query of queries) {
-    let docs: Array<{ token: string; type: string; title: string; url?: string }> = [];
-
-    // Try the legacy search endpoint first (works with user_access_token + docs:doc scope)
     const searchRes = await fetch(`${LARK_BASE_URL}/open-apis/suite/docs-api/search/object`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${searchToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         search_key: query, count: 5, offset: 0, owner_ids: [],
         docs_types: ['doc', 'docx', 'sheet', 'bitable'],
@@ -407,69 +410,41 @@ export async function searchAbReport(featureName: string, userAccessToken?: stri
       code: number; msg?: string;
       data?: { docs_entities?: Array<{ docs_token: string; docs_type: string; title: string }> };
     };
-    console.log('[AB search] query:', JSON.stringify(query), 'code:', searchData.code, 'msg:', searchData.msg);
 
-    if (searchData.code === 0) {
-      docs = (searchData.data?.docs_entities ?? []).map(d => ({
-        token: d.docs_token, type: d.docs_type, title: d.title,
-      }));
-    } else {
-      console.warn('[lark] drive search failed:', searchData.code, searchData.msg);
-      // If unauthorized, try the tenant token as fallback (limited results)
-      if (searchData.code === 99991679 && userAccessToken) {
-        const tenantToken = await getAccessToken();
-        const fallbackRes = await fetch(`${LARK_BASE_URL}/open-apis/suite/docs-api/search/object`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${tenantToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            search_key: query, count: 5, offset: 0, owner_ids: [],
-            docs_types: ['doc', 'docx', 'sheet', 'bitable'],
-          }),
-        });
-        const fallbackData = await parseJson(fallbackRes, 'drive_search_tenant') as {
-          code: number; msg?: string;
-          data?: { docs_entities?: Array<{ docs_token: string; docs_type: string; title: string }> };
-        };
-        console.log('[AB search] tenant fallback code:', fallbackData.code, 'msg:', fallbackData.msg);
-        if (fallbackData.code === 0) {
-          docs = (fallbackData.data?.docs_entities ?? []).map(d => ({
-            token: d.docs_token, type: d.docs_type, title: d.title,
-          }));
-        }
-      }
-      if (docs.length === 0) continue;
+    if (searchData.code !== 0) {
+      console.warn('[AB search] query failed:', searchData.code, searchData.msg);
+      continue;
     }
 
-    console.log('[AB search] found:', docs.length, 'docs:', docs.map(d => d.title));
+    const docs = searchData.data?.docs_entities ?? [];
     if (docs.length === 0) continue;
-
-    // Score each result by how well it matches an AB report for this feature
-    const stopWords = new Set([
-      'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'were',
-      'not', 'but', 'have', 'has', 'had', 'will', 'can', 'may', 'new', 'add',
-      'update', 'fix', 'bug', 'feature', 'report', 'test', 'user', 'users',
-    ]);
-    const lowerName = featureName.toLowerCase();
-    const nameTokens = lowerName
-      .replace(/[\[\](){}]/g, '')
-      .split(/[\s\-_]+/)
-      .filter(w => w.length > 2 && !stopWords.has(w));
-
-    if (nameTokens.length === 0) continue;
-    // Require at least half of significant tokens (min 2) to match
-    const minMatches = Math.max(2, Math.ceil(nameTokens.length * 0.5));
 
     for (const doc of docs) {
       const t = doc.title.toLowerCase();
-      // Must contain some AB indicator
-      const hasAb = /\bab\b|a\/b|ab\s*report|ab\s*test|实验报告/.test(t);
-      if (!hasAb) continue;
-      // Count how many significant words from the feature name appear in the title
-      const matchCount = nameTokens.filter(w => t.includes(w)).length;
-      console.log('[AB match]', JSON.stringify(doc.title), 'matches:', matchCount, '/', nameTokens.length, 'need:', minMatches);
-      if (matchCount >= minMatches) {
-        if (doc.url) return doc.url;
-        return `https://bytedance.sg.larkoffice.com/${doc.type}/${doc.token}`;
+      // Title must contain AB or A/B (case-insensitive)
+      if (!/\bab\b|a\/b/i.test(t)) continue;
+
+      // Read the doc content and check if it contains the PRD link
+      try {
+        const blocks = await getDocBlocks(doc.docs_token, readToken);
+        const containsPrd = blocks.some(block => {
+          for (const el of block.text?.elements ?? []) {
+            // Check hyperlinks
+            const style = el.text_run?.text_element_style as Record<string, unknown> | undefined;
+            const link = style?.link as Record<string, unknown> | undefined;
+            if (typeof link?.url === 'string' && link.url.includes(prdDocToken)) return true;
+            // Check plain text
+            if (el.text_run?.content?.includes(prdDocToken)) return true;
+          }
+          return false;
+        });
+
+        if (containsPrd) {
+          console.log('[AB match] found:', doc.title, '— contains PRD link');
+          return `https://bytedance.sg.larkoffice.com/${doc.docs_type}/${doc.docs_token}`;
+        }
+      } catch (e) {
+        console.warn('[AB match] failed to read doc:', doc.title, e);
       }
     }
   }
