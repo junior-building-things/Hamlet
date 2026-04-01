@@ -139,6 +139,11 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         {feature.lastUpdated ? new Date(feature.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
       </span>
 
+      {/* Comment Summary */}
+      <span className="hidden sm:flex items-center py-3 pl-4 text-xs text-gray-400 max-w-[200px] truncate" title={feature.commentSummary}>
+        {feature.commentSummary || ''}
+      </span>
+
       {/* Action */}
       <div className="hidden sm:flex items-center pr-4 py-3 pl-4">
         {feature.canCompleteNode && onComplete && (

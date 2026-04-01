@@ -46,5 +46,6 @@ export interface Feature {
   packageDownloadUrl?: string;
   iosPackageQrUrl?: string;
   iosPackageDownloadUrl?: string;
+  commentSummary?: string;
   chatId?: string;
 }

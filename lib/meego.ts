@@ -185,12 +185,12 @@ interface MqlResponse {
   data: Record<string, MqlItem[]>;
 }
 
-interface ExtendedFields { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string; name: string; status: string; nodeKey: string }
+interface ExtendedFields { priority: Priority; prd: string; complianceUrl: string; lastUpdated: string; name: string; status: string; nodeKey: string; commentSummary: string }
 
 // Fetch all PM-owned TikTok stories via MQL — returns every story regardless of todo status
 async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
   const map = new Map<string, ExtendedFields>();
-  const MQL = 'SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
+  const MQL = 'SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at`, `field_30a184` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
   const GROUP_ID = '1';
   let sessionId: string | undefined;
   let page = 1;
@@ -223,6 +223,7 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
       let prd = '';
       let complianceUrl = '';
       let lastUpdated = '';
+      let commentSummary = '';
       for (const f of item.moql_field_list ?? []) {
         if (f.key === 'work_item_id') {
           id = String(f.value.long_value ?? '');
@@ -248,10 +249,12 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
               lastUpdated = new Date(ms).toISOString().split('T')[0];
             }
           }
+        } else if (f.key === 'field_30a184') {
+          commentSummary = f.value.string_value ?? f.value.varchar_value ?? '';
         }
       }
 
-      if (id) map.set(id, { priority, prd, complianceUrl, lastUpdated, name, status: 'Unknown', nodeKey: '' });
+      if (id) map.set(id, { priority, prd, complianceUrl, lastUpdated, name, status: 'Unknown', nodeKey: '', commentSummary });
     }
 
     if (map.size >= total || items.length === 0) break;
@@ -325,6 +328,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       lastUpdated: ext?.lastUpdated || '',
       prd: ext?.prd || undefined,
       complianceUrl: ext?.complianceUrl || undefined,
+      commentSummary: ext?.commentSummary || undefined,
       meegoProjectKey: item.project_key,
       meegoIssueId: id,
       meegoNodeKey: item.node_info?.node_state_key ?? '',
@@ -346,6 +350,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       lastUpdated: ext.lastUpdated || new Date().toISOString().split('T')[0],
       prd: ext.prd || undefined,
       complianceUrl: ext.complianceUrl || undefined,
+      commentSummary: ext.commentSummary || undefined,
       meegoProjectKey: projectKey,
       meegoIssueId: id,
       meegoNodeKey: ext.nodeKey,
@@ -535,19 +540,6 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
-  // Debug: try fetching field_0cec98 and field_6909f6 via MQL
-  try {
-    const meegoId = meegoUrl.match(/\/detail\/(\d+)/)?.[1];
-    if (meegoId) {
-      const mqlRaw = await callMeegoMcp('search_by_mql', {
-        project_key: 'TikTok',
-        mql: `SELECT \`field_30a184\` FROM \`TikTok\`.\`需求\` WHERE \`work_item_id\` = ${meegoId}`,
-      });
-      console.log('[meego] MQL field_30a184:', mqlRaw.slice(0, 500));
-    }
-  } catch (e) {
-    console.log('[meego] MQL compliance fields failed:', e instanceof Error ? e.message : e);
-  }
 
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
