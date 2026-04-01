@@ -28,9 +28,9 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): 
   if (feature.figmaUrl)
     links.push({ key: 'figma', label: 'Figma', icon: '/figma.svg', iconW: 10, iconH: 14, color: '#FF7362', url: feature.figmaUrl });
   if (feature.packageQrUrl)
-    links.push({ key: 'android-pkg', label: 'Android Package', icon: feature.packageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: '#A3E635', onClick: () => onPackageClick?.(false) });
+    links.push({ key: 'android-pkg', label: 'Android Package', icon: feature.packageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: '#ffffff', onClick: () => onPackageClick?.(false) });
   if (feature.iosPackageQrUrl)
-    links.push({ key: 'ios-pkg', label: 'iOS Package', icon: feature.iosPackageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: '#94A3B8', onClick: () => onPackageClick?.(true) });
+    links.push({ key: 'ios-pkg', label: 'iOS Package', icon: feature.iosPackageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: '#ffffff', onClick: () => onPackageClick?.(true) });
   if (feature.abReportUrl)
     links.push({ key: 'ab', label: 'AB Report', icon: '/ab.png', iconW: 14, iconH: 14, color: '#F59E0B', url: feature.abReportUrl });
   return links;
@@ -104,15 +104,13 @@ function LinkChip({ link, index, total, ringColor }: { link: LinkDef; index: num
 
   const iconEl = link.dynamicIcon ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={link.icon} alt={link.label} className="w-[18px] h-[18px] rounded-sm shrink-0" />
+    <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] rounded-sm shrink-0" />
   ) : (
     <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 15)} height={Math.min(link.iconH, 15)} className="shrink-0" />
   );
 
-  const chipCls = "flex items-center justify-center w-6 h-6 rounded-full bg-[#1a1d32] cursor-pointer hover:brightness-125 relative";
+  const chipCls = "flex items-center justify-center w-6 h-6 cursor-pointer hover:brightness-125 relative";
   const chipStyle = {
-    outline: `2px solid ${ringColor}`,
-    outlineOffset: '-1px',
     zIndex: showBubble ? 30 : total - index,
   };
 
