@@ -231,12 +231,7 @@ export function ProjectView({ features, setFeatures }: Props) {
 
   // ── Periodic auto-sync every 2 hours ──────────────────────────────────────
   useEffect(() => {
-    const interval = setInterval(() => {
-      const lastSync = Number(localStorage.getItem('hamlet_last_sync') || '0');
-      if (Date.now() - lastSync >= 2 * 60 * 60 * 1000) {
-        syncAll();
-      }
-    }, 5 * 60 * 1000); // check every 5 minutes
+    const interval = setInterval(syncAll, 2 * 60 * 60 * 1000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
