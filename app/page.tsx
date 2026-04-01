@@ -72,6 +72,10 @@ export default function Home() {
       setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
       // Pin the new feature to the top of the list for 30 seconds
       setPinnedId(feature.id);
+      // Scroll to top so the pinned feature is visible
+      setTimeout(() => {
+        document.getElementById('main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
       setTimeout(() => setPinnedId(prev => prev === feature.id ? null : prev), 30_000);
     } else {
       setFeatures(prev => prev.filter(f => f.id !== tempId));
@@ -89,7 +93,7 @@ export default function Home() {
         user={user}
       />
 
-      <div className="flex-1 overflow-y-auto min-h-screen">
+      <div id="main-scroll" className="flex-1 overflow-y-auto min-h-screen">
         {activeView === 'project' && (
           <ProjectView features={features} setFeatures={setFeatures} pinnedId={pinnedId} onClearPin={() => setPinnedId(null)} />
         )}
