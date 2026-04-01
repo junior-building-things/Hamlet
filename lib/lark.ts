@@ -1021,19 +1021,33 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
   const appId = process.env.LARK_APP_ID;
   if (!appId) return null;
 
-  // Use user token to search (bot can only find chats it's already in)
-  const searchToken = userAccessToken || botToken;
+  // Try user token first (can find all chats), fall back to bot token (only chats bot is in)
+  let searchToken = userAccessToken || botToken;
   console.log('[lark] joinFeatureChat:', featureName, 'using', userAccessToken ? 'user token' : 'bot token');
 
   // Search with full feature name, fetch more results for description-based matching
-  const searchRes = await fetch(
+  let searchRes = await fetch(
     `${LARK_BASE_URL}/open-apis/im/v1/chats/search?query=${encodeURIComponent(featureName)}&page_size=20`,
     { headers: { Authorization: `Bearer ${searchToken}` } },
   );
-  const searchData = await parseJson(searchRes, 'chat_search') as {
+  let searchData = await parseJson(searchRes, 'chat_search') as {
     code: number; msg?: string;
     data?: { items?: Array<{ chat_id: string; name: string }> };
   };
+
+  // If user token expired, retry with bot token
+  if (searchData.code !== 0 && userAccessToken && searchData.code === 99991677) {
+    console.log('[lark] user token expired, retrying chat search with bot token');
+    searchToken = botToken;
+    searchRes = await fetch(
+      `${LARK_BASE_URL}/open-apis/im/v1/chats/search?query=${encodeURIComponent(featureName)}&page_size=20`,
+      { headers: { Authorization: `Bearer ${botToken}` } },
+    );
+    searchData = await parseJson(searchRes, 'chat_search_bot') as {
+      code: number; msg?: string;
+      data?: { items?: Array<{ chat_id: string; name: string }> };
+    };
+  }
 
   if (searchData.code !== 0) {
     console.warn('[lark] chat search failed:', searchData.code, searchData.msg);
