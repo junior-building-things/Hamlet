@@ -535,15 +535,14 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
-  // Debug: search node detail for compliance fields
+  // Debug: search for Comment Summary field
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const match0cec98 = nodeRaw.match(/.{0,30}0cec98.{0,80}/gi);
-    const match6909f6 = nodeRaw.match(/.{0,30}6909f6.{0,80}/gi);
-    const complianceMatches = nodeRaw.match(/.{0,20}合规.{0,60}/gi);
-    console.log('[meego] node field_0cec98:', match0cec98?.slice(0, 3) ?? 'not found');
-    console.log('[meego] node field_6909f6:', match6909f6?.slice(0, 3) ?? 'not found');
-    console.log('[meego] node compliance:', complianceMatches?.slice(0, 5) ?? 'none');
+    const commentSummary = nodeRaw.match(/.{0,30}(Comment Summary|comment_summary|评论摘要).{0,100}/gi);
+    console.log('[meego] Comment Summary in nodes:', commentSummary?.slice(0, 3) ?? 'not found');
+    // Also search brief
+    const inBrief = raw.match(/.{0,30}(Comment Summary|comment_summary|评论摘要).{0,100}/gi);
+    console.log('[meego] Comment Summary in brief:', inBrief?.slice(0, 3) ?? 'not found');
   } catch { /* ignore */ }
 
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
