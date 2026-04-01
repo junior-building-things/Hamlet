@@ -384,7 +384,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
-    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909'],
+    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'created_at'],
   });
 
   const lines = raw.split('\n');
@@ -526,9 +526,25 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   }
 
   // Add bot to the feature's group chat and find package QR code
+  // Only join groups for stories created in 2026+
+  const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
+  let createdYear = 0;
+  if (createdAtRaw) {
+    const ts = Number(createdAtRaw);
+    if (!isNaN(ts) && ts > 0) {
+      const ms = ts > 1e12 ? ts : ts * 1000;
+      createdYear = new Date(ms).getFullYear();
+    } else {
+      const m = createdAtRaw.match(/(\d{4})/);
+      if (m) createdYear = Number(m[1]);
+    }
+  }
+  console.log('[meego] story created_at:', createdAtRaw, 'year:', createdYear);
+
   let packageQrUrl = '';
   let chatId = cachedChatId ?? '';
-  if (workItemName) {
+  const shouldJoinChat = createdYear >= 2026;
+  if (workItemName && shouldJoinChat) {
     try {
       if (!chatId) {
         chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl)) ?? '';
