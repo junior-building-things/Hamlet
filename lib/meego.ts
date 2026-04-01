@@ -508,48 +508,6 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     iosVersion = await resolveVersion('field_08a9ca');
     if (!iosVersion) iosVersion = await resolveVersion('field_c88970');
 
-    // Debug: log all form_item field types that could contain work item references
-    const relatedFields: string[] = [];
-    for (const node of nodeData.list ?? []) {
-      for (const fi of node.form_items ?? []) {
-        const fiAny = fi as Record<string, unknown>;
-        const fieldType = fiAny.field_type as string ?? '';
-        if (fieldType.includes('workitem') || fieldType.includes('related') || fieldType.includes('sub_task') ||
-            fi.field_name?.includes('Bits') || fi.field_name?.includes('开发') || fi.field_name?.includes('任务') ||
-            fi.field_name?.includes('bits') || fi.field_name?.includes('devops')) {
-          relatedFields.push(`${node.basic?.name}: ${fi.field_key}(${fi.field_name}) type=${fieldType} val=${fi.value?.slice(0, 100)}`);
-        }
-      }
-    }
-    if (relatedFields.length) console.log('[meego] work-item related fields:', relatedFields);
-
-    // Check sub_tasks in each node
-    for (const node of (nodeData.list ?? []).slice(0, 3)) {
-      const nodeAny = node as unknown as Record<string, unknown>;
-      if (nodeAny.sub_tasks) {
-        console.log(`[meego] sub_tasks in "${node.basic?.name}":`, JSON.stringify(nodeAny.sub_tasks).slice(0, 500));
-      }
-    }
-
-    // List all MCP tools to find one that can fetch Bits tasks / connections
-    try {
-      const token = process.env.MEEGO_USER_TOKEN!;
-      const toolsRes = await fetch(MEEGO_MCP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Mcp-Token': token },
-        body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'tools/list', params: {} }),
-      });
-      const toolsData = await toolsRes.json() as { result?: { tools?: Array<{ name: string; description?: string }> } };
-      const tools = toolsData.result?.tools ?? [];
-      const relevantTools = tools.filter(t =>
-        t.name.includes('connection') || t.name.includes('relation') || t.name.includes('sub_task') ||
-        t.name.includes('bits') || t.name.includes('devops') || t.name.includes('cross') ||
-        t.description?.includes('Bits') || t.description?.includes('开发任务') ||
-        t.description?.includes('关联') || t.description?.includes('connection')
-      );
-      console.log('[meego] relevant MCP tools:', relevantTools.map(t => `${t.name}: ${t.description?.slice(0, 100)}`));
-      console.log('[meego] all MCP tool names:', tools.map(t => t.name));
-    } catch { /* ignore */ }
   } catch (e) {
     console.log('[meego] version fetch failed:', e);
   }
@@ -574,12 +532,6 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
-  // Debug: search for Bits/dev task references in brief
-  const bitsInBrief = raw.match(/.{0,20}(bits|Bits|开发任务|sub_task|子任务|devops).{0,80}/gi);
-  if (bitsInBrief?.length) console.log('[meego] Bits in brief:', bitsInBrief.slice(0, 5));
-  // Also look for the sub_tasks section in node detail
-  // The node detail JSON has a sub_tasks key per node
-
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
   if (createdAtRaw) {
@@ -592,7 +544,6 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       if (m) createdYear = Number(m[1]);
     }
   }
-  console.log('[meego] story created_at:', createdAtRaw, 'year:', createdYear);
 
   let packageQrUrl = '';
   let chatId = cachedChatId ?? '';
