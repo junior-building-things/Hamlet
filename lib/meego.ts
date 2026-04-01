@@ -513,11 +513,29 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       return shortNames[0];
     }
 
-    // Prioritize launched version, fall back to planned
-    iosVersion = await resolveVersion('ios_actual_online_version');
-    if (!iosVersion) iosVersion = await resolveVersion('android_actual_online_version');
-    if (!iosVersion) iosVersion = await resolveVersion('field_08a9ca');
-    if (!iosVersion) iosVersion = await resolveVersion('field_c88970');
+    // Collect all available versions, pick the lowest
+    // Priority: launched versions first, then planned as fallback
+    function pickLowest(a: string, b: string): string {
+      if (!a) return b;
+      if (!b) return a;
+      const [aMaj, aMin] = a.split('.').map(Number);
+      const [bMaj, bMin] = b.split('.').map(Number);
+      const cmp = (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
+      return cmp <= 0 ? a : b;
+    }
+
+    const iosLaunched = await resolveVersion('ios_actual_online_version');
+    const androidLaunched = await resolveVersion('android_actual_online_version');
+    const launched = pickLowest(iosLaunched, androidLaunched);
+
+    if (launched) {
+      iosVersion = launched;
+    } else {
+      // Fall back to planned versions
+      const iosPlanned = await resolveVersion('field_08a9ca');
+      const androidPlanned = await resolveVersion('field_c88970');
+      iosVersion = pickLowest(iosPlanned, androidPlanned);
+    }
 
   } catch (e) {
     console.log('[meego] version fetch failed:', e);
