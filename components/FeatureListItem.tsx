@@ -17,14 +17,16 @@ interface Props {
   onSync: (feature: Feature) => void;
   completing?: boolean;
   onComplete?: (feature: Feature) => void;
+  pinned?: boolean;
 }
 
-export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete, pinned }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
   return (
-    <div className="bg-[#13162a] border border-[#1e2240] rounded-xl hover:border-[#2e3460] transition-colors
-                    sm:col-span-full sm:grid sm:[grid-template-columns:subgrid] sm:items-center">
+    <div className={`bg-[#13162a] border rounded-xl hover:border-[#2e3460] transition-colors
+                    sm:col-span-full sm:grid sm:[grid-template-columns:subgrid] sm:items-center
+                    ${pinned ? 'border-blue-500/60 ring-1 ring-blue-500/30' : 'border-[#1e2240]'}`}>
 
       {/* Mobile layout */}
       <div className="sm:hidden px-4 py-3 flex flex-col gap-2">
@@ -88,9 +90,10 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       {/* Desktop cells — direct subgrid children */}
       <button
         onClick={() => onEdit(feature)}
-        className="hidden sm:block pl-4 py-3 w-full min-w-0 truncate text-left text-white text-sm font-semibold hover:text-blue-300 transition-colors cursor-pointer"
+        className="hidden sm:flex items-center gap-2 pl-4 py-3 w-full min-w-0 text-left text-white text-sm font-semibold hover:text-blue-300 transition-colors cursor-pointer"
       >
-        {feature.name}
+        <span className="truncate">{feature.name}</span>
+        {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
       </button>
 
       <div className="hidden sm:flex py-3 pl-4">

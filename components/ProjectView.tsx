@@ -93,6 +93,7 @@ export function ProjectView({ features, setFeatures }: Props) {
   const [modalMode,      setModalMode]      = useState<'edit' | null>(null);
   const [editingFeature, setEditing]        = useState<Feature | undefined>();
   const [completingId,   setCompletingId]   = useState<string | null>(null);
+  const [pinnedId,       setPinnedId]       = useState<string | null>(null);
 
   // ── Persisted group + sort preferences ───────────────────────────────────
 
@@ -335,6 +336,7 @@ export function ProjectView({ features, setFeatures }: Props) {
   }, [setFeatures]);
 
   async function syncAll() {
+    setPinnedId(null);
     setSyncingAll(true);
     const list = await fetchFromMeego();
     setSyncingAll(false);
@@ -353,6 +355,9 @@ export function ProjectView({ features, setFeatures }: Props) {
     if (feature) {
       setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
       toast.success(`"${feature.name}" created`);
+      // Pin the new feature to the top of the list for 30 seconds
+      setPinnedId(feature.id);
+      setTimeout(() => setPinnedId(prev => prev === feature.id ? null : prev), 30_000);
     } else {
       setFeatures(prev => prev.filter(f => f.id !== tempId));
       toast.error('Failed to create feature');
@@ -386,8 +391,7 @@ export function ProjectView({ features, setFeatures }: Props) {
   // ── Sort ───────────────────────────────────────────────────────────────────
 
   const sorted = useMemo(() => {
-    if (sortBy === 'none') return filtered;
-    return [...filtered].sort((a, b) => {
+    const list = sortBy === 'none' ? filtered : [...filtered].sort((a, b) => {
       let cmp = 0;
       if (sortBy === 'priority') {
         cmp = (PRIORITY_ORDER[a.priority] ?? 99) - (PRIORITY_ORDER[b.priority] ?? 99);
@@ -398,7 +402,16 @@ export function ProjectView({ features, setFeatures }: Props) {
       }
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [filtered, sortBy, sortDir]);
+    // Pin newly created feature to the top
+    if (pinnedId) {
+      const idx = list.findIndex(f => f.id === pinnedId);
+      if (idx > 0) {
+        const [pinned] = list.splice(idx, 1);
+        list.unshift(pinned);
+      }
+    }
+    return list;
+  }, [filtered, sortBy, sortDir, pinnedId]);
 
   // ── Group ──────────────────────────────────────────────────────────────────
 
@@ -493,7 +506,8 @@ export function ProjectView({ features, setFeatures }: Props) {
     return items.map(f => (
       <FeatureListItem key={f.id} feature={f} syncing={syncingId === f.id}
         onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne}
-        completing={completingId === f.id} onComplete={handleComplete} />
+        completing={completingId === f.id} onComplete={handleComplete}
+        pinned={f.id === pinnedId} />
     ));
   }
 
