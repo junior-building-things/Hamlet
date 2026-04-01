@@ -157,7 +157,7 @@ export function ProjectView({ features, setFeatures }: Props) {
             abReportUrl:     (d.abReportUrl      as string) || p.abReportUrl,
             packageQrUrl:    (d.packageQrUrl     as string) || p.packageQrUrl,
             chatId:          (d.chatId           as string) || p.chatId,
-            lastUpdated:     (d.lastUpdated      as string) || new Date().toISOString().split('T')[0],
+            lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
           }));
         } catch { /* ignore per-card errors */ }
         setDetailSyncCount(c => c + 1);
@@ -256,7 +256,7 @@ export function ProjectView({ features, setFeatures }: Props) {
         contentDesigner: (d.contentDesigner as string) || p.contentDesigner,
         iosVersion:      (d.iosVersion     as string) || p.iosVersion,
         abReportUrl:     (d.abReportUrl    as string) || p.abReportUrl,
-        lastUpdated:     new Date().toISOString().split('T')[0],
+        lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
       }));
     } catch { /* ignore */ }
     finally { setSyncingId(null); }
@@ -399,7 +399,7 @@ export function ProjectView({ features, setFeatures }: Props) {
               canCompleteNode: d.canCompleteNode as boolean,
               meegoNodeKey:    (d.meegoNodeKey as string) || f.meegoNodeKey,
               priority:        ((d.priority as Priority) ?? f.priority),
-              lastUpdated:     new Date().toISOString().split('T')[0],
+              lastUpdated:     f.lastUpdated || (d.lastUpdated as string) || '',
             }));
           })
           .catch(() => {});
