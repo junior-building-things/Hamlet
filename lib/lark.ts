@@ -1070,11 +1070,14 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
         if (infoData.code === 0 && infoData.data?.description?.includes(meegoId)) {
           // Only match groups created in 2026 or later
           const createTime = infoData.data.create_time;
+          console.log('[lark] chat create_time:', createTime, 'for:', c.name);
           if (createTime) {
-            const createdMs = Number(createTime) * 1000; // Lark uses seconds
+            const ts = Number(createTime);
+            // Lark may use seconds or milliseconds — detect by magnitude
+            const createdMs = ts > 1e12 ? ts : ts * 1000;
             const cutoff = new Date('2026-01-01T00:00:00Z').getTime();
             if (createdMs < cutoff) {
-              console.log('[lark] skipping old chat (created before 2026):', c.name);
+              console.log('[lark] skipping old chat (created', new Date(createdMs).toISOString(), '):', c.name);
               continue;
             }
           }
