@@ -408,12 +408,14 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     // Pin newly created feature to the top
     if (pinnedId) {
       const idx = list.findIndex(f => f.id === pinnedId);
+      console.log('[pin] pinnedId:', pinnedId, 'idx in list:', idx, 'list length:', list.length, 'ids:', list.slice(0, 5).map(f => f.id));
       if (idx > 0) {
         const [pinned] = list.splice(idx, 1);
         list.unshift(pinned);
       } else if (idx === -1) {
         // Feature might be filtered out — find it in the full features list and prepend
         const pinned = features.find(f => f.id === pinnedId);
+        console.log('[pin] fallback lookup in features:', !!pinned);
         if (pinned) list.unshift(pinned);
       }
     }

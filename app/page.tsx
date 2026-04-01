@@ -68,6 +68,7 @@ export default function Home() {
   /** Replace temp feature with the real one, or remove it on failure */
   function handleFeatureCreated(tempId: string, feature: Feature | null) {
     if (feature) {
+      console.log('[pin] setting pinnedId:', feature.id, 'tempId:', tempId);
       setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
       // Pin the new feature to the top of the list for 30 seconds
       setPinnedId(feature.id);
