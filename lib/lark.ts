@@ -1182,7 +1182,7 @@ export async function getPackageQrUrl(chatId: string): Promise<string | null> {
     console.log('[lark] package msg keys:', Object.keys(msg));
     console.log('[lark] package msg body content:', content);
     // Check if there's a separate content field with actions
-    const msgAny = msg as Record<string, unknown>;
+    const msgAny = msg as unknown as Record<string, unknown>;
     if (msgAny.content) console.log('[lark] package msg .content:', String(msgAny.content).slice(0, 1000));
 
     // Try to find a direct download URL first (some cards include href links)
