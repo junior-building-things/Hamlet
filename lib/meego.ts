@@ -155,7 +155,7 @@ function parseUpdateTime(raw: string): string {
     const m = val.match(/(\d{4}-\d{2}-\d{2})/);
     if (m) return m[1];
   }
-  return new Date().toISOString().split('T')[0];
+  return '';
 }
 
 // Parse a role member from the 角色成员 JSON in the workitem attributes table
@@ -236,7 +236,6 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
         } else if (f.key === 'field_due3fb') {
           complianceUrl = f.value.varchar_value ?? '';
         } else if (f.key === 'updated_at') {
-          console.log('[meego] MQL updated_at value:', JSON.stringify(f.value));
           const sv = f.value.string_value ?? f.value.varchar_value;
           if (sv) {
             const m = sv.match(/(\d{4}-\d{2}-\d{2})/);
@@ -323,7 +322,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       priority: ext?.priority ?? 'P2',
       owner: 'Thomas',
       tasks: [],
-      lastUpdated: ext?.lastUpdated || new Date().toISOString().split('T')[0],
+      lastUpdated: ext?.lastUpdated || '',
       prd: ext?.prd || undefined,
       complianceUrl: ext?.complianceUrl || undefined,
       meegoProjectKey: item.project_key,

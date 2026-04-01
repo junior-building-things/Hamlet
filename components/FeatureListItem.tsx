@@ -121,7 +121,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
 
       <span className="hidden sm:flex items-center gap-1 py-3 pl-4 text-xs text-gray-400 truncate">
         <Calendar className="w-3 h-3 shrink-0" />
-        {new Date(feature.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        {feature.lastUpdated ? new Date(feature.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
       </span>
 
       {/* Action */}
