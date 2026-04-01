@@ -523,12 +523,20 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     }
     if (relatedFields.length) console.log('[meego] work-item related fields:', relatedFields);
 
-    // Check sub_tasks in each node (Bits tasks might be here)
+    // Check sub_tasks in each node
     for (const node of (nodeData.list ?? []).slice(0, 3)) {
       const nodeAny = node as unknown as Record<string, unknown>;
       if (nodeAny.sub_tasks) {
         console.log(`[meego] sub_tasks in "${node.basic?.name}":`, JSON.stringify(nodeAny.sub_tasks).slice(0, 500));
       }
+    }
+
+    // Try list_related_workitems without field_key (get all relations)
+    try {
+      const relRaw = await callMeegoMcp('list_related_workitems', { url: meegoUrl });
+      console.log('[meego] all related workitems:', relRaw.slice(0, 500));
+    } catch (e) {
+      console.log('[meego] list_related_workitems (no field) failed:', e);
     }
   } catch (e) {
     console.log('[meego] version fetch failed:', e);
