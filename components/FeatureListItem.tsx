@@ -8,7 +8,7 @@ import { TeamAvatars } from './TeamAvatars';
 import { LinkIcons } from './LinkIcons';
 import { PackageModal } from './PackageModal';
 import Image from 'next/image';
-import { RefreshCw, Calendar, CheckCircle2, Loader2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface Props {
   feature: Feature;
@@ -136,11 +136,6 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       <div className="hidden sm:flex items-center py-3 pl-4">
         <TeamAvatars feature={feature} ringColor="#13162a" />
       </div>
-
-      <span className="hidden sm:flex items-center gap-1 py-3 pl-4 text-xs text-gray-400 truncate">
-        <Calendar className="w-3 h-3 shrink-0" />
-        {feature.lastUpdated ? new Date(feature.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-      </span>
 
       {/* Comment Summary */}
       <span className="hidden sm:flex items-center py-3 pl-4 text-xs text-gray-400 max-w-[200px] truncate" title={feature.commentSummary}>
