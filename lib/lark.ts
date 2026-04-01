@@ -1171,10 +1171,7 @@ export async function getPackageQrUrl(chatId: string): Promise<string | null> {
     // Look for package release messages
     if (!content.includes('artifacts') && !content.includes('released') && !content.includes('已发布')) continue;
 
-    console.log('[lark] package message type:', msg.msg_type, 'content length:', content.length);
-    // Log all URLs found in the content
-    const allUrls = content.match(/https?:\/\/[^"'\s]+/g);
-    console.log('[lark] package message URLs:', allUrls);
+    console.log('[lark] package message full content:', content);
 
     // Try to find a direct download URL first (some cards include href links)
     const downloadMatch = content.match(/"(https?:\/\/[^"]*(?:download|install|qrcode)[^"]*)"/i);
