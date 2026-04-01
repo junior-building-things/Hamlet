@@ -43,6 +43,7 @@ export interface Feature {
   iosVersion?: string;
   versionHistory?: string[];
   abReportUrl?: string;
+  libraUrl?: string;
   packageQrUrl?: string;
   packageDownloadUrl?: string;
   iosPackageQrUrl?: string;

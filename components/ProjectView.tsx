@@ -167,6 +167,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             iosVersion:      (d.iosVersion       as string) || p.iosVersion,
             versionHistory:  trackVersion(p.versionHistory, (d.iosVersion as string) || p.iosVersion),
             abReportUrl:     (d.abReportUrl      as string) || p.abReportUrl,
+            libraUrl:        (d.libraUrl         as string) || p.libraUrl,
             packageQrUrl:    (d.packageQrUrl     as string) || p.packageQrUrl,
             packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
             iosPackageQrUrl: (d.iosPackageQrUrl  as string) || p.iosPackageQrUrl,
@@ -203,6 +204,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
               // Preserve enriched fields that MQL doesn't return (only overwrite if new value is non-empty)
               figmaUrl:        f.figmaUrl        || old.figmaUrl,
               abReportUrl:     f.abReportUrl     || old.abReportUrl,
+              libraUrl:        f.libraUrl        || old.libraUrl,
               packageQrUrl:    f.packageQrUrl    || old.packageQrUrl,
               packageDownloadUrl: f.packageDownloadUrl || old.packageDownloadUrl,
               iosPackageQrUrl: f.iosPackageQrUrl || old.iosPackageQrUrl,
@@ -327,6 +329,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         iosVersion:      (d.iosVersion     as string) || p.iosVersion,
         versionHistory:  trackVersion(p.versionHistory, (d.iosVersion as string) || p.iosVersion),
         abReportUrl:     (d.abReportUrl    as string) || p.abReportUrl,
+        libraUrl:        (d.libraUrl      as string) || p.libraUrl,
         packageQrUrl:    (d.packageQrUrl  as string) || p.packageQrUrl,
         packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
         chatId:          (d.chatId        as string) || p.chatId,

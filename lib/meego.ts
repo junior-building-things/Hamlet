@@ -1,5 +1,5 @@
 import { Priority, Feature } from './types';
-import { extractFigmaUrlFromPrd, searchAbReport, joinFeatureChat, getPackageQrUrl } from './lark';
+import { extractFigmaUrlFromPrd, searchAbReport, joinFeatureChat, getPackageQrUrl, searchLibraInChat } from './lark';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const MY_EMAIL = process.env.OWNER_EMAIL!;
@@ -396,6 +396,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   contentDesigner: string;
   iosVersion: string;
   abReportUrl: string;
+  libraUrl: string;
   packageQrUrl: string;
   packageDownloadUrl: string;
   iosPackageQrUrl: string;
@@ -530,11 +531,14 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     } catch { /* ignore — Figma link is optional */ }
   }
 
-  // Search for AB report on Lark Drive (best-effort)
+  // Search for AB report on Lark Drive (best-effort) — also extracts Libra URL
   let abReportUrl = '';
+  let libraUrl = '';
   if (workItemName) {
     try {
-      abReportUrl = await searchAbReport(workItemName, userAccessToken, prd);
+      const abResult = await searchAbReport(workItemName, userAccessToken, prd);
+      abReportUrl = abResult.abReportUrl;
+      libraUrl = abResult.libraUrl;
     } catch (e) {
       console.warn('[sync] AB report search error:', e);
     }
@@ -577,6 +581,14 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
           iosPackageDownloadUrl = pkg.ios.downloadUrl;
         }
       }
+      // Fallback: search chat for Libra link if not found in AB report
+      if (!libraUrl && chatId) {
+        try {
+          libraUrl = await searchLibraInChat(chatId);
+        } catch (e) {
+          console.warn('[sync] Libra chat search error:', e);
+        }
+      }
     } catch (e) {
       console.warn('[sync] join feature chat / package QR error:', e);
     }
@@ -608,6 +620,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     contentDesigner,
     iosVersion,
     abReportUrl,
+    libraUrl,
     packageQrUrl,
     packageDownloadUrl,
     iosPackageQrUrl,

@@ -369,12 +369,17 @@ export async function refreshUserToken(refreshToken: string): Promise<{ accessTo
  * combined with the feature name (or key words from it).
  * Returns the URL of the best match, or '' if nothing found.
  */
-export async function searchAbReport(featureName: string, userAccessToken?: string, prdUrl?: string): Promise<string> {
-  if (!featureName || !prdUrl) return '';
+const LIBRA_URL_RE = /https?:\/\/libra[^\s"')]*\/flight\/\d+[^\s"')"]*/i;
+
+export async function searchAbReport(
+  featureName: string, userAccessToken?: string, prdUrl?: string,
+): Promise<{ abReportUrl: string; libraUrl: string }> {
+  const empty = { abReportUrl: '', libraUrl: '' };
+  if (!featureName || !prdUrl) return empty;
 
   // Extract doc token from PRD URL to search for inside AB report docs
   const prdTokenMatch = prdUrl.match(/\/(docx|wiki)\/([A-Za-z0-9]+)/);
-  if (!prdTokenMatch) return '';
+  if (!prdTokenMatch) return empty;
   const prdDocToken = prdTokenMatch[2];
 
   // Drive search requires user_access_token; fall back to tenant token
@@ -387,7 +392,7 @@ export async function searchAbReport(featureName: string, userAccessToken?: stri
     .split(/\s+/)
     .filter(w => w.length > 2)
     .slice(0, 5);
-  if (words.length === 0) return '';
+  if (words.length === 0) return empty;
   const nameQuery = words.join(' ');
 
   // Search for AB-related docs mentioning the feature
@@ -425,23 +430,37 @@ export async function searchAbReport(featureName: string, userAccessToken?: stri
       if (!/\bab\b|a\/b/i.test(t)) continue;
 
       // Read the doc content and check if it contains the PRD link
+      // Also extract any Libra URL found
       try {
         const blocks = await getDocBlocks(doc.docs_token, readToken);
-        const containsPrd = blocks.some(block => {
+        let containsPrd = false;
+        let libraUrl = '';
+
+        for (const block of blocks) {
           for (const el of block.text?.elements ?? []) {
-            // Check hyperlinks
             const style = el.text_run?.text_element_style as Record<string, unknown> | undefined;
             const link = style?.link as Record<string, unknown> | undefined;
-            if (typeof link?.url === 'string' && link.url.includes(prdDocToken)) return true;
-            // Check plain text
-            if (el.text_run?.content?.includes(prdDocToken)) return true;
+            const linkUrl = typeof link?.url === 'string' ? link.url : '';
+            const content = el.text_run?.content ?? '';
+
+            // Check for PRD link
+            if (linkUrl.includes(prdDocToken) || content.includes(prdDocToken)) {
+              containsPrd = true;
+            }
+            // Check for Libra URL
+            if (!libraUrl) {
+              const libraMatch = linkUrl.match(LIBRA_URL_RE) || content.match(LIBRA_URL_RE);
+              if (libraMatch) libraUrl = libraMatch[0];
+            }
           }
-          return false;
-        });
+        }
 
         if (containsPrd) {
-          console.log('[AB match] found:', doc.title, '— contains PRD link');
-          return `https://bytedance.sg.larkoffice.com/${doc.docs_type}/${doc.docs_token}`;
+          console.log('[AB match] found:', doc.title, '— contains PRD link, libra:', libraUrl || 'none');
+          return {
+            abReportUrl: `https://bytedance.sg.larkoffice.com/${doc.docs_type}/${doc.docs_token}`,
+            libraUrl,
+          };
         }
       } catch (e) {
         console.warn('[AB match] failed to read doc:', doc.title, e);
@@ -449,6 +468,35 @@ export async function searchAbReport(featureName: string, userAccessToken?: stri
     }
   }
 
+  return empty;
+}
+
+/**
+ * Search a Lark group chat for the latest Libra (AB test) URL.
+ */
+export async function searchLibraInChat(chatId: string): Promise<string> {
+  if (!chatId) return '';
+  const token = await getAccessToken();
+
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/im/v1/messages?container_id_type=chat&container_id=${chatId}&page_size=50`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const data = await parseJson(res, 'chat_messages_libra') as {
+    code: number; msg?: string;
+    data?: { items?: Array<{ msg_type: string; body?: { content?: string } }> };
+  };
+  if (data.code !== 0) {
+    console.warn('[libra chat] message fetch failed:', data.code, data.msg);
+    return '';
+  }
+
+  // Messages are newest-first — return the first Libra link found
+  for (const msg of data.data?.items ?? []) {
+    const content = msg.body?.content ?? '';
+    const match = content.match(LIBRA_URL_RE);
+    if (match) return match[0];
+  }
   return '';
 }
 
