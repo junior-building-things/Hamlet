@@ -256,6 +256,8 @@ export function ProjectView({ features, setFeatures }: Props) {
         contentDesigner: (d.contentDesigner as string) || p.contentDesigner,
         iosVersion:      (d.iosVersion     as string) || p.iosVersion,
         abReportUrl:     (d.abReportUrl    as string) || p.abReportUrl,
+        packageQrUrl:    (d.packageQrUrl  as string) || p.packageQrUrl,
+        chatId:          (d.chatId        as string) || p.chatId,
         lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
       }));
     } catch { /* ignore */ }
@@ -399,6 +401,8 @@ export function ProjectView({ features, setFeatures }: Props) {
               canCompleteNode: d.canCompleteNode as boolean,
               meegoNodeKey:    (d.meegoNodeKey as string) || f.meegoNodeKey,
               priority:        ((d.priority as Priority) ?? f.priority),
+              packageQrUrl:    (d.packageQrUrl as string) || f.packageQrUrl,
+              chatId:          (d.chatId as string) || f.chatId,
               lastUpdated:     f.lastUpdated || (d.lastUpdated as string) || '',
             }));
           })
