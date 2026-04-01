@@ -527,6 +527,10 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
+  // Log all date-like fields for debugging lastUpdated
+  const dateFields = raw.split('\n').filter((l: string) => l.includes('时间') || l.includes('time') || l.includes('date') || l.includes('Date'));
+  console.log('[meego] date-related fields:', dateFields.slice(0, 10));
+
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
   if (createdAtRaw) {
