@@ -1154,11 +1154,16 @@ interface LarkMessage {
   body?: { content?: string };
 }
 
+export interface PackageResult {
+  android?: { qrUrl: string; downloadUrl: string };
+  ios?: { qrUrl: string; downloadUrl: string };
+}
+
 /**
- * Search a chat's recent messages for the latest package release.
- * Returns the QR proxy URL and the direct download URL, or null.
+ * Search a chat's recent messages for the latest package releases.
+ * Returns Android and/or iOS package info.
  */
-export async function getPackageQrUrl(chatId: string): Promise<{ qrUrl: string; downloadUrl: string } | null> {
+export async function getPackageQrUrl(chatId: string): Promise<PackageResult | null> {
   const token = await getAccessToken();
 
   // Fetch recent messages (newest first)
@@ -1178,47 +1183,44 @@ export async function getPackageQrUrl(chatId: string): Promise<{ qrUrl: string; 
 
   const messages = data.data?.items ?? [];
 
-  // Search messages for package download URLs (newest first)
+  const result: PackageResult = {};
+
+  // Search messages for Android package download URLs (newest first)
   for (const msg of messages) {
+    if (result.android) break;
     if (!msg.body?.content) continue;
     const content = msg.body.content;
-
-    // Only look at package release messages
     if (!content.includes('released') && !content.includes('artifacts') && !content.includes('已发布')) continue;
 
-    // Look for install/download URLs in the message content
-    // Matches: ttidevops install URLs, voffline download URLs, or any .apk/.ipa URLs
     const urlPatterns = [
       /https:\/\/ttidevops[^"'\s]+package_id=\d+/,
-      /https:\/\/voffline\.byted\.org\/download[^"'\s]+\.(?:apk|ipa)/,
-      /https:\/\/[^"'\s]+\.(?:apk|ipa)/,
+      /https:\/\/voffline\.byted\.org\/download[^"'\s]+\.apk/,
+      /https:\/\/[^"'\s]+\.apk/,
     ];
 
     for (const pattern of urlPatterns) {
       const match = content.match(pattern);
       if (match) {
         const downloadUrl = match[0];
-        // Skip TikTok Lite packages
-        if (/ttlite|lite_android|lite_ios|app-lite/i.test(downloadUrl)) continue;
-        console.log('[lark] found package URL:', downloadUrl.slice(0, 100));
-        return {
+        if (/ttlite|lite_android|app-lite/i.test(downloadUrl)) continue;
+        console.log('[lark] found Android package:', downloadUrl.slice(0, 100));
+        result.android = {
           qrUrl: `/api/lark/qr?url=${encodeURIComponent(downloadUrl)}`,
           downloadUrl,
         };
+        break;
       }
     }
   }
 
-  // Fallback for iOS: extract commit hash from card messages and use Bits API
+  // Search for iOS packages: extract commit hash from card messages and use Bits API
   for (const msg of messages) {
+    if (result.ios) break;
     if (!msg.body?.content) continue;
     const content = msg.body.content;
     if (!content.includes('released') && !content.includes('artifacts')) continue;
-
-    // iOS cards have MusicallyInhouse or TikTokInhouse in the title/text
     if (!/musically|tiktok.*inhouse/i.test(content)) continue;
 
-    // Extract commit hash from code.byted.org URL
     const commitMatch = content.match(/code\.byted\.org\/[^/]+\/[^/]+\/commit\/([a-f0-9]{40})/);
     if (!commitMatch) continue;
 
@@ -1228,13 +1230,17 @@ export async function getPackageQrUrl(chatId: string): Promise<{ qrUrl: string; 
     const { getIosPackageUrl } = await import('@/lib/bits');
     const installUrl = await getIosPackageUrl(commitHash);
     if (installUrl) {
-      return {
+      result.ios = {
         qrUrl: `/api/lark/qr?url=${encodeURIComponent(installUrl)}`,
         downloadUrl: installUrl,
       };
     }
   }
 
-  console.log('[lark] no package QR found in', messages.length, 'messages');
-  return null;
+  if (!result.android && !result.ios) {
+    console.log('[lark] no packages found in', messages.length, 'messages');
+    return null;
+  }
+
+  return result;
 }

@@ -21,6 +21,7 @@ interface Props {
 
 export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete }: Props) {
   const [showPackage, setShowPackage] = useState(false);
+  const [showIos, setShowIos] = useState(false);
   return (
     <div className="bg-[#13162a] border border-[#1e2240] rounded-xl hover:border-[#2e3460] transition-colors
                     sm:col-span-full sm:grid sm:[grid-template-columns:subgrid] sm:items-center">
@@ -109,11 +110,22 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       {/* Package QR */}
-      <div className="hidden sm:flex items-center py-3 pl-4">
+      <div className="hidden sm:flex items-center gap-1 py-3 pl-4">
         {feature.packageQrUrl && (
-          <button onClick={() => setShowPackage(true)} className="block cursor-pointer hover:opacity-80 transition-opacity">
-            <img src={feature.packageQrUrl} alt="Package QR" className="w-8 h-8 rounded" />
-          </button>
+          <div className="relative group/android">
+            <button onClick={() => setShowPackage(true)} className="block cursor-pointer hover:opacity-80 transition-opacity">
+              <img src={feature.packageQrUrl} alt="Android QR" className="w-8 h-8 rounded" />
+            </button>
+            <span className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-gray-900 text-[10px] text-gray-300 rounded whitespace-nowrap opacity-0 group-hover/android:opacity-100 transition-opacity pointer-events-none">Android</span>
+          </div>
+        )}
+        {feature.iosPackageQrUrl && (
+          <div className="relative group/ios">
+            <button onClick={() => { setShowPackage(true); setShowIos(true); }} className="block cursor-pointer hover:opacity-80 transition-opacity">
+              <img src={feature.iosPackageQrUrl} alt="iOS QR" className="w-8 h-8 rounded" />
+            </button>
+            <span className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-gray-900 text-[10px] text-gray-300 rounded whitespace-nowrap opacity-0 group-hover/ios:opacity-100 transition-opacity pointer-events-none">iOS</span>
+          </div>
         )}
       </div>
 
@@ -144,12 +156,15 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       {/* Package modal */}
-      {showPackage && feature.packageQrUrl && (
+      {showPackage && (feature.packageQrUrl || feature.iosPackageQrUrl) && (
         <PackageModal
-          qrUrl={feature.packageQrUrl}
-          downloadUrl={feature.packageDownloadUrl ?? feature.packageQrUrl}
+          androidQrUrl={feature.packageQrUrl}
+          androidDownloadUrl={feature.packageDownloadUrl}
+          iosQrUrl={feature.iosPackageQrUrl}
+          iosDownloadUrl={feature.iosPackageDownloadUrl}
           featureName={feature.name}
-          onClose={() => setShowPackage(false)}
+          defaultTab={showIos ? 'ios' : 'android'}
+          onClose={() => { setShowPackage(false); setShowIos(false); }}
         />
       )}
     </div>

@@ -384,6 +384,8 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   abReportUrl: string;
   packageQrUrl: string;
   packageDownloadUrl: string;
+  iosPackageQrUrl: string;
+  iosPackageDownloadUrl: string;
   chatId: string;
   pocEmails: Record<string, string>;
 }> {
@@ -548,19 +550,23 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   let packageQrUrl = '';
   let packageDownloadUrl = '';
+  let iosPackageQrUrl = '';
+  let iosPackageDownloadUrl = '';
   let chatId = cachedChatId ?? '';
   if (workItemName) {
     try {
-      // Search for chat (and join if 2026+), skip join for older stories
       if (!chatId) {
         chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl, createdYear < 2026)) ?? '';
       }
-      // Fetch package QR if we have a chatId (regardless of creation year)
       if (chatId) {
         const pkg = await getPackageQrUrl(chatId);
-        if (pkg) {
-          packageQrUrl = pkg.qrUrl;
-          packageDownloadUrl = pkg.downloadUrl;
+        if (pkg?.android) {
+          packageQrUrl = pkg.android.qrUrl;
+          packageDownloadUrl = pkg.android.downloadUrl;
+        }
+        if (pkg?.ios) {
+          iosPackageQrUrl = pkg.ios.qrUrl;
+          iosPackageDownloadUrl = pkg.ios.downloadUrl;
         }
       }
     } catch (e) {
@@ -596,6 +602,8 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     abReportUrl,
     packageQrUrl,
     packageDownloadUrl,
+    iosPackageQrUrl,
+    iosPackageDownloadUrl,
     chatId,
     pocEmails,
   };

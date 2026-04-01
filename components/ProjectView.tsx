@@ -158,6 +158,8 @@ export function ProjectView({ features, setFeatures }: Props) {
             abReportUrl:     (d.abReportUrl      as string) || p.abReportUrl,
             packageQrUrl:    (d.packageQrUrl     as string) || p.packageQrUrl,
             packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
+            iosPackageQrUrl: (d.iosPackageQrUrl  as string) || p.iosPackageQrUrl,
+            iosPackageDownloadUrl: (d.iosPackageDownloadUrl as string) || p.iosPackageDownloadUrl,
             chatId:          (d.chatId           as string) || p.chatId,
             lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
           }));
