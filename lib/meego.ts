@@ -508,17 +508,28 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     iosVersion = await resolveVersion('field_08a9ca');
     if (!iosVersion) iosVersion = await resolveVersion('field_c88970');
 
-    // Debug: search for Bits-related fields across all nodes
-    const bitsFields: string[] = [];
+    // Debug: log all form_item field types that could contain work item references
+    const relatedFields: string[] = [];
     for (const node of nodeData.list ?? []) {
       for (const fi of node.form_items ?? []) {
-        if (fi.field_name?.includes('Bits') || fi.field_name?.includes('bits') || fi.field_name?.includes('开发任务') || fi.field_name?.includes('MR')) {
-          bitsFields.push(`${node.basic?.name}: ${fi.field_key}(${fi.field_name}) = ${fi.value?.slice(0, 100)}`);
+        const fiAny = fi as Record<string, unknown>;
+        const fieldType = fiAny.field_type as string ?? '';
+        if (fieldType.includes('workitem') || fieldType.includes('related') || fieldType.includes('sub_task') ||
+            fi.field_name?.includes('Bits') || fi.field_name?.includes('开发') || fi.field_name?.includes('任务') ||
+            fi.field_name?.includes('bits') || fi.field_name?.includes('devops')) {
+          relatedFields.push(`${node.basic?.name}: ${fi.field_key}(${fi.field_name}) type=${fieldType} val=${fi.value?.slice(0, 100)}`);
         }
       }
     }
-    if (bitsFields.length) console.log('[meego] Bits-related fields:', bitsFields);
-    else console.log('[meego] No Bits fields found in node form_items');
+    if (relatedFields.length) console.log('[meego] work-item related fields:', relatedFields);
+
+    // Check sub_tasks in each node (Bits tasks might be here)
+    for (const node of (nodeData.list ?? []).slice(0, 3)) {
+      const nodeAny = node as unknown as Record<string, unknown>;
+      if (nodeAny.sub_tasks) {
+        console.log(`[meego] sub_tasks in "${node.basic?.name}":`, JSON.stringify(nodeAny.sub_tasks).slice(0, 500));
+      }
+    }
   } catch (e) {
     console.log('[meego] version fetch failed:', e);
   }
@@ -543,9 +554,11 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
-  // Debug: search for Bits/MR references in brief
-  const bitsInBrief = raw.match(/.{0,20}(bits|Bits|开发任务|MR|mr_iid).{0,50}/gi);
+  // Debug: search for Bits/dev task references in brief
+  const bitsInBrief = raw.match(/.{0,20}(bits|Bits|开发任务|sub_task|子任务|devops).{0,80}/gi);
   if (bitsInBrief?.length) console.log('[meego] Bits in brief:', bitsInBrief.slice(0, 5));
+  // Also look for the sub_tasks section in node detail
+  // The node detail JSON has a sub_tasks key per node
 
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
