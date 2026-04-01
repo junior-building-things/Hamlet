@@ -1159,45 +1159,28 @@ export async function getPackageQrUrl(chatId: string): Promise<string | null> {
 
   const messages = data.data?.items ?? [];
 
-  // First pass: look for install URL in any message
+  // Search messages for package download URLs (newest first)
   for (const msg of messages) {
     if (!msg.body?.content) continue;
-    const installMatch = msg.body.content.match(/https:\/\/ttidevops\.cn\.goofy\.app\/install\.html\?package_id=\d+/);
-    if (installMatch) {
-      console.log('[lark] found install URL in message:', installMatch[0]);
-      // Generate QR code from this URL
-      return `/api/lark/qr?url=${encodeURIComponent(installMatch[0])}`;
-    }
-  }
-
-  // Second pass: look for artifact card messages
-  for (const msg of messages) {
-    if (!msg.body?.content) continue;
-
     const content = msg.body.content;
 
-    if (!content.includes('artifacts') && !content.includes('released') && !content.includes('已发布')) continue;
+    // Only look at package release messages
+    if (!content.includes('released') && !content.includes('artifacts') && !content.includes('已发布')) continue;
 
-    // Log full message object to find button action URLs
-    console.log('[lark] package msg keys:', Object.keys(msg));
-    console.log('[lark] package msg body content:', content);
-    // Check if there's a separate content field with actions
-    const msgAny = msg as unknown as Record<string, unknown>;
-    if (msgAny.content) console.log('[lark] package msg .content:', String(msgAny.content).slice(0, 1000));
+    // Look for install/download URLs in the message content
+    // Matches: ttidevops install URLs, voffline download URLs, or any .apk/.ipa URLs
+    const urlPatterns = [
+      /https:\/\/ttidevops[^"'\s]+package_id=\d+/,
+      /https:\/\/voffline\.byted\.org\/download[^"'\s]+\.(?:apk|ipa)/,
+      /https:\/\/[^"'\s]+\.(?:apk|ipa)/,
+    ];
 
-    // Try to find a direct download URL first (some cards include href links)
-    const downloadMatch = content.match(/"(https?:\/\/[^"]*(?:download|install|qrcode)[^"]*)"/i);
-    if (downloadMatch) {
-      console.log('[lark] found package download URL:', downloadMatch[1]);
-      return downloadMatch[1];
-    }
-
-    // Extract image_key from the content
-    const imageKeyMatch = content.match(/"image_key"\s*:\s*"([^"]+)"/);
-    if (imageKeyMatch) {
-      const imageKey = imageKeyMatch[1];
-      console.log('[lark] found package QR imageKey:', imageKey);
-      return `/api/lark/image?messageId=${msg.message_id}&imageKey=${imageKey}`;
+    for (const pattern of urlPatterns) {
+      const match = content.match(pattern);
+      if (match) {
+        console.log('[lark] found package URL:', match[0].slice(0, 100));
+        return `/api/lark/qr?url=${encodeURIComponent(match[0])}`;
+      }
     }
   }
 
