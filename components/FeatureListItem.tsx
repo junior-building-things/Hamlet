@@ -1,10 +1,12 @@
 'use client';
+import { useState } from 'react';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
 import { VersionBadge } from './VersionBadge';
 import { TeamAvatars } from './TeamAvatars';
 import { LinkIcons } from './LinkIcons';
+import { PackageModal } from './PackageModal';
 import Image from 'next/image';
 import { RefreshCw, Calendar, CheckCircle2, Loader2 } from 'lucide-react';
 
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete }: Props) {
+  const [showPackage, setShowPackage] = useState(false);
   return (
     <div className="bg-[#13162a] border border-[#1e2240] rounded-xl hover:border-[#2e3460] transition-colors
                     sm:col-span-full sm:grid sm:[grid-template-columns:subgrid] sm:items-center">
@@ -108,9 +111,9 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       {/* Package QR */}
       <div className="hidden sm:flex items-center py-3 pl-4">
         {feature.packageQrUrl && (
-          <a href={feature.packageQrUrl} target="_blank" rel="noreferrer" className="block">
+          <button onClick={() => setShowPackage(true)} className="block cursor-pointer hover:opacity-80 transition-opacity">
             <img src={feature.packageQrUrl} alt="Package QR" className="w-8 h-8 rounded" />
-          </a>
+          </button>
         )}
       </div>
 
@@ -139,6 +142,16 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
           </button>
         )}
       </div>
+
+      {/* Package modal */}
+      {showPackage && feature.packageQrUrl && (
+        <PackageModal
+          qrUrl={feature.packageQrUrl}
+          downloadUrl={feature.packageDownloadUrl ?? feature.packageQrUrl}
+          featureName={feature.name}
+          onClose={() => setShowPackage(false)}
+        />
+      )}
     </div>
   );
 }

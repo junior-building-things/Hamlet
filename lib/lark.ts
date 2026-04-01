@@ -1150,10 +1150,10 @@ interface LarkMessage {
 }
 
 /**
- * Search a chat's recent messages for the latest package release QR code.
- * Returns a proxy URL like /api/lark/image?messageId=X&imageKey=Y, or null.
+ * Search a chat's recent messages for the latest package release.
+ * Returns the QR proxy URL and the direct download URL, or null.
  */
-export async function getPackageQrUrl(chatId: string): Promise<string | null> {
+export async function getPackageQrUrl(chatId: string): Promise<{ qrUrl: string; downloadUrl: string } | null> {
   const token = await getAccessToken();
 
   // Fetch recent messages (newest first)
@@ -1192,8 +1192,12 @@ export async function getPackageQrUrl(chatId: string): Promise<string | null> {
     for (const pattern of urlPatterns) {
       const match = content.match(pattern);
       if (match) {
-        console.log('[lark] found package URL:', match[0].slice(0, 100));
-        return `/api/lark/qr?url=${encodeURIComponent(match[0])}`;
+        const downloadUrl = match[0];
+        console.log('[lark] found package URL:', downloadUrl.slice(0, 100));
+        return {
+          qrUrl: `/api/lark/qr?url=${encodeURIComponent(downloadUrl)}`,
+          downloadUrl,
+        };
       }
     }
   }

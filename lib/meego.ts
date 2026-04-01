@@ -383,6 +383,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   iosVersion: string;
   abReportUrl: string;
   packageQrUrl: string;
+  packageDownloadUrl: string;
   chatId: string;
   pocEmails: Record<string, string>;
 }> {
@@ -546,6 +547,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   }
 
   let packageQrUrl = '';
+  let packageDownloadUrl = '';
   let chatId = cachedChatId ?? '';
   const shouldJoinChat = createdYear >= 2026;
   if (workItemName && shouldJoinChat) {
@@ -554,8 +556,11 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
         chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl)) ?? '';
       }
       if (chatId) {
-        const qrUrl = await getPackageQrUrl(chatId);
-        if (qrUrl) packageQrUrl = qrUrl;
+        const pkg = await getPackageQrUrl(chatId);
+        if (pkg) {
+          packageQrUrl = pkg.qrUrl;
+          packageDownloadUrl = pkg.downloadUrl;
+        }
       }
     } catch (e) {
       console.warn('[sync] join feature chat / package QR error:', e);
@@ -589,6 +594,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     iosVersion,
     abReportUrl,
     packageQrUrl,
+    packageDownloadUrl,
     chatId,
     pocEmails,
   };

@@ -156,6 +156,7 @@ export function ProjectView({ features, setFeatures }: Props) {
             iosVersion:      (d.iosVersion       as string) || p.iosVersion,
             abReportUrl:     (d.abReportUrl      as string) || p.abReportUrl,
             packageQrUrl:    (d.packageQrUrl     as string) || p.packageQrUrl,
+            packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
             chatId:          (d.chatId           as string) || p.chatId,
             lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
           }));
@@ -257,6 +258,7 @@ export function ProjectView({ features, setFeatures }: Props) {
         iosVersion:      (d.iosVersion     as string) || p.iosVersion,
         abReportUrl:     (d.abReportUrl    as string) || p.abReportUrl,
         packageQrUrl:    (d.packageQrUrl  as string) || p.packageQrUrl,
+        packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
         chatId:          (d.chatId        as string) || p.chatId,
         lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
       }));
@@ -402,6 +404,7 @@ export function ProjectView({ features, setFeatures }: Props) {
               meegoNodeKey:    (d.meegoNodeKey as string) || f.meegoNodeKey,
               priority:        ((d.priority as Priority) ?? f.priority),
               packageQrUrl:    (d.packageQrUrl as string) || f.packageQrUrl,
+              packageDownloadUrl: (d.packageDownloadUrl as string) || f.packageDownloadUrl,
               chatId:          (d.chatId as string) || f.chatId,
               lastUpdated:     f.lastUpdated || (d.lastUpdated as string) || '',
             }));
