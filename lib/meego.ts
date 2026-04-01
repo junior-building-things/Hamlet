@@ -391,7 +391,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
-    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'created_at'],
+    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'created_at', 'field_0cec98', 'field_6909f6'],
   });
 
   const lines = raw.split('\n');
@@ -535,6 +535,12 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
+  // Debug: check compliance fields
+  const field0cec98 = parseWorkItemField(raw, 'field_0cec98') || raw.match(/field_0cec98[^|]*\|\s*([^|\n]+)/)?.[1]?.trim();
+  const field6909f6 = parseWorkItemField(raw, 'field_6909f6') || raw.match(/field_6909f6[^|]*\|\s*([^|\n]+)/)?.[1]?.trim();
+  console.log('[meego] field_0cec98:', field0cec98);
+  console.log('[meego] field_6909f6:', field6909f6);
+
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
   if (createdAtRaw) {
