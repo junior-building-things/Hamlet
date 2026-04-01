@@ -26,22 +26,29 @@ export async function GET(req: NextRequest) {
   const token = await getAccessToken();
 
   // Try multiple image endpoints
-  // 1. Standard image API
-  const url1 = `${LARK_BASE_URL}/open-apis/im/v1/images/${imageKey}`;
-  console.log('[lark-image] trying:', url1);
-  let res = await fetch(url1, { headers: { Authorization: `Bearer ${token}` } });
+  const urls = [
+    `${LARK_BASE_URL}/open-apis/im/v1/images/${imageKey}`,
+    messageId ? `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}/resources/${imageKey}?type=image` : '',
+    // Card images may be on Lark's static CDN
+    `https://lf-flow-web-cdn-sg.feishucdn.com/obj/${imageKey}`,
+    `https://internal-api-larkoffice.feishu.cn/open-apis/im/v1/images/${imageKey}`,
+  ].filter(Boolean);
 
-  // 2. If failed, try message resource API
-  if (!res.ok && messageId) {
-    const url2 = `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}/resources/${imageKey}?type=image`;
-    console.log('[lark-image] fallback:', url2);
-    res = await fetch(url2, { headers: { Authorization: `Bearer ${token}` } });
+  let res: Response | null = null;
+  for (const url of urls) {
+    console.log('[lark-image] trying:', url);
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (r.ok) {
+      res = r;
+      console.log('[lark-image] success:', url);
+      break;
+    }
+    const errText = await r.text();
+    console.log('[lark-image] failed:', r.status, errText.slice(0, 200));
   }
 
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error('[lark-image] fetch failed:', res.status, errText.slice(0, 300));
-    return NextResponse.json({ error: 'Failed to fetch image', status: res.status, detail: errText.slice(0, 200) }, { status: 502 });
+  if (!res) {
+    return NextResponse.json({ error: 'Failed to fetch image from all endpoints' }, { status: 502 });
   }
 
   const contentType = res.headers.get('content-type') ?? 'image/png';
