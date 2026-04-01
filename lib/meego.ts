@@ -535,11 +535,14 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
-  // Debug: check compliance fields
-  const field0cec98 = parseWorkItemField(raw, 'field_0cec98') || raw.match(/field_0cec98[^|]*\|\s*([^|\n]+)/)?.[1]?.trim();
-  const field6909f6 = parseWorkItemField(raw, 'field_6909f6') || raw.match(/field_6909f6[^|]*\|\s*([^|\n]+)/)?.[1]?.trim();
-  console.log('[meego] field_0cec98:', field0cec98);
-  console.log('[meego] field_6909f6:', field6909f6);
+  // Debug: search raw brief for compliance field keys
+  const match0cec98 = raw.match(/.{0,30}0cec98.{0,80}/gi);
+  const match6909f6 = raw.match(/.{0,30}6909f6.{0,80}/gi);
+  console.log('[meego] field_0cec98 in raw:', match0cec98?.slice(0, 3) ?? 'not found');
+  console.log('[meego] field_6909f6 in raw:', match6909f6?.slice(0, 3) ?? 'not found');
+  // Also search for 合规 (compliance) related fields
+  const complianceFields = raw.match(/.{0,20}合规.{0,60}/gi);
+  console.log('[meego] compliance fields:', complianceFields?.slice(0, 5) ?? 'none');
 
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
