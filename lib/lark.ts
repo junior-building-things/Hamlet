@@ -1094,50 +1094,10 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
     return null;
   }
 
-  console.log('[lark] found chat:', bestChat.name, '— adding bot');
+  console.log('[lark] found chat:', bestChat.name, '— DRY RUN (join disabled for verification)');
 
-  // Try bot self-join first, then fall back to user adding bot
-  let joined = false;
-
-  // Attempt 1: Bot adds itself via members endpoint with bot token
-  const selfAddRes = await fetch(
-    `${LARK_BASE_URL}/open-apis/im/v1/chats/${bestChat.chat_id}/members?member_id_type=app_id`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id_list: [appId] }),
-    },
-  );
-  const selfAddData = await parseJson(selfAddRes, 'chat_add_bot_self') as { code: number; msg?: string };
-  if (selfAddData.code === 0 || selfAddData.code === 230001) {
-    joined = true;
-    console.log('[lark] bot joined chat (bot token):', bestChat.name);
-  }
-
-  // Attempt 2: User adds the bot (if user token available and bot couldn't self-join)
-  if (!joined && userAccessToken) {
-    const addRes = await fetch(
-      `${LARK_BASE_URL}/open-apis/im/v1/chats/${bestChat.chat_id}/members?member_id_type=app_id`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${userAccessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id_list: [appId] }),
-      },
-    );
-    const addData = await parseJson(addRes, 'chat_add_bot_user') as { code: number; msg?: string };
-    if (addData.code === 0 || addData.code === 230001) {
-      joined = true;
-      console.log('[lark] bot joined chat (user token):', bestChat.name);
-    } else {
-      console.warn('[lark] failed to add bot to chat:', addData.code, addData.msg);
-    }
-  }
-
-  // Even if join failed, return chatId if we can still read from it (bot might already be in)
-  if (!joined) {
-    console.warn('[lark] could not join chat, returning chatId anyway:', bestChat.chat_id);
-  }
-
+  // TEMPORARILY DISABLED: bot join logic
+  // TODO: re-enable after verifying create_time filter works correctly
   return bestChat.chat_id;
 }
 
