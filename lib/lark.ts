@@ -1174,14 +1174,16 @@ export async function getPackageQrUrl(chatId: string): Promise<string | null> {
   for (const msg of messages) {
     if (!msg.body?.content) continue;
 
-    let content: string;
-    try {
-      content = msg.body.content;
-    } catch { continue; }
+    const content = msg.body.content;
 
     if (!content.includes('artifacts') && !content.includes('released') && !content.includes('已发布')) continue;
 
-    console.log('[lark] package message content:', content.slice(0, 300));
+    // Log full message object to find button action URLs
+    console.log('[lark] package msg keys:', Object.keys(msg));
+    console.log('[lark] package msg body content:', content);
+    // Check if there's a separate content field with actions
+    const msgAny = msg as Record<string, unknown>;
+    if (msgAny.content) console.log('[lark] package msg .content:', String(msgAny.content).slice(0, 1000));
 
     // Try to find a direct download URL first (some cards include href links)
     const downloadMatch = content.match(/"(https?:\/\/[^"]*(?:download|install|qrcode)[^"]*)"/i);
