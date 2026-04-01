@@ -14,6 +14,7 @@ const STORAGE_KEY      = 'hamlet_features_v1';
 const STORAGE_GROUP_BY = 'hamlet_group_by';
 const STORAGE_SORT_BY  = 'hamlet_sort_by';
 const STORAGE_SORT_DIR = 'hamlet_sort_dir';
+const SYNC_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
 const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
 
@@ -203,10 +204,22 @@ export function ProjectView({ features, setFeatures }: Props) {
       }
       if (!list) list = await fetchFromMeego();
       setLoading(false);
-      if (list) syncAllDetails(list);
+      if (list) {
+        syncAllDetails(list);
+        if (typeof window !== 'undefined') localStorage.setItem('hamlet_last_sync', String(Date.now()));
+      }
     }
+    const lastSync = typeof window !== 'undefined' ? Number(localStorage.getItem('hamlet_last_sync') || '0') : 0;
+    const elapsed = Date.now() - lastSync;
+
     if (features.length === 0) init();
-    else { setLoading(false); syncAllDetails(features); }
+    else if (elapsed >= SYNC_COOLDOWN_MS) {
+      setLoading(false);
+      syncAllDetails(features);
+      if (typeof window !== 'undefined') localStorage.setItem('hamlet_last_sync', String(Date.now()));
+    } else {
+      setLoading(false);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -270,7 +283,10 @@ export function ProjectView({ features, setFeatures }: Props) {
     setSyncingAll(true);
     const list = await fetchFromMeego();
     setSyncingAll(false);
-    if (list) syncAllDetails(list);
+    if (list) {
+      syncAllDetails(list);
+      if (typeof window !== 'undefined') localStorage.setItem('hamlet_last_sync', String(Date.now()));
+    }
   }
 
   function handleNodeCompleted(featureId: string) {
