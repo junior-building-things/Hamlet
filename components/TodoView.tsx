@@ -1,10 +1,12 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { FeatureListHeader } from './FeatureListHeader';
 import { FeatureListItem } from './FeatureListItem';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { FeatureModal } from './FeatureModal';
+import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { AV } from '@/lib/avatars';
 
 function statusChipCls(key: string): string {
   const s = key.toLowerCase();
@@ -30,6 +32,10 @@ export function TodoView({ features, setFeatures }: Props) {
   const [completingId,  setCompletingId]  = useState<string | null>(null);
   const [completed,     setCompleted]     = useState<Set<string>>(new Set());
   const [bulkRunning,   setBulkRunning]   = useState<string | null>(null);
+  const [syncingAll,    setSyncingAll]    = useState(false);
+  const [syncingId,     setSyncingId]     = useState<string | null>(null);
+  const [editingFeature, setEditing]      = useState<Feature | undefined>();
+  const [modalMode,     setModalMode]     = useState<'edit' | null>(null);
 
   // Features where the user is the assignee on an active node
   const todos = features.filter(f => f.canCompleteNode === true && !completed.has(f.id));
@@ -109,17 +115,63 @@ export function TodoView({ features, setFeatures }: Props) {
     toast.success(`Completed ${count}/${items.length} ${nodeType} nodes`);
   }
 
+  // ── Sync ──────────────────────────────────────────────────────────────────
+  const syncOne = useCallback(async (feature: Feature) => {
+    if (!feature.meegoUrl) return;
+    setSyncingId(feature.id);
+    try {
+      const res = await fetch('/api/meego/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meegoUrl: feature.meegoUrl, chatId: feature.chatId }),
+      });
+      if (!res.ok) throw new Error('Sync failed');
+      const d = await res.json() as Record<string, unknown>;
+      if (d.pocAvatars && typeof d.pocAvatars === 'object') Object.assign(AV, d.pocAvatars);
+      setFeatures(prev => prev.map(p => p.id !== feature.id ? p : {
+        ...p, ...Object.fromEntries(Object.entries(d).filter(([, v]) => v !== '' && v !== null && v !== undefined)),
+        lastUpdated: p.lastUpdated || (d.lastUpdated as string) || '',
+      }));
+    } catch { /* ignore */ }
+    finally { setSyncingId(null); }
+  }, [setFeatures]);
+
+  async function syncAll() {
+    setSyncingAll(true);
+    const withUrl = features.filter(f => f.meegoUrl);
+    for (const f of withUrl) {
+      try { await syncOne(f); } catch { /* ignore */ }
+    }
+    setSyncingAll(false);
+  }
+
+  function openDetail(feature: Feature) {
+    setEditing(feature);
+    setModalMode('edit');
+  }
+
   const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_max-content_max-content_max-content_max-content_max-content_max-content_max-content_max-content] sm:gap-x-1.5 sm:gap-y-2';
 
   return (
     <div className="min-h-screen">
 
       {/* Header */}
-      <div className="px-6 pt-7 pb-2">
-        <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
-          To Dos
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">Nodes waiting for your action</p>
+      <div className="flex items-start justify-between px-6 pt-7 pb-2">
+        <div>
+          <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
+            To Dos
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">Nodes waiting for your action</p>
+        </div>
+        <button
+          onClick={syncAll}
+          disabled={syncingAll}
+          className="flex items-center gap-2 px-4 py-2 bg-[#1e2240] hover:bg-[#252a4a] text-gray-300 hover:text-white text-sm rounded-xl transition-colors disabled:opacity-50"
+        >
+          {syncingAll
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
+            : <><RefreshCw className="w-3.5 h-3.5" /> Sync All</>}
+        </button>
       </div>
 
       {/* Bulk completion cards */}
@@ -205,9 +257,9 @@ export function TodoView({ features, setFeatures }: Props) {
                     <FeatureListItem
                       key={f.id}
                       feature={f}
-                      syncing={false}
-                      onEdit={() => {}}
-                      onSync={() => {}}
+                      syncing={syncingId === f.id}
+                      onEdit={openDetail}
+                      onSync={syncOne}
                       completing={completingId === f.id}
                       onComplete={handleComplete}
                     />
@@ -237,6 +289,16 @@ export function TodoView({ features, setFeatures }: Props) {
           </div>
         )}
       </div>
+
+      {/* Detail modal */}
+      {modalMode === 'edit' && editingFeature && (
+        <FeatureModal
+          mode="edit"
+          feature={editingFeature}
+          onClose={() => { setModalMode(null); setEditing(undefined); }}
+          onSave={() => {}}
+        />
+      )}
     </div>
   );
 }
