@@ -77,9 +77,11 @@ function GroupHeader({ label, count, first, groupBy }: { label: string; count: n
 interface Props {
   features: Feature[];
   setFeatures: React.Dispatch<React.SetStateAction<Feature[]>>;
+  pinnedId?: string | null;
+  onClearPin?: () => void;
 }
 
-export function ProjectView({ features, setFeatures }: Props) {
+export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Props) {
   const [view,           setView]           = useState<'grid' | 'list'>('list');
   const [search,         setSearch]         = useState('');
   const [statusFilter,   setStatusFilter]   = useState<string>('All');
@@ -93,7 +95,6 @@ export function ProjectView({ features, setFeatures }: Props) {
   const [modalMode,      setModalMode]      = useState<'edit' | null>(null);
   const [editingFeature, setEditing]        = useState<Feature | undefined>();
   const [completingId,   setCompletingId]   = useState<string | null>(null);
-  const [pinnedId,       setPinnedId]       = useState<string | null>(null);
 
   // ── Persisted group + sort preferences ───────────────────────────────────
 
@@ -336,7 +337,7 @@ export function ProjectView({ features, setFeatures }: Props) {
   }, [setFeatures]);
 
   async function syncAll() {
-    setPinnedId(null);
+    onClearPin?.();
     setSyncingAll(true);
     const list = await fetchFromMeego();
     setSyncingAll(false);
@@ -355,9 +356,6 @@ export function ProjectView({ features, setFeatures }: Props) {
     if (feature) {
       setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
       toast.success(`"${feature.name}" created`);
-      // Pin the new feature to the top of the list for 30 seconds
-      setPinnedId(feature.id);
-      setTimeout(() => setPinnedId(prev => prev === feature.id ? null : prev), 30_000);
     } else {
       setFeatures(prev => prev.filter(f => f.id !== tempId));
       toast.error('Failed to create feature');

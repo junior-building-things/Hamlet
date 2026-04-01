@@ -18,6 +18,7 @@ export default function Home() {
     return 'project';
   });
   const [showAddModal,  setShowAddModal]  = useState(false);
+  const [pinnedId,      setPinnedId]      = useState<string | null>(null);
   const [user,          setUser]          = useState<{ name: string; avatarUrl: string } | undefined>();
 
   // Sync URL when view changes
@@ -68,6 +69,9 @@ export default function Home() {
   function handleFeatureCreated(tempId: string, feature: Feature | null) {
     if (feature) {
       setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
+      // Pin the new feature to the top of the list for 30 seconds
+      setPinnedId(feature.id);
+      setTimeout(() => setPinnedId(prev => prev === feature.id ? null : prev), 30_000);
     } else {
       setFeatures(prev => prev.filter(f => f.id !== tempId));
     }
@@ -86,7 +90,7 @@ export default function Home() {
 
       <div className="flex-1 overflow-y-auto min-h-screen">
         {activeView === 'project' && (
-          <ProjectView features={features} setFeatures={setFeatures} />
+          <ProjectView features={features} setFeatures={setFeatures} pinnedId={pinnedId} onClearPin={() => setPinnedId(null)} />
         )}
         {activeView === 'chat' && (
           <ChatView onFeatureCreated={f => setFeatures(prev => [f, ...prev])} />
