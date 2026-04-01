@@ -507,6 +507,18 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
     iosVersion = await resolveVersion('field_08a9ca');
     if (!iosVersion) iosVersion = await resolveVersion('field_c88970');
+
+    // Debug: search for Bits-related fields across all nodes
+    const bitsFields: string[] = [];
+    for (const node of nodeData.list ?? []) {
+      for (const fi of node.form_items ?? []) {
+        if (fi.field_name?.includes('Bits') || fi.field_name?.includes('bits') || fi.field_name?.includes('开发任务') || fi.field_name?.includes('MR')) {
+          bitsFields.push(`${node.basic?.name}: ${fi.field_key}(${fi.field_name}) = ${fi.value?.slice(0, 100)}`);
+        }
+      }
+    }
+    if (bitsFields.length) console.log('[meego] Bits-related fields:', bitsFields);
+    else console.log('[meego] No Bits fields found in node form_items');
   } catch (e) {
     console.log('[meego] version fetch failed:', e);
   }
@@ -531,6 +543,10 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
+  // Debug: search for Bits/MR references in brief
+  const bitsInBrief = raw.match(/.{0,20}(bits|Bits|开发任务|MR|mr_iid).{0,50}/gi);
+  if (bitsInBrief?.length) console.log('[meego] Bits in brief:', bitsInBrief.slice(0, 5));
+
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
   if (createdAtRaw) {
