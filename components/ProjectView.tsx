@@ -582,10 +582,15 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           // ── Grouped list view ──────────────────────────────────────────────
           <div className={listGridCls}>
             <FeatureListHeader />
+            {/* Render pinned feature above all groups */}
+            {pinnedId && (() => {
+              const pinned = features.find(f => f.id === pinnedId);
+              return pinned ? renderListRows([pinned]) : null;
+            })()}
             {groups.map((group, gi) => (
               <React.Fragment key={group.key}>
                 <GroupHeader label={group.label} count={group.items.length} first={gi === 0} groupBy={groupBy} />
-                {renderListRows(group.items)}
+                {renderListRows(group.items.filter(f => f.id !== pinnedId))}
               </React.Fragment>
             ))}
           </div>
