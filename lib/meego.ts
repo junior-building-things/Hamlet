@@ -173,6 +173,7 @@ interface MqlFieldValue {
   varchar_value?: string;
   string_value?: string;
   key_label_value?: { key: string; label: string };
+  array_varchar_value?: string[];
 }
 
 interface MqlItem {
@@ -190,7 +191,7 @@ interface ExtendedFields { priority: Priority; prd: string; complianceUrl: strin
 // Fetch all PM-owned TikTok stories via MQL — returns every story regardless of todo status
 async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
   const map = new Map<string, ExtendedFields>();
-  const MQL = 'SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at`, `field_30a184` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()';
+  const MQL = "SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at`, `field_30a184`, in_progress_nodes_name() FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()";
   const GROUP_ID = '1';
   let sessionId: string | undefined;
   let page = 1;
@@ -224,6 +225,7 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
       let complianceUrl = '';
       let lastUpdated = '';
       let commentSummary = '';
+      let status = '';
       for (const f of item.moql_field_list ?? []) {
         if (f.key === 'work_item_id') {
           id = String(f.value.long_value ?? '');
@@ -251,10 +253,16 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
           }
         } else if (f.key === 'field_30a184') {
           commentSummary = f.value.string_value ?? f.value.varchar_value ?? '';
+        } else if (f.key === 'in_progress_nodes_name()') {
+          // Array of active node names, e.g. ["iOS 开发", "Android 开发"]
+          const nodeNames = f.value.array_varchar_value ?? [];
+          if (nodeNames.length > 0) {
+            status = translateNode(nodeNames[0]);
+          }
         }
       }
 
-      if (id) map.set(id, { priority, prd, complianceUrl, lastUpdated, name, status: 'Unknown', nodeKey: '', commentSummary });
+      if (id) map.set(id, { priority, prd, complianceUrl, lastUpdated, name, status, nodeKey: '', commentSummary });
     }
 
     if (map.size >= total || items.length === 0) break;
@@ -336,9 +344,10 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
     });
   }
 
-  // Add stories from MQL that weren't in the todo list
+  // Add stories from MQL that weren't in the todo list (skip deleted/completed with no active node)
   for (const [id, ext] of allOwned) {
     if (todoIds.has(id)) continue;
+    if (!ext.status) continue; // no active node = likely deleted or fully completed
     features.push({
       id,
       name: ext.name,
