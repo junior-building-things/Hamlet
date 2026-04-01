@@ -180,7 +180,42 @@ export function ProjectView({ features, setFeatures }: Props) {
       const data = await res.json() as { features?: Feature[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       if (data.features && data.features.length > 0) {
-        setFeatures(data.features);
+        // Merge new list with existing features to preserve enriched fields
+        // (figmaUrl, packageQrUrl, chatId, abReportUrl, etc.) that MQL doesn't return
+        setFeatures(prev => {
+          const existing = new Map(prev.map(f => [f.id, f]));
+          return data.features!.map(f => {
+            const old = existing.get(f.id);
+            if (!old) return f;
+            // New basic fields from MQL overwrite, but keep enriched fields from previous sync
+            return { ...old, ...f,
+              // Preserve enriched fields that MQL doesn't return (only overwrite if new value is non-empty)
+              figmaUrl:        f.figmaUrl        || old.figmaUrl,
+              abReportUrl:     f.abReportUrl     || old.abReportUrl,
+              packageQrUrl:    f.packageQrUrl    || old.packageQrUrl,
+              packageDownloadUrl: f.packageDownloadUrl || old.packageDownloadUrl,
+              iosPackageQrUrl: f.iosPackageQrUrl || old.iosPackageQrUrl,
+              iosPackageDownloadUrl: f.iosPackageDownloadUrl || old.iosPackageDownloadUrl,
+              chatId:          f.chatId          || old.chatId,
+              quarterlyCycle:  f.quarterlyCycle   || old.quarterlyCycle,
+              businessLine:    f.businessLine     || old.businessLine,
+              socialComponent: f.socialComponent  || old.socialComponent,
+              pmOwner:         f.pmOwner          || old.pmOwner,
+              tpmOwner:        f.tpmOwner         || old.tpmOwner,
+              techOwner:       f.techOwner        || old.techOwner,
+              iosOwner:        f.iosOwner         || old.iosOwner,
+              androidOwner:    f.androidOwner     || old.androidOwner,
+              serverOwner:     f.serverOwner      || old.serverOwner,
+              qaOwner:         f.qaOwner          || old.qaOwner,
+              daOwner:         f.daOwner          || old.daOwner,
+              uiuxOwner:       f.uiuxOwner        || old.uiuxOwner,
+              contentDesigner: f.contentDesigner   || old.contentDesigner,
+              iosVersion:      f.iosVersion        || old.iosVersion,
+              canCompleteNode: f.canCompleteNode   ?? old.canCompleteNode,
+              lastUpdated:     f.lastUpdated       || old.lastUpdated,
+            };
+          });
+        });
         return data.features;
       }
       setFetchError('No features returned from Meego');
