@@ -541,9 +541,9 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     if (meegoId) {
       const mqlRaw = await callMeegoMcp('search_by_mql', {
         project_key: 'TikTok',
-        mql: `SELECT \`field_0cec98\`, \`field_6909f6\` FROM \`TikTok\`.\`需求\` WHERE \`work_item_id\` = ${meegoId}`,
+        mql: `SELECT \`field_30a184\` FROM \`TikTok\`.\`需求\` WHERE \`work_item_id\` = ${meegoId}`,
       });
-      console.log('[meego] MQL field_0cec98/field_6909f6:', mqlRaw.slice(0, 500));
+      console.log('[meego] MQL field_30a184:', mqlRaw.slice(0, 500));
     }
   } catch (e) {
     console.log('[meego] MQL compliance fields failed:', e instanceof Error ? e.message : e);
