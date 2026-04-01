@@ -533,21 +533,6 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
-  // Debug: search for MR/Bits references in brief
-  const mrRefs = raw.match(/.{0,30}(mr_iid|mr_id|merge_request|MR|bits\.bytedance|code\.byted|iid|devops).{0,80}/gi);
-  if (mrRefs?.length) console.log('[meego] MR refs in brief:', mrRefs.slice(0, 10));
-
-  // Also search node detail for MR references
-  try {
-    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const nodeRefs = nodeRaw.match(/.{0,30}(mr_iid|mr_id|merge_request|MR|bits\.bytedance|code\.byted|iid|devops).{0,80}/gi);
-    if (nodeRefs?.length) console.log('[meego] MR refs in nodes:', nodeRefs.slice(0, 10));
-
-    // Search sub_tasks specifically
-    const subTaskRefs = nodeRaw.match(/.{0,30}(sub_task|subtask).{0,200}/gi);
-    if (subTaskRefs?.length) console.log('[meego] sub_tasks:', subTaskRefs.slice(0, 3));
-  } catch { /* ignore */ }
-
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
   if (createdAtRaw) {
