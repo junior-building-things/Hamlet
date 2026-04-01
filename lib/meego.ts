@@ -531,13 +531,27 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       }
     }
 
-    // Try list_related_workitems without field_key (get all relations)
+    // Search field config for Bits/devtask related field keys
     try {
-      const relRaw = await callMeegoMcp('list_related_workitems', { url: meegoUrl });
-      console.log('[meego] all related workitems:', relRaw.slice(0, 500));
-    } catch (e) {
-      console.log('[meego] list_related_workitems (no field) failed:', e);
-    }
+      const configRaw = await callMeegoMcp('list_workitem_field_config', { url: meegoUrl });
+      // Parse JSON config to find sub_task or connection type fields
+      try {
+        const config = JSON.parse(configRaw);
+        const fields = config.list ?? config.data?.list ?? config;
+        if (Array.isArray(fields)) {
+          const bitsLike = fields.filter((f: Record<string, string>) =>
+            f.field_type?.includes('sub_task') || f.field_type?.includes('connection') ||
+            f.field_type?.includes('relation') || f.field_name?.includes('Bits') ||
+            f.field_name?.includes('开发任务') || f.field_name?.includes('devops')
+          );
+          console.log('[meego] Bits-like field configs:', bitsLike.map((f: Record<string, string>) => `${f.field_key}(${f.field_name}) type=${f.field_type}`));
+        }
+      } catch {
+        // Try regex on raw string
+        const matches = configRaw.match(/.{0,20}(sub_task|connection|relation|开发任务|bits|devops).{0,80}/gi);
+        console.log('[meego] Bits field config regex:', matches?.slice(0, 10));
+      }
+    } catch { /* ignore */ }
   } catch (e) {
     console.log('[meego] version fetch failed:', e);
   }
