@@ -531,26 +531,24 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       }
     }
 
-    // Search field config for Bits/devtask related field keys
+    // List all MCP tools to find one that can fetch Bits tasks / connections
     try {
-      const configRaw = await callMeegoMcp('list_workitem_field_config', { url: meegoUrl });
-      // Parse JSON config to find sub_task or connection type fields
-      try {
-        const config = JSON.parse(configRaw);
-        const fields = config.list ?? config.data?.list ?? config;
-        if (Array.isArray(fields)) {
-          const bitsLike = fields.filter((f: Record<string, string>) =>
-            f.field_type?.includes('sub_task') || f.field_type?.includes('connection') ||
-            f.field_type?.includes('relation') || f.field_name?.includes('Bits') ||
-            f.field_name?.includes('开发任务') || f.field_name?.includes('devops')
-          );
-          console.log('[meego] Bits-like field configs:', bitsLike.map((f: Record<string, string>) => `${f.field_key}(${f.field_name}) type=${f.field_type}`));
-        }
-      } catch {
-        // Try regex on raw string
-        const matches = configRaw.match(/.{0,20}(sub_task|connection|relation|开发任务|bits|devops).{0,80}/gi);
-        console.log('[meego] Bits field config regex:', matches?.slice(0, 10));
-      }
+      const token = process.env.MEEGO_USER_TOKEN!;
+      const toolsRes = await fetch(MEEGO_MCP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Mcp-Token': token },
+        body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'tools/list', params: {} }),
+      });
+      const toolsData = await toolsRes.json() as { result?: { tools?: Array<{ name: string; description?: string }> } };
+      const tools = toolsData.result?.tools ?? [];
+      const relevantTools = tools.filter(t =>
+        t.name.includes('connection') || t.name.includes('relation') || t.name.includes('sub_task') ||
+        t.name.includes('bits') || t.name.includes('devops') || t.name.includes('cross') ||
+        t.description?.includes('Bits') || t.description?.includes('开发任务') ||
+        t.description?.includes('关联') || t.description?.includes('connection')
+      );
+      console.log('[meego] relevant MCP tools:', relevantTools.map(t => `${t.name}: ${t.description?.slice(0, 100)}`));
+      console.log('[meego] all MCP tool names:', tools.map(t => t.name));
     } catch { /* ignore */ }
   } catch (e) {
     console.log('[meego] version fetch failed:', e);
