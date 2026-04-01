@@ -29,6 +29,7 @@ const PRIORITIES = [
 ];
 
 const QUARTERLY_CYCLES = [
+  { id: 'xg717kfyx', label: '2025-Q4' },
   { id: '15axr3g7g', label: '2026-Q1' },
   { id: '5350il55y', label: '2026-Q2' },
   { id: '3y4d9_0oy', label: '2026-Q3' },
@@ -43,7 +44,7 @@ const BUSINESS_LINES = [
 ];
 
 const SOCIAL_COMPONENTS = [
-  { id: 'mz8vxxems',              label: 'Sticker & Typing Rec' },
+  { id: 'mz8vxxems',              label: 'Sticker & Avatar' },
   { id: 'lpdmxqui2',              label: 'AI in DM' },
   { id: 'xory3g7r6',              label: 'Chat experience' },
   { id: 'vpw0ytamc',              label: 'Group chat' },
@@ -63,6 +64,43 @@ const SOCIAL_COMPONENTS = [
   { id: 'g16xgcqb3',              label: 'Messaging Safety & Permission' },
   { id: 'dya1s1cea',              label: 'Platforms (Msg Management+SCP)' },
   { id: 'IMCloud',                label: 'IMCloud' },
+  { id: 'zv2r55744',              label: 'Comment' },
+  { id: 'bw5j80hmq',              label: 'Push & Notification' },
+  { id: 'jhix081_e',              label: 'Like' },
+  { id: 'fvbm2kzw5',              label: 'Repost' },
+  { id: '1rwknvism',              label: 'Story' },
+  { id: '1bwnkchqi',              label: 'Friends Tab' },
+  { id: 'o_sqx0771',              label: 'Following Tab' },
+  { id: 'vgrfiylba',              label: 'Social Creation' },
+  { id: 'svc51kfyq',              label: 'Mention' },
+  { id: '8ychm5sq1',              label: 'Game' },
+  { id: '_8s_m0nt8',              label: 'Cross Team' },
+  { id: '66c4cc75o',              label: 'Profile Viewer' },
+  { id: 'km7q6q0j4',              label: 'Collab' },
+  { id: 'Comment Platform',       label: 'Comment Platform' },
+  { id: 'f5kfva7cc',              label: 'Interest Graph' },
+  { id: 'i5f7lqne5',              label: 'Compliance/External' },
+  { id: '4ikv9_1th',              label: 'Campus' },
+  { id: 'Gamification',           label: 'Gamification' },
+  { id: '9iet2d_lf',              label: 'Client Platformization' },
+  { id: 'ealmxb07n',              label: 'Whee 3.0' },
+  { id: 'wlqq2bu03',              label: 'Sora 1.0' },
+  { id: 'Real time Communication', label: 'Real time Communication' },
+  { id: 's_kvfq_uz',              label: 'Text Mode' },
+  { id: '8aaoei2jk',              label: 'FYP/Fullpage-Photo Mode' },
+  { id: '5iqcrp5u9',              label: 'Double Column' },
+  { id: '8my6m3q7x',              label: 'Interest Community' },
+  { id: 'qvid_2qez',              label: 'Info Graphic & Text' },
+  { id: 'e0087agcz',              label: 'Foundation' },
+  { id: '7179p9d_n',              label: 'Photo-Text Feature' },
+  { id: 'pbpg1jn5m',              label: 'Standalone App (history)' },
+  { id: 'vrc2x3l2i',              label: 'Counter' },
+  { id: 'i_6pj4ua3',              label: 'Social Sort' },
+  { id: '_o5lg5h7o',              label: 'Collab' },
+  { id: '2y6v0lv_i',              label: 'Photo-Text Standalone' },
+  { id: 'zvmpr6qqk',              label: 'Now App' },
+  { id: 'kdy9b7vww',              label: 'Now' },
+  { id: 'cjvllclrm',              label: 'Profile' },
 ];
 
 // Role members with keys + avatars
