@@ -391,27 +391,34 @@ export function ProjectView({ features, setFeatures }: Props) {
   // ── Sort ───────────────────────────────────────────────────────────────────
 
   const sorted = useMemo(() => {
-    const list = sortBy === 'none' ? filtered : [...filtered].sort((a, b) => {
-      let cmp = 0;
-      if (sortBy === 'priority') {
-        cmp = (PRIORITY_ORDER[a.priority] ?? 99) - (PRIORITY_ORDER[b.priority] ?? 99);
-      } else if (sortBy === 'status') {
-        cmp = (a.status ?? '').localeCompare(b.status ?? '');
-      } else if (sortBy === 'lastUpdated') {
-        cmp = new Date(a.lastUpdated).getTime() - new Date(b.lastUpdated).getTime();
-      }
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
+    let list = [...filtered];
+    if (sortBy !== 'none') {
+      list.sort((a, b) => {
+        let cmp = 0;
+        if (sortBy === 'priority') {
+          cmp = (PRIORITY_ORDER[a.priority] ?? 99) - (PRIORITY_ORDER[b.priority] ?? 99);
+        } else if (sortBy === 'status') {
+          cmp = (a.status ?? '').localeCompare(b.status ?? '');
+        } else if (sortBy === 'lastUpdated') {
+          cmp = new Date(a.lastUpdated).getTime() - new Date(b.lastUpdated).getTime();
+        }
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+    }
     // Pin newly created feature to the top
     if (pinnedId) {
       const idx = list.findIndex(f => f.id === pinnedId);
       if (idx > 0) {
         const [pinned] = list.splice(idx, 1);
         list.unshift(pinned);
+      } else if (idx === -1) {
+        // Feature might be filtered out — find it in the full features list and prepend
+        const pinned = features.find(f => f.id === pinnedId);
+        if (pinned) list.unshift(pinned);
       }
     }
     return list;
-  }, [filtered, sortBy, sortDir, pinnedId]);
+  }, [filtered, features, sortBy, sortDir, pinnedId]);
 
   // ── Group ──────────────────────────────────────────────────────────────────
 
