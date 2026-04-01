@@ -535,15 +535,19 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Add bot to the feature's group chat and find package QR code
   // Only join groups for stories created in 2026+
-  // Debug: search for Comment Summary field
+  // Debug: try fetching field_0cec98 and field_6909f6 via MQL
   try {
-    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const commentSummary = nodeRaw.match(/.{0,30}(Comment Summary|comment_summary|评论摘要).{0,100}/gi);
-    console.log('[meego] Comment Summary in nodes:', commentSummary?.slice(0, 3) ?? 'not found');
-    // Also search brief
-    const inBrief = raw.match(/.{0,30}(Comment Summary|comment_summary|评论摘要).{0,100}/gi);
-    console.log('[meego] Comment Summary in brief:', inBrief?.slice(0, 3) ?? 'not found');
-  } catch { /* ignore */ }
+    const meegoId = meegoUrl.match(/\/detail\/(\d+)/)?.[1];
+    if (meegoId) {
+      const mqlRaw = await callMeegoMcp('search_by_mql', {
+        project_key: 'TikTok',
+        mql: `SELECT \`field_0cec98\`, \`field_6909f6\` FROM \`TikTok\`.\`需求\` WHERE \`work_item_id\` = ${meegoId}`,
+      });
+      console.log('[meego] MQL field_0cec98/field_6909f6:', mqlRaw.slice(0, 500));
+    }
+  } catch (e) {
+    console.log('[meego] MQL compliance fields failed:', e instanceof Error ? e.message : e);
+  }
 
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
