@@ -62,7 +62,11 @@ export default function Home() {
   /** Immediately add the temp feature (status: 'Creating…') and close the modal */
   function handleTempAdded(feature: Feature) {
     setFeatures(prev => [feature, ...prev]);
+    setPinnedId(feature.id);
     setShowAddModal(false);
+    setTimeout(() => {
+      document.getElementById('main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
   }
 
   /** Replace temp feature with the real one, or remove it on failure */
