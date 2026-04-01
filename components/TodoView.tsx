@@ -156,7 +156,7 @@ export function TodoView({ features, setFeatures }: Props) {
     <div className="min-h-screen">
 
       {/* Header */}
-      <div className="flex items-start justify-between px-6 pt-7 pb-2">
+      <div className="flex items-center justify-between px-6 pt-7 pb-2">
         <div>
           <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
             To Dos
