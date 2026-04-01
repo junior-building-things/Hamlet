@@ -549,12 +549,13 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let packageQrUrl = '';
   let packageDownloadUrl = '';
   let chatId = cachedChatId ?? '';
-  const shouldJoinChat = createdYear >= 2026;
-  if (workItemName && shouldJoinChat) {
+  if (workItemName) {
     try {
-      if (!chatId) {
+      // Only join new groups (2026+), but still use cached chatId for older ones
+      if (!chatId && createdYear >= 2026) {
         chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl)) ?? '';
       }
+      // Fetch package QR if we have a chatId (regardless of creation year)
       if (chatId) {
         const pkg = await getPackageQrUrl(chatId);
         if (pkg) {
