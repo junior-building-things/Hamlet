@@ -41,6 +41,7 @@ export interface Feature {
   uiuxOwner?: string;
   contentDesigner?: string;
   iosVersion?: string;
+  versionHistory?: string[];
   abReportUrl?: string;
   packageQrUrl?: string;
   packageDownloadUrl?: string;

@@ -18,6 +18,14 @@ const SYNC_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
 const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
 
+/** Append a new version to the history if it differs from the last entry */
+function trackVersion(history: string[] | undefined, newVersion: string | undefined): string[] | undefined {
+  if (!newVersion) return history;
+  const h = history ?? [];
+  if (h.length === 0 || h[h.length - 1] !== newVersion) return [...h, newVersion];
+  return h;
+}
+
 // ─── Group header row (spans all 6 list columns) ──────────────────────────────
 
 function priorityChipCls(key: string): string {
@@ -155,6 +163,7 @@ export function ProjectView({ features, setFeatures }: Props) {
             uiuxOwner:       (d.uiuxOwner        as string) || p.uiuxOwner,
             contentDesigner: (d.contentDesigner  as string) || p.contentDesigner,
             iosVersion:      (d.iosVersion       as string) || p.iosVersion,
+            versionHistory:  trackVersion(p.versionHistory, (d.iosVersion as string) || p.iosVersion),
             abReportUrl:     (d.abReportUrl      as string) || p.abReportUrl,
             packageQrUrl:    (d.packageQrUrl     as string) || p.packageQrUrl,
             packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
@@ -211,6 +220,7 @@ export function ProjectView({ features, setFeatures }: Props) {
               uiuxOwner:       f.uiuxOwner        || old.uiuxOwner,
               contentDesigner: f.contentDesigner   || old.contentDesigner,
               iosVersion:      f.iosVersion        || old.iosVersion,
+              versionHistory:  trackVersion(old.versionHistory, f.iosVersion || old.iosVersion),
               canCompleteNode: f.canCompleteNode   ?? old.canCompleteNode,
               lastUpdated:     f.lastUpdated       || old.lastUpdated,
             };
@@ -313,6 +323,7 @@ export function ProjectView({ features, setFeatures }: Props) {
         uiuxOwner:       (d.uiuxOwner       as string) || p.uiuxOwner,
         contentDesigner: (d.contentDesigner as string) || p.contentDesigner,
         iosVersion:      (d.iosVersion     as string) || p.iosVersion,
+        versionHistory:  trackVersion(p.versionHistory, (d.iosVersion as string) || p.iosVersion),
         abReportUrl:     (d.abReportUrl    as string) || p.abReportUrl,
         packageQrUrl:    (d.packageQrUrl  as string) || p.packageQrUrl,
         packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,

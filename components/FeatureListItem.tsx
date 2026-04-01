@@ -43,7 +43,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={feature.status} />
-          <VersionBadge version={feature.iosVersion} />
+          <VersionBadge version={feature.iosVersion} versionHistory={feature.versionHistory} />
           <PriorityBadge priority={feature.priority} />
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -98,7 +98,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       <div className="hidden sm:flex items-center py-3 pl-4">
-        <VersionBadge version={feature.iosVersion} />
+        <VersionBadge version={feature.iosVersion} versionHistory={feature.versionHistory} />
       </div>
 
       <div className="hidden sm:flex py-3">
