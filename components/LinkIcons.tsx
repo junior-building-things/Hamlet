@@ -104,7 +104,7 @@ function LinkChip({ link, index, total, ringColor }: { link: LinkDef; index: num
 
   const iconEl = link.dynamicIcon ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] rounded-sm shrink-0" />
+    <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] shrink-0" />
   ) : (
     <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 15)} height={Math.min(link.iconH, 15)} className="shrink-0" />
   );
