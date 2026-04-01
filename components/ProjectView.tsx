@@ -371,6 +371,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   const filtered = useMemo(() => {
     const result = features.filter(f => {
+      // Hide features with Unknown status (deleted/completed on Meego)
+      if (f.status === 'Unknown') return false;
       const q = search.toLowerCase();
       return (
         (!q || f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q) || f.owner.toLowerCase().includes(q)) &&
