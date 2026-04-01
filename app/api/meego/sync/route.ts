@@ -4,31 +4,39 @@ import { batchFetchAvatars, refreshUserToken } from '@/lib/lark';
 import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
 import { cookies } from 'next/headers';
 
-// Cache refreshed user token in memory (avoids refreshing on every sync call during Sync All)
+// Cache refreshed tokens in memory to avoid refreshing on every sync call
 let cachedUserToken = '';
+let cachedRefreshToken = '';
 let cachedUserTokenExp = 0;
 
-/** Get a fresh user access token, refreshing if needed. */
+/** Get a fresh user access token, always refreshing proactively. */
 async function getFreshUserToken(): Promise<string | undefined> {
-  // Return cached token if still fresh (refresh every 30 min)
+  // Return in-memory cached token if still fresh (cache for 90 min, token lasts ~2h)
   if (cachedUserToken && Date.now() < cachedUserTokenExp) {
-    console.log('[sync] using cached user token (expires in', Math.round((cachedUserTokenExp - Date.now()) / 1000), 's)');
     return cachedUserToken;
   }
 
   const session = await getSession();
-  console.log('[sync] session has larkAccessToken:', !!session?.larkAccessToken, 'larkRefreshToken:', !!session?.larkRefreshToken);
-  if (!session?.larkRefreshToken) return session?.larkAccessToken;
+  // Use the most recent refresh token: in-memory cache or session cookie
+  const refreshToken = cachedRefreshToken || session?.larkRefreshToken;
+  if (!refreshToken) return session?.larkAccessToken;
 
-  const refreshed = await refreshUserToken(session.larkRefreshToken);
-  console.log('[sync] token refresh result:', refreshed ? 'success' : 'failed');
-  if (!refreshed) return session.larkAccessToken;
+  const refreshed = await refreshUserToken(refreshToken);
+  if (!refreshed) {
+    console.warn('[sync] token refresh failed — using stale access token');
+    return session?.larkAccessToken;
+  }
 
-  // Persist the new tokens in the session cookie
+  // Cache in memory (survives across requests within the same server process)
+  cachedUserToken = refreshed.accessToken;
+  cachedRefreshToken = refreshed.refreshToken;
+  cachedUserTokenExp = Date.now() + 90 * 60 * 1000; // 90 min
+
+  // Persist the new tokens in the session cookie (best-effort)
   try {
     const jar = await cookies();
     const newSession = await createSession({
-      ...session,
+      ...(session ?? { userId: '', name: '', email: '', avatarUrl: '' }),
       larkAccessToken: refreshed.accessToken,
       larkRefreshToken: refreshed.refreshToken,
     });
@@ -37,10 +45,10 @@ async function getFreshUserToken(): Promise<string | undefined> {
       maxAge: COOKIE_MAX_AGE, path: '/',
       secure: process.env.NODE_ENV === 'production',
     });
-  } catch { /* cookie write may fail in some contexts */ }
+  } catch (e) {
+    console.warn('[sync] cookie write failed (token still cached in memory):', e);
+  }
 
-  cachedUserToken = refreshed.accessToken;
-  cachedUserTokenExp = Date.now() + 30 * 60 * 1000; // 30 min
   return refreshed.accessToken;
 }
 

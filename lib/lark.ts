@@ -347,10 +347,13 @@ export async function refreshUserToken(refreshToken: string): Promise<{ accessTo
     }),
   });
   const data = await parseJson(res, 'refresh_token') as {
-    code: number;
+    code: number; msg?: string;
     data?: { access_token?: string; refresh_token?: string };
   };
-  if (data.code !== 0 || !data.data?.access_token) return null;
+  if (data.code !== 0 || !data.data?.access_token) {
+    console.warn('[lark] refresh token failed:', data.code, data.msg, '— user may need to re-login');
+    return null;
+  }
 
   return {
     accessToken:  data.data.access_token,
