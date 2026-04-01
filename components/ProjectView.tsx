@@ -466,7 +466,7 @@ export function ProjectView({ features, setFeatures }: Props) {
           className="flex items-center gap-2 px-4 py-2 bg-[#1e2240] hover:bg-[#252a4a] text-gray-300 hover:text-white text-sm rounded-xl transition-colors disabled:opacity-50"
         >
           {syncingAll || detailSyncTotal > 0
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing {detailSyncCount}/{detailSyncTotal}</>
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
             : <><RefreshCw className="w-3.5 h-3.5" /> Sync All</>}
         </button>
       </div>
