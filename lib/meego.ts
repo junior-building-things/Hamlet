@@ -449,8 +449,8 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   // Collect name→email pairs for avatar resolution
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
 
-  // Fetch planned version from node detail JSON
-  // Try iOS (field_08a9ca) first, fall back to Android (field_c88970)
+  // Fetch version from node detail JSON
+  // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
   let iosVersion = '';
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
@@ -513,7 +513,10 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       return shortNames[0];
     }
 
-    iosVersion = await resolveVersion('field_08a9ca');
+    // Prioritize launched version, fall back to planned
+    iosVersion = await resolveVersion('ios_actual_online_version');
+    if (!iosVersion) iosVersion = await resolveVersion('android_actual_online_version');
+    if (!iosVersion) iosVersion = await resolveVersion('field_08a9ca');
     if (!iosVersion) iosVersion = await resolveVersion('field_c88970');
 
   } catch (e) {
