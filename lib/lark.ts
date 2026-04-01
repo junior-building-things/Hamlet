@@ -1068,17 +1068,21 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
         );
         const infoData = await infoRes.json() as { code: number; data?: Record<string, unknown> };
         if (infoData.code === 0 && infoData.data?.description && String(infoData.data.description).includes(meegoId)) {
-          // Log all keys to find the timestamp field
-          console.log('[lark] chat info keys:', Object.keys(infoData.data), 'for:', c.name);
-          const createTime = infoData.data.create_time ?? infoData.data.created_at ?? infoData.data.create_timestamp;
-          console.log('[lark] chat create_time:', createTime, 'for:', c.name);
-          if (createTime) {
-            const ts = Number(createTime);
-            // Lark may use seconds or milliseconds — detect by magnitude
+          // Chat API doesn't return creation time, so we filter by
+          // the first message in the chat instead
+          const firstMsgRes = await fetch(
+            `${LARK_BASE_URL}/open-apis/im/v1/messages?container_id_type=chat&container_id=${c.chat_id}&page_size=1&sort_type=ByCreateTimeAsc`,
+            { headers: { Authorization: `Bearer ${await getAccessToken()}` } },
+          );
+          const firstMsgData = await firstMsgRes.json() as { code: number; data?: { items?: Array<{ create_time?: string }> } };
+          const firstMsgTime = firstMsgData.data?.items?.[0]?.create_time;
+          if (firstMsgTime) {
+            const ts = Number(firstMsgTime);
             const createdMs = ts > 1e12 ? ts : ts * 1000;
             const cutoff = new Date('2026-01-01T00:00:00Z').getTime();
+            console.log('[lark] chat first message:', new Date(createdMs).toISOString(), 'for:', c.name);
             if (createdMs < cutoff) {
-              console.log('[lark] skipping old chat (created', new Date(createdMs).toISOString(), '):', c.name);
+              console.log('[lark] skipping old chat (first msg before 2026):', c.name);
               continue;
             }
           }
