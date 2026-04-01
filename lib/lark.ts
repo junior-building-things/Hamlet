@@ -1066,8 +1066,18 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
           `${LARK_BASE_URL}/open-apis/im/v1/chats/${c.chat_id}`,
           { headers: { Authorization: `Bearer ${searchToken}` } },
         );
-        const infoData = await infoRes.json() as { code: number; data?: { description?: string } };
+        const infoData = await infoRes.json() as { code: number; data?: { description?: string; create_time?: string } };
         if (infoData.code === 0 && infoData.data?.description?.includes(meegoId)) {
+          // Only match groups created in 2026 or later
+          const createTime = infoData.data.create_time;
+          if (createTime) {
+            const createdMs = Number(createTime) * 1000; // Lark uses seconds
+            const cutoff = new Date('2026-01-01T00:00:00Z').getTime();
+            if (createdMs < cutoff) {
+              console.log('[lark] skipping old chat (created before 2026):', c.name);
+              continue;
+            }
+          }
           bestChat = c;
           console.log('[lark] matched chat by Meego ID in description:', c.name);
           break;
