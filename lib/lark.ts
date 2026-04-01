@@ -1066,10 +1066,11 @@ export async function joinFeatureChat(featureName: string, userAccessToken?: str
           `${LARK_BASE_URL}/open-apis/im/v1/chats/${c.chat_id}`,
           { headers: { Authorization: `Bearer ${searchToken}` } },
         );
-        const infoData = await infoRes.json() as { code: number; data?: { description?: string; create_time?: string } };
-        if (infoData.code === 0 && infoData.data?.description?.includes(meegoId)) {
-          // Only match groups created in 2026 or later
-          const createTime = infoData.data.create_time;
+        const infoData = await infoRes.json() as { code: number; data?: Record<string, unknown> };
+        if (infoData.code === 0 && infoData.data?.description && String(infoData.data.description).includes(meegoId)) {
+          // Log all keys to find the timestamp field
+          console.log('[lark] chat info keys:', Object.keys(infoData.data), 'for:', c.name);
+          const createTime = infoData.data.create_time ?? infoData.data.created_at ?? infoData.data.create_timestamp;
           console.log('[lark] chat create_time:', createTime, 'for:', c.name);
           if (createTime) {
             const ts = Number(createTime);
