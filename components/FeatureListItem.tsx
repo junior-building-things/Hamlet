@@ -109,27 +109,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       <div className="hidden sm:flex items-center py-3 pl-4 overflow-visible relative">
-        <LinkIcons feature={feature} ringColor="#13162a" />
-      </div>
-
-      {/* Package QR */}
-      <div className="hidden sm:flex items-center gap-1 py-3 pl-4">
-        {feature.packageQrUrl && (
-          <div className="relative group/android">
-            <button onClick={() => setShowPackage(true)} className="block cursor-pointer hover:opacity-80 transition-opacity">
-              <img src={feature.packageQrUrl} alt="Android QR" className="w-8 h-8 rounded" />
-            </button>
-            <span className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-gray-900 text-[10px] text-gray-300 rounded whitespace-nowrap opacity-0 group-hover/android:opacity-100 transition-opacity pointer-events-none">Android</span>
-          </div>
-        )}
-        {feature.iosPackageQrUrl && (
-          <div className="relative group/ios">
-            <button onClick={() => { setShowPackage(true); setShowIos(true); }} className="block cursor-pointer hover:opacity-80 transition-opacity">
-              <img src={feature.iosPackageQrUrl} alt="iOS QR" className="w-8 h-8 rounded" />
-            </button>
-            <span className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-gray-900 text-[10px] text-gray-300 rounded whitespace-nowrap opacity-0 group-hover/ios:opacity-100 transition-opacity pointer-events-none">iOS</span>
-          </div>
-        )}
+        <LinkIcons feature={feature} ringColor="#13162a" onPackageClick={(ios) => { setShowPackage(true); if (ios) setShowIos(true); }} />
       </div>
 
       {/* Team avatars */}
