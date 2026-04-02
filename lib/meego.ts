@@ -501,6 +501,21 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     for (const [key, url] of avatarMap) {
       if (!key.includes('@') && !meegoAvatars[key]) meegoAvatars[key] = url;
     }
+    // Debug: log a sample owner to see actual structure
+    try {
+      const parsed = JSON.parse(nodeRaw);
+      const firstNode = parsed.list?.[0];
+      const firstOwner = firstNode?.assignees?.owners?.[0];
+      console.log('[meego] node owner sample:', JSON.stringify(firstOwner)?.slice(0, 200));
+      console.log('[meego] node assignees keys:', Object.keys(firstNode?.assignees ?? {}));
+      // Check role_assignees
+      const roleKeys = Object.keys(firstNode?.assignees?.role_assignees ?? {});
+      console.log('[meego] role_assignees keys:', roleKeys.slice(0, 5));
+      if (roleKeys.length > 0) {
+        const firstRole = firstNode.assignees.role_assignees[roleKeys[0]];
+        console.log('[meego] first role sample:', JSON.stringify(firstRole?.[0])?.slice(0, 200));
+      }
+    } catch { /* ignore */ }
     console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length,
       'total in node:', avatarMap.size);
   } catch (e) {
