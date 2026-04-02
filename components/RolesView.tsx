@@ -41,7 +41,7 @@ const ROLES: Role[] = [
   {
     key: 'tech',
     title: 'Tech Owner',
-    shortName: 'Tech Lead',
+    shortName: 'Tech Owner',
     description: 'Leads the technical design and architecture. Makes key engineering decisions and ensures code quality across client and server.',
     responsibilities: [
       'Author the technical design document',
@@ -105,8 +105,8 @@ const ROLES: Role[] = [
   },
   {
     key: 'uiux',
-    title: 'UI/UX Designer',
-    shortName: 'UI/UX',
+    title: 'UX Designer',
+    shortName: 'UX Designer',
     description: 'Designs the user interface and interaction flow. Delivers specs, prototypes, and final assets for engineering.',
     responsibilities: [
       'Create wireframes and high-fidelity mockups',
@@ -118,8 +118,8 @@ const ROLES: Role[] = [
   },
   {
     key: 'da',
-    title: 'Data Analyst',
-    shortName: 'DA',
+    title: 'Data Scientist',
+    shortName: 'DS',
     description: 'Defines event tracking, sets up dashboards, and analyzes experiment data to inform feature decisions.',
     responsibilities: [
       'Define the event tracking plan',
@@ -132,7 +132,7 @@ const ROLES: Role[] = [
   {
     key: 'content',
     title: 'Content Designer',
-    shortName: 'Content',
+    shortName: 'Content Designer',
     description: 'Crafts all user-facing copy including UI strings, error messages, tooltips, and localization-ready text.',
     responsibilities: [
       'Write UI copy, labels, and error messages',
@@ -144,7 +144,7 @@ const ROLES: Role[] = [
   },
   {
     key: 'rd-assistant',
-    title: 'RD Assistant Agent',
+    title: 'RD Assistant',
     shortName: 'RD Agent',
     description: 'An AI agent that monitors the Meego group chat for the project. Follows up on unanswered questions from engineering POCs to QA or PM — for example, if a PM doesn\'t respond to a question, the agent will tag them again later.',
     isAgent: true,
@@ -158,7 +158,7 @@ const ROLES: Role[] = [
   },
   {
     key: 'pm-assistant',
-    title: 'PM Assistant Agent',
+    title: 'PM Assistant',
     shortName: 'PM Agent',
     description: 'An AI agent that assists the PM by monitoring project progress from the PM perspective. Flags when milestones are missed — for example, if a feature was supposed to merge today but the Meego status hasn\'t been updated.',
     isAgent: true,
