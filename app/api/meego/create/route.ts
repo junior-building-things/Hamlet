@@ -6,7 +6,12 @@ const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as CreateFeatureParams & { featureDescription?: string; useHalfDayPrd?: boolean };
+    const body = await req.json() as CreateFeatureParams & {
+      featureDescription?: string;
+      useHalfDayPrd?: boolean;
+      businessLineLabel?: string;
+      socialComponentLabel?: string;
+    };
     if (!body.name?.trim()) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
@@ -32,9 +37,12 @@ export async function POST(req: NextRequest) {
     // 4. Send card message to PM group chat (fire-and-forget)
     sendFeatureCard({
       name: body.name.trim(),
+      description: body.featureDescription?.trim(),
       meegoUrl: result.meegoUrl,
       prdUrl: prd,
       priority: body.priority ?? 'P1',
+      businessLine: body.businessLineLabel,
+      socialComponent: body.socialComponentLabel,
     }).catch(e => console.warn('[create] card send failed:', e));
 
     return NextResponse.json({ ...result, prd, prdError });

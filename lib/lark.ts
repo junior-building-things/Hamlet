@@ -1327,34 +1327,47 @@ const PM_GROUP_CHAT_ID = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
  */
 export async function sendFeatureCard(opts: {
   name: string;
+  description?: string;
   meegoUrl: string;
   prdUrl?: string;
   priority: string;
+  businessLine?: string;
+  socialComponent?: string;
 }): Promise<void> {
   const token = await getAccessToken();
 
-  const priorityColors: Record<string, string> = {
-    P0: 'red', P1: 'orange', P2: 'blue', P3: 'grey',
-  };
-  const headerColor = priorityColors[opts.priority] || 'blue';
+  const fields: Array<{ label: string; value: string }> = [
+    { label: 'Name', value: opts.name },
+  ];
+  if (opts.description) fields.push({ label: 'Description', value: opts.description });
+  fields.push({ label: 'Priority', value: opts.priority });
+  if (opts.businessLine) fields.push({ label: 'Business Line', value: opts.businessLine });
+  if (opts.socialComponent) fields.push({ label: 'Social Component', value: opts.socialComponent });
 
   const elements: Array<Record<string, unknown>> = [
-    {
+    ...fields.map(f => ({
       tag: 'div',
-      text: { tag: 'lark_md', content: `**Priority:** ${opts.priority}` },
-    },
+      text: { tag: 'lark_md', content: `**${f.label}:** ${f.value}` },
+    })),
+    { tag: 'hr' },
     {
       tag: 'action',
       actions: [
         {
           tag: 'button',
-          text: { tag: 'plain_text', content: 'Open in Meego' },
+          text: { tag: 'plain_text', content: 'Hamlet' },
           type: 'primary',
+          url: `${process.env.APP_URL ?? 'https://hamlet-app.vercel.app'}/projects`,
+        },
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: 'Meego' },
+          type: 'default',
           url: opts.meegoUrl,
         },
         ...(opts.prdUrl ? [{
           tag: 'button',
-          text: { tag: 'plain_text', content: 'Open PRD' },
+          text: { tag: 'plain_text', content: 'PRD' },
           type: 'default' as const,
           url: opts.prdUrl,
         }] : []),
@@ -1365,8 +1378,8 @@ export async function sendFeatureCard(opts: {
   const card = {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: opts.name },
-      template: headerColor,
+      title: { tag: 'plain_text', content: 'Feature Created \u2705' },
+      template: 'blue',
     },
     elements,
   };
