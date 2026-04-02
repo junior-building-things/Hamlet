@@ -424,10 +424,14 @@ export async function searchAbReport(
     const docs = searchData.data?.docs_entities ?? [];
     if (docs.length === 0) continue;
 
-    for (const doc of docs) {
+    for (let di = 0; di < docs.length; di++) {
+      const doc = docs[di];
       const t = doc.title.toLowerCase();
       // Title must contain AB or A/B (case-insensitive)
       if (!/\bab\b|a\/b/i.test(t)) continue;
+
+      // Rate-limit doc reads to avoid 99991400 (Lark allows ~5 req/s)
+      if (di > 0) await new Promise(r => setTimeout(r, 300));
 
       // Read the doc content and check if it contains the PRD link
       // Also extract any Libra URL found
