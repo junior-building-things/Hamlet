@@ -29,7 +29,7 @@ function buildPocs(feature: Feature): Poc[] {
       const name = raw.trim();
       if (!name || seen.has(name)) continue;
       seen.add(name);
-      pocs.push({ name, role: label, url: AV[name] });
+      pocs.push({ name, role: label, url: feature.avatars?.[name] || AV[name] });
     }
   }
   return pocs;

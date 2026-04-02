@@ -50,4 +50,5 @@ export interface Feature {
   iosPackageDownloadUrl?: string;
   commentSummary?: string;
   chatId?: string;
+  avatars?: Record<string, string>;
 }

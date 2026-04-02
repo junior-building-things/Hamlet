@@ -136,10 +136,9 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           });
           if (!res.ok) return;
           const d = await res.json() as Record<string, unknown>;
-          // Merge discovered avatars into the global AV map
-          if (d.pocAvatars && typeof d.pocAvatars === 'object') {
-            Object.assign(AV, d.pocAvatars);
-          }
+          // Merge avatars into both the global AV map and the feature's avatars field
+          const newAvatars = (d.pocAvatars && typeof d.pocAvatars === 'object') ? d.pocAvatars as Record<string, string> : {};
+          if (Object.keys(newAvatars).length > 0) Object.assign(AV, newAvatars);
           setFeatures(prev => prev.map(p => p.id !== f.id ? p : {
             ...p,
             status:          (d.status          as string) || p.status,
@@ -173,6 +172,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             iosPackageQrUrl: (d.iosPackageQrUrl  as string) || p.iosPackageQrUrl,
             iosPackageDownloadUrl: (d.iosPackageDownloadUrl as string) || p.iosPackageDownloadUrl,
             chatId:          (d.chatId           as string) || p.chatId,
+            avatars:         { ...p.avatars, ...newAvatars },
             lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
           }));
         } catch { /* ignore per-card errors */ }
@@ -226,6 +226,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
               iosVersion:      f.iosVersion        || old.iosVersion,
               versionHistory:  trackVersion(old.versionHistory, f.iosVersion || old.iosVersion),
               canCompleteNode: f.canCompleteNode   ?? old.canCompleteNode,
+              avatars:         old.avatars,
               lastUpdated:     f.lastUpdated       || old.lastUpdated,
             };
           });
@@ -299,9 +300,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       });
       if (!res.ok) throw new Error('Sync failed');
       const d = await res.json() as Record<string, unknown>;
-      if (d.pocAvatars && typeof d.pocAvatars === 'object') {
-        Object.assign(AV, d.pocAvatars);
-      }
+      const newAvatars2 = (d.pocAvatars && typeof d.pocAvatars === 'object') ? d.pocAvatars as Record<string, string> : {};
+      if (Object.keys(newAvatars2).length > 0) Object.assign(AV, newAvatars2);
       setFeatures(prev => prev.map(p => p.id !== feature.id ? p : {
         ...p,
         status:          (d.status         as string) || p.status,
@@ -333,6 +333,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         packageQrUrl:    (d.packageQrUrl  as string) || p.packageQrUrl,
         packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
         chatId:          (d.chatId        as string) || p.chatId,
+        avatars:         { ...p.avatars, ...newAvatars2 },
         lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
       }));
     } catch { /* ignore */ }
@@ -490,9 +491,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           .then(r => r.ok ? r.json() : null)
           .then((d: Record<string, unknown> | null) => {
             if (!d) return;
-            if (d.pocAvatars && typeof d.pocAvatars === 'object') {
-              Object.assign(AV, d.pocAvatars);
-            }
+            const na3 = (d.pocAvatars && typeof d.pocAvatars === 'object') ? d.pocAvatars as Record<string, string> : {};
+            if (Object.keys(na3).length > 0) Object.assign(AV, na3);
             setFeatures(prev => prev.map(f => f.id !== feature.id ? f : {
               ...f,
               status:          (d.status as string) || f.status,
@@ -502,6 +502,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
               packageQrUrl:    (d.packageQrUrl as string) || f.packageQrUrl,
               packageDownloadUrl: (d.packageDownloadUrl as string) || f.packageDownloadUrl,
               chatId:          (d.chatId as string) || f.chatId,
+              avatars:         { ...f.avatars, ...na3 },
               lastUpdated:     f.lastUpdated || (d.lastUpdated as string) || '',
             }));
           })
