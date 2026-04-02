@@ -974,63 +974,65 @@ export async function batchFetchAvatars(
 
   const token = await getAccessToken();
 
-  // Step 1: Batch resolve emails → user IDs
+  // Resolve enterprise emails to user IDs, then fetch avatars
   const emails = [...new Set(entries.map(([, email]) => email))];
-  console.log('[lark] batch_get_id emails:', emails.slice(0, 5));
-  console.log('[lark] batch_get_id request body:', JSON.stringify({ emails: emails.slice(0, 3) }));
-  const res = await fetch(`${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=user_id`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ emails, include_resigned: false }),
-  });
-  const idData = await parseJson(res, 'batch_get_id') as {
-    code: number; msg?: string;
-    data?: { email_users?: Record<string, Array<{ user_id: string }>> };
-  };
-  console.log('[lark] batch_get_id response code:', idData.code, 'email_users keys:', Object.keys(idData.data?.email_users ?? {}).length);
-  if (idData.code !== 0) {
-    console.warn('[lark] batch_get_id failed:', idData.code, idData.msg);
-    return {};
-  }
 
-  // Build email → user_id map
+  // Step 1: Try batch_get_id with enterprise_emails (not emails)
   const emailToUserId = new Map<string, string>();
-  const failedEmails: string[] = [];
-  for (const [email, users] of Object.entries(idData.data?.email_users ?? {})) {
-    if (users?.[0]?.user_id) emailToUserId.set(email, users[0].user_id);
-    else failedEmails.push(email);
+
+  // Split into batches of 50
+  for (let i = 0; i < emails.length; i += 50) {
+    const batch = emails.slice(i, i + 50);
+    const res = await fetch(`${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails: batch }),
+    });
+    const d1 = await parseJson(res, 'batch_get_id_email') as {
+      code: number; msg?: string;
+      data?: { email_users?: Record<string, Array<{ user_id: string }>> };
+    };
+
+    // If personal emails didn't work, the field name might be different
+    // ByteDance uses enterprise_email — try with emails as-is first
+    if (d1.code === 0) {
+      for (const [email, users] of Object.entries(d1.data?.email_users ?? {})) {
+        if (users?.[0]?.user_id) emailToUserId.set(email, users[0].user_id);
+      }
+    }
   }
-  if (failedEmails.length) console.log('[lark] emails not resolved to user_id:', failedEmails);
-  console.log('[lark] resolved', emailToUserId.size, '/', emails.length, 'emails to user IDs');
 
-  // Step 2: Batch fetch user details (up to 50 at a time)
+  console.log('[lark] email lookup resolved:', emailToUserId.size, '/', emails.length);
+
+  // Step 2: Fetch avatars for resolved users
   const userIds = [...new Set(emailToUserId.values())];
-  if (userIds.length === 0) return {};
-
   const userIdToAvatar = new Map<string, string>();
+
   for (let i = 0; i < userIds.length; i += 50) {
     const batch = userIds.slice(i, i + 50);
     const params = batch.map(id => `user_ids=${id}`).join('&');
     const userRes = await fetch(
-      `${LARK_BASE_URL}/open-apis/contact/v3/users/batch?${params}&user_id_type=user_id`,
+      `${LARK_BASE_URL}/open-apis/contact/v3/users/batch?${params}&user_id_type=open_id`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     const userData = await parseJson(userRes, 'users_batch') as {
       code: number; msg?: string;
-      data?: { items?: Array<{ user_id: string; avatar?: { avatar_72?: string; avatar_240?: string } }> };
+      data?: { items?: Array<{ user_id: string; open_id?: string; avatar?: { avatar_72?: string; avatar_240?: string; avatar_origin?: string } }> };
     };
     if (userData.code !== 0) {
       console.warn('[lark] users/batch failed:', userData.code, userData.msg);
       continue;
     }
     for (const user of userData.data?.items ?? []) {
-      const url = user.avatar?.avatar_72 || user.avatar?.avatar_240;
-      if (url) userIdToAvatar.set(user.user_id, url);
+      const url = user.avatar?.avatar_72 || user.avatar?.avatar_240 || user.avatar?.avatar_origin;
+      const id = user.open_id || user.user_id;
+      if (url && id) userIdToAvatar.set(id, url);
     }
   }
-  console.log('[lark] resolved', userIdToAvatar.size, '/', userIds.length, 'user IDs to avatars');
 
-  // Step 3: Map back to name → avatarUrl
+  console.log('[lark] avatar lookup resolved:', userIdToAvatar.size, '/', userIds.length);
+
+  // Step 3: Map back
   const result: Record<string, string> = {};
   for (const [name, email] of entries) {
     const userId = emailToUserId.get(email);
