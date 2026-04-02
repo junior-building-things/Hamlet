@@ -191,7 +191,7 @@ interface ExtendedFields { priority: Priority; prd: string; complianceUrl: strin
 // Fetch all PM-owned TikTok stories via MQL — returns every story regardless of todo status
 async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
   const map = new Map<string, ExtendedFields>();
-  const MQL = "SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at`, `field_30a184`, in_progress_nodes_name() FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()";
+  const MQL = "SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at`, in_progress_nodes_name() FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()";
   const GROUP_ID = '1';
   let sessionId: string | undefined;
   let page = 1;
@@ -251,8 +251,6 @@ async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
               lastUpdated = new Date(ms).toISOString().split('T')[0];
             }
           }
-        } else if (f.key === 'field_30a184') {
-          commentSummary = f.value.string_value ?? f.value.varchar_value ?? '';
         } else if (f.key === 'in_progress_nodes_name()') {
           // Array of active node names, e.g. ["iOS 开发", "Android 开发"]
           const nodeNames = f.value.array_varchar_value ?? [];
