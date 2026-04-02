@@ -23,8 +23,10 @@ async function getFreshUserToken(): Promise<string | undefined> {
 
   const refreshed = await refreshUserToken(refreshToken);
   if (!refreshed) {
-    console.warn('[sync] token refresh failed — using stale access token');
-    return session?.larkAccessToken;
+    // Don't return stale token — it causes cascading 99991668 errors for every API call.
+    // Return undefined so user-token features (AB search, chat search) are gracefully skipped.
+    console.warn('[sync] token refresh failed — skipping user-token features (re-login needed)');
+    return undefined;
   }
 
   // Cache in memory (survives across requests within the same server process)
