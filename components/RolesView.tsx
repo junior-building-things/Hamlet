@@ -182,7 +182,7 @@ export function RolesView() {
         <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
           R&R
         </h1>
-        <p className="text-sm text-gray-500 mt-1">Each feature involves the following roles. Cards describe what each person (or agent) is responsible for.</p>
+        <p className="text-sm text-gray-500 mt-1">Each feature involves the following roles</p>
       </div>
 
       <div className="px-6 pb-6">
