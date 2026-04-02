@@ -492,16 +492,26 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   // Collect name→email pairs from brief, and avatar URLs from node detail
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
   let meegoAvatars: Record<string, string> = {};
-  try {
-    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const nodeEmailAvatars = collectEmailAvatarMap(nodeRaw);
-    // Cross-reference: name→email (from brief) + email→avatar (from node detail)
-    for (const [name, email] of Object.entries(pocEmails)) {
-      const avatar = nodeEmailAvatars.get(email);
-      if (avatar) meegoAvatars[name] = avatar;
-    }
-    console.log('[meego] node avatars resolved:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length);
-  } catch { /* ignore */ }
+  // Try brief first (has all role members), then node detail (has assignees only)
+  const briefEmailAvatars = collectEmailAvatarMap(raw);
+  for (const [name, email] of Object.entries(pocEmails)) {
+    const avatar = briefEmailAvatars.get(email);
+    if (avatar) meegoAvatars[name] = avatar;
+  }
+  // Supplement with node detail for missing avatars
+  if (Object.keys(meegoAvatars).length < Object.keys(pocEmails).length) {
+    try {
+      const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+      const nodeEmailAvatars = collectEmailAvatarMap(nodeRaw);
+      for (const [name, email] of Object.entries(pocEmails)) {
+        if (!meegoAvatars[name]) {
+          const avatar = nodeEmailAvatars.get(email);
+          if (avatar) meegoAvatars[name] = avatar;
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length);
 
   // Fetch version from work item brief (version fields are work-item-level, not node-level)
   // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
