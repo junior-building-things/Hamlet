@@ -488,7 +488,9 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Collect name→email pairs and avatar URLs from Meego brief
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
+  const emailAvatarMap = collectEmailAvatarMap(raw);
   const meegoAvatars = collectAllPocAvatars(raw);
+  console.log('[meego] email→avatar map size:', emailAvatarMap.size, 'meego avatars:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length);
 
   // Fetch version from work item brief (version fields are work-item-level, not node-level)
   // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
