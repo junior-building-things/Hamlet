@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
     if (Object.keys(missingEmails).length > 0) {
       try {
-        const larkAvatars = await batchFetchAvatars(missingEmails);
+        const larkAvatars = await batchFetchAvatars(missingEmails, userToken);
         Object.assign(pocAvatars, larkAvatars);
       } catch { /* ignore */ }
     }

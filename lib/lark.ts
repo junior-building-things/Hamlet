@@ -968,13 +968,15 @@ export async function copyPrdTemplate(
  */
 export async function batchFetchAvatars(
   nameEmailMap: Record<string, string>,
+  userAccessToken?: string,
 ): Promise<Record<string, string>> {
   const entries = Object.entries(nameEmailMap);
   if (entries.length === 0) return {};
 
-  const token = await getAccessToken();
+  // Prefer user token (has contact:user.base:readonly for avatar access)
+  const token = userAccessToken || await getAccessToken();
 
-  // Use Lark's people API to search by enterprise email username
+  // Resolve emails to user IDs, then fetch avatars
   const result: Record<string, string> = {};
   const emailToAvatar = new Map<string, string>();
   const uniqueEmails = [...new Set(entries.map(([, email]) => email))];

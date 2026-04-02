@@ -146,34 +146,6 @@ function collectAllPocEmails(raw: string): Map<string, string> {
   return map;
 }
 
-// Extract all email→avatar mappings from node detail JSON
-function collectAvatarsFromNodeDetail(nodeRaw: string): Map<string, string> {
-  const map = new Map<string, string>();
-  try {
-    interface NodeUser { user_key?: string; name?: string; email?: string; avatar?: string }
-    interface NodeAssignees { owners?: NodeUser[]; role_assignees?: Record<string, NodeUser[]> }
-    interface NodeEntry { assignees?: NodeAssignees }
-    const data = JSON.parse(nodeRaw) as { list?: NodeEntry[] };
-    for (const node of data.list ?? []) {
-      const processUsers = (users: NodeUser[]) => {
-        for (const u of users) {
-          if (u.avatar && u.email) map.set(u.email, u.avatar);
-          if (u.avatar && u.user_key) {
-            // user_key "first.last" → display name "First Last"
-            const displayName = u.user_key.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
-            map.set(displayName, u.avatar);
-          }
-          if (u.avatar && u.name) map.set(u.name, u.avatar);
-        }
-      };
-      if (node.assignees?.owners) processUsers(node.assignees.owners);
-      for (const users of Object.values(node.assignees?.role_assignees ?? {})) {
-        if (Array.isArray(users)) processUsers(users);
-      }
-    }
-  } catch { /* ignore parse errors */ }
-  return map;
-}
 
 
 // Parse last-modified date from get_workitem_brief raw text
@@ -487,34 +459,8 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Collect name→email pairs from brief, and avatar URLs from node detail
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
-  // Extract avatars from node detail (properly parsed JSON, not regex)
-  let meegoAvatars: Record<string, string> = {};
-  try {
-    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const avatarMap = collectAvatarsFromNodeDetail(nodeRaw);
-    // Map pocEmail names to avatars using email or name as bridge
-    for (const [name, email] of Object.entries(pocEmails)) {
-      const avatar = avatarMap.get(email) || avatarMap.get(name);
-      if (avatar) meegoAvatars[name] = avatar;
-    }
-    // Also include display-name-keyed avatars (from user_key conversion)
-    for (const [key, url] of avatarMap) {
-      if (!key.includes('@') && !meegoAvatars[key]) meegoAvatars[key] = url;
-    }
-    // Debug: find where avatar URLs actually are
-    const avatarInNode = nodeRaw.match(/"avatar"\s*:\s*"(https?:\/\/[^"]{20,})"/);
-    console.log('[meego] avatar URL in node detail:', avatarInNode ? 'YES' : 'NO');
-    // Check brief
-    const avatarInBrief = raw.match(/"avatar"\s*:\s*"(https?:\/\/[^"]{20,})"/);
-    console.log('[meego] avatar URL in brief:', avatarInBrief ? avatarInBrief[1].slice(0, 80) : 'NO');
-    // Check escaped brief
-    const escapedAvatar = raw.match(/avatar.*?https?:\\{0,2}\/\\{0,2}\/[^"\\]{20,}/);
-    console.log('[meego] escaped avatar in brief:', escapedAvatar ? escapedAvatar[0].slice(0, 100) : 'NO');
-    console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length,
-      'total in node:', avatarMap.size);
-  } catch (e) {
-    console.log('[meego] avatar fetch failed:', e);
-  }
+  // Meego MCP doesn't include avatar URLs — avatars are resolved via Lark API in sync route
+  const meegoAvatars: Record<string, string> = {};
 
   // Fetch version from work item brief (version fields are work-item-level, not node-level)
   // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
