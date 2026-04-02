@@ -6,11 +6,10 @@ export async function GET(req: NextRequest) {
   const appId   = process.env.LARK_APP_ID;
   if (!appId) return NextResponse.json({ error: 'LARK_APP_ID not configured' }, { status: 500 });
 
-  // Build callback URL — use forwarded host on Cloud Run, fall back to req.url for local dev
-  const forwardedHost = req.headers.get('x-forwarded-host');
-  const proto         = req.headers.get('x-forwarded-proto') ?? 'https';
-  const origin        = forwardedHost ? `${proto}://${forwardedHost}` : new URL(req.url).origin;
-  const redirectUri   = `${origin}/api/auth/callback`;
+  // Build callback URL — use HOST header (set by Cloud Run), env override, or req.url fallback
+  const host        = req.headers.get('host');
+  const origin      = process.env.APP_URL ?? (host ? `https://${host}` : new URL(req.url).origin);
+  const redirectUri = `${origin}/api/auth/callback`;
 
   // CSRF state — store in a short-lived cookie
   const state = crypto.randomUUID();

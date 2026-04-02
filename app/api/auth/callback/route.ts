@@ -6,7 +6,8 @@ export async function GET(req: NextRequest) {
   const base   = process.env.LARK_BASE_URL ?? 'https://open.larkoffice.com';
   const appId  = process.env.LARK_APP_ID!;
   const secret = process.env.LARK_APP_SECRET!;
-  const origin = new URL(req.url).origin;
+  const host   = req.headers.get('host');
+  const origin = process.env.APP_URL ?? (host ? `https://${host}` : new URL(req.url).origin);
 
   const { searchParams } = new URL(req.url);
   const code  = searchParams.get('code');
