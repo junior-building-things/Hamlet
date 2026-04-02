@@ -1036,6 +1036,36 @@ export async function batchFetchAvatars(
     }));
   }
 
+  // If email-based lookup failed, try using Lark user_key (username without domain)
+  if (emailToAvatar.size === 0) {
+    // Construct avatar URLs from Lark's avatar API using open_id from batch_get_id
+    // Since batch_get_id doesn't work with enterprise emails, try the user search API
+    for (let i = 0; i < uniqueEmails.length; i += 3) {
+      const batch = uniqueEmails.slice(i, i + 3);
+      await Promise.all(batch.map(async (email) => {
+        try {
+          const username = email.split('@')[0].replace(/\./g, ' ');
+          // Use Lark search user API (requires search:user scope on user token)
+          const res = await fetch(
+            `${LARK_BASE_URL}/open-apis/search/v2/user?query=${encodeURIComponent(username)}&page_size=3`,
+            { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } },
+          );
+          const d = await res.json() as {
+            code: number;
+            data?: { users?: Array<{ enterprise_email?: string; avatar?: { avatar_72?: string } }> };
+          };
+          if (d.code === 0) {
+            for (const user of d.data?.users ?? []) {
+              if (user.enterprise_email === email && user.avatar?.avatar_72) {
+                emailToAvatar.set(email, user.avatar.avatar_72);
+              }
+            }
+          }
+        } catch { /* skip */ }
+      }));
+    }
+  }
+
   console.log('[lark] avatar resolved:', emailToAvatar.size, '/', uniqueEmails.length);
 
   for (const [name, email] of entries) {
