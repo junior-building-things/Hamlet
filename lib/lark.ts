@@ -984,8 +984,7 @@ export async function batchFetchAvatars(
     const batch = uniqueEmails.slice(i, i + 5);
     await Promise.all(batch.map(async (email) => {
       try {
-        const username = email.split('@')[0];
-        // Use the contact search API with enterprise email
+        // Try batch_get_id with enterprise email
         const res = await fetch(
           `${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`,
           {
@@ -994,11 +993,14 @@ export async function batchFetchAvatars(
             body: JSON.stringify({ emails: [email] }),
           },
         );
-        const d = await res.json() as { code: number; data?: { email_users?: Record<string, Array<{ user_id: string }>> } };
+        const d = await res.json() as { code: number; msg?: string; data?: { email_users?: Record<string, Array<{ user_id: string }>> } };
 
         let userId = '';
         if (d.code === 0) {
           userId = d.data?.email_users?.[email]?.[0]?.user_id ?? '';
+        }
+        if (i === 0 && !userId) {
+          console.log('[lark] batch_get_id for', email, ':', d.code, d.msg, JSON.stringify(d.data?.email_users ?? {}).slice(0, 200));
         }
 
         // If email lookup failed, try with Lark username (without @domain)
@@ -1051,9 +1053,10 @@ export async function batchFetchAvatars(
             { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } },
           );
           const d = await res.json() as {
-            code: number;
+            code: number; msg?: string;
             data?: { users?: Array<{ enterprise_email?: string; avatar?: { avatar_72?: string } }> };
           };
+          if (i === 0) console.log('[lark] search user for', email, ':', d.code, d.msg, 'users:', d.data?.users?.length ?? 0);
           if (d.code === 0) {
             for (const user of d.data?.users ?? []) {
               if (user.enterprise_email === email && user.avatar?.avatar_72) {
@@ -1061,7 +1064,7 @@ export async function batchFetchAvatars(
               }
             }
           }
-        } catch { /* skip */ }
+        } catch (e) { if (i === 0) console.log('[lark] search user error:', e); }
       }));
     }
   }
