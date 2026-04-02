@@ -974,72 +974,73 @@ export async function batchFetchAvatars(
 
   const token = await getAccessToken();
 
-  // Resolve enterprise emails to user IDs, then fetch avatars
-  const emails = [...new Set(entries.map(([, email]) => email))];
-
-  // Step 1: Try batch_get_id with enterprise_emails (not emails)
-  const emailToUserId = new Map<string, string>();
-
-  // Split into batches of 50
-  for (let i = 0; i < emails.length; i += 50) {
-    const batch = emails.slice(i, i + 50);
-    const res = await fetch(`${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ emails: batch }),
-    });
-    const d1 = await parseJson(res, 'batch_get_id_email') as {
-      code: number; msg?: string;
-      data?: { email_users?: Record<string, Array<{ user_id: string }>> };
-    };
-
-    // If personal emails didn't work, the field name might be different
-    // ByteDance uses enterprise_email — try with emails as-is first
-    if (d1.code === 0) {
-      for (const [email, users] of Object.entries(d1.data?.email_users ?? {})) {
-        if (users?.[0]?.user_id) emailToUserId.set(email, users[0].user_id);
-      }
-    }
-  }
-
-  console.log('[lark] email lookup resolved:', emailToUserId.size, '/', emails.length);
-
-  // Step 2: Fetch avatars for resolved users
-  const userIds = [...new Set(emailToUserId.values())];
-  const userIdToAvatar = new Map<string, string>();
-
-  for (let i = 0; i < userIds.length; i += 50) {
-    const batch = userIds.slice(i, i + 50);
-    const params = batch.map(id => `user_ids=${id}`).join('&');
-    const userRes = await fetch(
-      `${LARK_BASE_URL}/open-apis/contact/v3/users/batch?${params}&user_id_type=open_id`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    const userData = await parseJson(userRes, 'users_batch') as {
-      code: number; msg?: string;
-      data?: { items?: Array<{ user_id: string; open_id?: string; avatar?: { avatar_72?: string; avatar_240?: string; avatar_origin?: string } }> };
-    };
-    if (userData.code !== 0) {
-      console.warn('[lark] users/batch failed:', userData.code, userData.msg);
-      continue;
-    }
-    for (const user of userData.data?.items ?? []) {
-      const url = user.avatar?.avatar_72 || user.avatar?.avatar_240 || user.avatar?.avatar_origin;
-      const id = user.open_id || user.user_id;
-      if (url && id) userIdToAvatar.set(id, url);
-    }
-  }
-
-  console.log('[lark] avatar lookup resolved:', userIdToAvatar.size, '/', userIds.length);
-
-  // Step 3: Map back
+  // Use Lark's people API to search by enterprise email username
   const result: Record<string, string> = {};
+  const emailToAvatar = new Map<string, string>();
+  const uniqueEmails = [...new Set(entries.map(([, email]) => email))];
+
+  // Process in parallel batches of 5
+  for (let i = 0; i < uniqueEmails.length; i += 5) {
+    const batch = uniqueEmails.slice(i, i + 5);
+    await Promise.all(batch.map(async (email) => {
+      try {
+        const username = email.split('@')[0];
+        // Use the contact search API with enterprise email
+        const res = await fetch(
+          `${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emails: [email] }),
+          },
+        );
+        const d = await res.json() as { code: number; data?: { email_users?: Record<string, Array<{ user_id: string }>> } };
+
+        let userId = '';
+        if (d.code === 0) {
+          userId = d.data?.email_users?.[email]?.[0]?.user_id ?? '';
+        }
+
+        // If email lookup failed, try with Lark username (without @domain)
+        if (!userId) {
+          const res2 = await fetch(
+            `${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`,
+            {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ emails: [`${username}@larkoffice.com`, `${username}@feishu.cn`] }),
+            },
+          );
+          const d2 = await res2.json() as { code: number; data?: { email_users?: Record<string, Array<{ user_id: string }>> } };
+          if (d2.code === 0) {
+            for (const users of Object.values(d2.data?.email_users ?? {})) {
+              if (users?.[0]?.user_id) { userId = users[0].user_id; break; }
+            }
+          }
+        }
+
+        if (!userId) return;
+
+        // Fetch avatar
+        const userRes = await fetch(
+          `${LARK_BASE_URL}/open-apis/contact/v3/users/${userId}?user_id_type=open_id`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        const userData = await userRes.json() as {
+          code: number;
+          data?: { user?: { avatar?: { avatar_72?: string; avatar_240?: string } } };
+        };
+        const avatar = userData.data?.user?.avatar?.avatar_72 || userData.data?.user?.avatar?.avatar_240;
+        if (avatar) emailToAvatar.set(email, avatar);
+      } catch { /* skip */ }
+    }));
+  }
+
+  console.log('[lark] avatar resolved:', emailToAvatar.size, '/', uniqueEmails.length);
+
   for (const [name, email] of entries) {
-    const userId = emailToUserId.get(email);
-    if (userId) {
-      const avatar = userIdToAvatar.get(userId);
-      if (avatar) result[name] = avatar;
-    }
+    const avatar = emailToAvatar.get(email);
+    if (avatar) result[name] = avatar;
   }
   return result;
 }
