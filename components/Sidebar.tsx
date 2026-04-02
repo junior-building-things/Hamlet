@@ -1,8 +1,8 @@
 'use client';
 import Image from 'next/image';
-import { LayoutList, MessageSquare, CheckSquare, Plus, LogOut } from 'lucide-react';
+import { LayoutList, MessageSquare, CheckSquare, Users, Plus, LogOut } from 'lucide-react';
 
-export type SidebarView = 'project' | 'chat' | 'todos';
+export type SidebarView = 'project' | 'chat' | 'todos' | 'roles';
 
 interface Props {
   activeView: SidebarView;
@@ -49,6 +49,12 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Pro
           label="To Dos"
           active={activeView === 'todos'}
           onClick={() => onViewChange('todos')}
+        />
+        <NavItem
+          icon={<Users className="w-4 h-4 shrink-0" />}
+          label="Roles & Responsibilities"
+          active={activeView === 'roles'}
+          onClick={() => onViewChange('roles')}
         />
       </nav>
 

@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
       { source: '/projects', destination: '/' },
       { source: '/todos', destination: '/' },
       { source: '/chat', destination: '/' },
+      { source: '/roles', destination: '/' },
     ];
   },
 };

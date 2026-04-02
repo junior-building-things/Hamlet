@@ -5,6 +5,7 @@ import { Sidebar, SidebarView } from '@/components/Sidebar';
 import { ProjectView } from '@/components/ProjectView';
 import { ChatView } from '@/components/ChatView';
 import { TodoView } from '@/components/TodoView';
+import { RolesView } from '@/components/RolesView';
 import { FeatureModal } from '@/components/FeatureModal';
 
 export default function Home() {
@@ -14,6 +15,7 @@ export default function Home() {
       const path = window.location.pathname;
       if (path === '/todos') return 'todos';
       if (path === '/chat') return 'chat';
+      if (path === '/roles') return 'roles';
     }
     return 'project';
   });
@@ -22,7 +24,7 @@ export default function Home() {
   const [user,          setUser]          = useState<{ name: string; avatarUrl: string } | undefined>();
 
   // Sync URL when view changes
-  const viewToPath: Record<SidebarView, string> = { project: '/projects', todos: '/todos', chat: '/chat' };
+  const viewToPath: Record<SidebarView, string> = { project: '/projects', todos: '/todos', chat: '/chat', roles: '/roles' };
   function handleViewChange(view: SidebarView) {
     setActiveView(view);
     window.history.pushState(null, '', viewToPath[view]);
@@ -34,6 +36,7 @@ export default function Home() {
       const path = window.location.pathname;
       if (path === '/todos') setActiveView('todos');
       else if (path === '/chat') setActiveView('chat');
+      else if (path === '/roles') setActiveView('roles');
       else setActiveView('project');
     }
     window.addEventListener('popstate', onPopState);
@@ -106,6 +109,9 @@ export default function Home() {
         )}
         {activeView === 'todos' && (
           <TodoView features={features} setFeatures={setFeatures} />
+        )}
+        {activeView === 'roles' && (
+          <RolesView />
         )}
       </div>
 
