@@ -1317,3 +1317,74 @@ export async function getPackageQrUrl(chatId: string): Promise<PackageResult | n
 
   return result;
 }
+
+// ─── Send feature card to PM group chat ──────────────────────────────────────
+
+const PM_GROUP_CHAT_ID = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
+
+/**
+ * Send an interactive card message to the PM group chat announcing a new feature.
+ */
+export async function sendFeatureCard(opts: {
+  name: string;
+  meegoUrl: string;
+  prdUrl?: string;
+  priority: string;
+}): Promise<void> {
+  const token = await getAccessToken();
+
+  const priorityColors: Record<string, string> = {
+    P0: 'red', P1: 'orange', P2: 'blue', P3: 'grey',
+  };
+  const headerColor = priorityColors[opts.priority] || 'blue';
+
+  const elements: Array<Record<string, unknown>> = [
+    {
+      tag: 'div',
+      text: { tag: 'lark_md', content: `**Priority:** ${opts.priority}` },
+    },
+    {
+      tag: 'action',
+      actions: [
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: 'Open in Meego' },
+          type: 'primary',
+          url: opts.meegoUrl,
+        },
+        ...(opts.prdUrl ? [{
+          tag: 'button',
+          text: { tag: 'plain_text', content: 'Open PRD' },
+          type: 'default' as const,
+          url: opts.prdUrl,
+        }] : []),
+      ],
+    },
+  ];
+
+  const card = {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: opts.name },
+      template: headerColor,
+    },
+    elements,
+  };
+
+  const res = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/messages?receive_id_type=chat_id`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      receive_id: PM_GROUP_CHAT_ID,
+      msg_type: 'interactive',
+      content: JSON.stringify(card),
+    }),
+  });
+
+  const data = await parseJson(res, 'send_card') as { code: number; msg?: string };
+  if (data.code !== 0) {
+    console.warn('[lark] send feature card failed:', data.code, data.msg);
+  } else {
+    console.log('[lark] feature card sent to PM group:', opts.name);
+  }
+}
