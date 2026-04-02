@@ -487,7 +487,8 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
     data?: { items?: Array<{ msg_type: string; body?: { content?: string } }> };
   };
   if (data.code !== 0) {
-    console.warn('[libra chat] message fetch failed:', data.code, data.msg);
+    // 230002 = bot not in chat — expected for older features, don't log
+    if (data.code !== 230002) console.warn('[libra chat] message fetch failed:', data.code, data.msg);
     return '';
   }
 
@@ -1248,7 +1249,7 @@ export async function getPackageQrUrl(chatId: string): Promise<PackageResult | n
   };
 
   if (data.code !== 0) {
-    console.warn('[lark] list messages failed:', data.code, data.msg);
+    if (data.code !== 230002) console.warn('[lark] list messages failed:', data.code, data.msg);
     return null;
   }
 

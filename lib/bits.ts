@@ -28,8 +28,8 @@ async function getJwt(): Promise<string> {
  * Returns the ttidevops install URL, or null if no package found.
  */
 export async function getIosPackageUrl(commitHash: string): Promise<string | null> {
-  // Skip if running on Cloud Run (internal APIs not reachable)
-  if (!process.env.SERVICE_ACCOUNT_SECRET) return null;
+  // Skip if internal APIs not reachable (Cloud Run / Vercel can't reach bits.bytedance.net)
+  if (!process.env.SERVICE_ACCOUNT_SECRET || process.env.K_SERVICE) return null;
   try {
     const jwt = await getJwt();
     const res = await fetch(
