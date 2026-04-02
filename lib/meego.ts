@@ -507,8 +507,11 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
         if (avatar) meegoAvatars[name] = avatar;
       }
     }
+    // Debug: show what emails are in each source
+    const nodeEmails = [...nodeEmailAvatars.keys()].slice(0, 3);
+    const pocEmailVals = Object.values(pocEmails).slice(0, 3);
     console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length,
-      'node:', nodeEmailAvatars.size, 'brief:', briefEmailAvatars.size);
+      'node emails:', nodeEmails, 'poc emails:', pocEmailVals);
   } catch (e) {
     console.log('[meego] avatar fetch failed:', e);
   }
