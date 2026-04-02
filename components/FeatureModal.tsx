@@ -111,10 +111,11 @@ const TECH_OWNERS: AvatarOption[] = [
   { value: '7405623196516450307', label: 'Tianyang Ni',  avatarUrl: AV['Tianyang Ni'] },
 ];
 const SERVER_OWNERS: AvatarOption[] = [
-  { value: '7210676945535778820', label: 'Austin Lee',   avatarUrl: AV['Austin Lee'] },
-  { value: '7291604705006895105', label: 'Kyle Chan',    avatarUrl: AV['Kyle Chan'] },
-  { value: '6990536503940218908', label: 'Xuan Sheng',   avatarUrl: AV['Xuan Sheng'] },
-  { value: '7405623196516450307', label: 'Tianyang Ni',  avatarUrl: AV['Tianyang Ni'] },
+  { value: '7210676945535778820', label: 'Austin Lee',    avatarUrl: AV['Austin Lee'] },
+  { value: '7291604705006895105', label: 'Kyle Chan',     avatarUrl: AV['Kyle Chan'] },
+  { value: '6990536503940218908', label: 'Xuan Sheng',    avatarUrl: AV['Xuan Sheng'] },
+  { value: '7405623196516450307', label: 'Tianyang Ni',   avatarUrl: AV['Tianyang Ni'] },
+  { value: 'jinming.zhang',       label: 'Jinming Zhang', avatarUrl: AV['Jinming Zhang'] },
 ];
 const ANDROID_OWNERS: AvatarOption[] = [
   { value: '7210676945535778820', label: 'Austin Lee',  avatarUrl: AV['Austin Lee'] },

@@ -146,42 +146,33 @@ function collectAllPocEmails(raw: string): Map<string, string> {
   return map;
 }
 
-// Extract all name→avatar mappings from raw text (handles escaped JSON)
-// Maps both English names (from user_key like "thomas.oefverstroem") and emails to avatar URLs
-function collectAllAvatarsFromRaw(raw: string): Record<string, string> {
-  const avatars: Record<string, string> = {};
-  const unescaped = raw.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-
-  // Match user objects with user_key/email/name and avatar
-  // Pattern: {"user_key":"thomas.oefverstroem","name":"托马斯","email":"thomas.oefverstroem@bytedance.com",...}
-  // Avatar might be elsewhere in the same object
-  const userBlocks = unescaped.match(/\{[^{}]*?"(?:user_key|email)"[^{}]*?\}/g) ?? [];
-  for (const block of userBlocks) {
-    const avatarMatch = block.match(/"avatar"\s*:\s*"(https?:\/\/[^"]+)"/);
-    if (!avatarMatch) continue;
-    const avatarUrl = avatarMatch[1];
-
-    // Extract user_key (maps to English name like "first.last")
-    const keyMatch = block.match(/"user_key"\s*:\s*"([^"]+)"/);
-    if (keyMatch) {
-      // Convert user_key to display name: "thomas.oefverstroem" -> "Thomas Oefverstroem"
-      const displayName = keyMatch[1].split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
-      if (!avatars[displayName]) avatars[displayName] = avatarUrl;
+// Extract all email→avatar mappings from node detail JSON
+function collectAvatarsFromNodeDetail(nodeRaw: string): Map<string, string> {
+  const map = new Map<string, string>();
+  try {
+    interface NodeUser { user_key?: string; name?: string; email?: string; avatar?: string }
+    interface NodeAssignees { owners?: NodeUser[]; role_assignees?: Record<string, NodeUser[]> }
+    interface NodeEntry { assignees?: NodeAssignees }
+    const data = JSON.parse(nodeRaw) as { list?: NodeEntry[] };
+    for (const node of data.list ?? []) {
+      const processUsers = (users: NodeUser[]) => {
+        for (const u of users) {
+          if (u.avatar && u.email) map.set(u.email, u.avatar);
+          if (u.avatar && u.user_key) {
+            // user_key "first.last" → display name "First Last"
+            const displayName = u.user_key.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+            map.set(displayName, u.avatar);
+          }
+          if (u.avatar && u.name) map.set(u.name, u.avatar);
+        }
+      };
+      if (node.assignees?.owners) processUsers(node.assignees.owners);
+      for (const users of Object.values(node.assignees?.role_assignees ?? {})) {
+        if (Array.isArray(users)) processUsers(users);
+      }
     }
-
-    // Also map by email
-    const emailMatch = block.match(/"email"\s*:\s*"([^"]+@[^"]+)"/);
-    if (emailMatch && !avatars[emailMatch[1]]) {
-      avatars[emailMatch[1]] = avatarUrl;
-    }
-
-    // And by name
-    const nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/);
-    if (nameMatch && !avatars[nameMatch[1]]) {
-      avatars[nameMatch[1]] = avatarUrl;
-    }
-  }
-  return avatars;
+  } catch { /* ignore parse errors */ }
+  return map;
 }
 
 
@@ -496,26 +487,22 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Collect name→email pairs from brief, and avatar URLs from node detail
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
-  // Extract avatars from node detail (has user_key, email, name, avatar for all participants)
+  // Extract avatars from node detail (properly parsed JSON, not regex)
   let meegoAvatars: Record<string, string> = {};
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const allAvatars = collectAllAvatarsFromRaw(nodeRaw);
-    // Also extract from brief (role member data)
-    const briefAvatars = collectAllAvatarsFromRaw(raw);
-    // Merge all avatars by all keys (name, email, user_key display name)
-    const allFound = { ...briefAvatars, ...allAvatars };
-    // Map pocEmail names to avatars using email as bridge
+    const avatarMap = collectAvatarsFromNodeDetail(nodeRaw);
+    // Map pocEmail names to avatars using email or name as bridge
     for (const [name, email] of Object.entries(pocEmails)) {
-      const avatar = allFound[email] || allFound[name];
+      const avatar = avatarMap.get(email) || avatarMap.get(name);
       if (avatar) meegoAvatars[name] = avatar;
     }
-    // Also include all display-name-keyed avatars directly
-    for (const [key, url] of Object.entries(allFound)) {
+    // Also include display-name-keyed avatars (from user_key conversion)
+    for (const [key, url] of avatarMap) {
       if (!key.includes('@') && !meegoAvatars[key]) meegoAvatars[key] = url;
     }
-    console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, 'from', Object.keys(allFound).length, 'found',
-      'allFound keys:', Object.keys(allFound).slice(0, 5), 'pocEmail entries:', Object.entries(pocEmails).slice(0, 3).map(([n,e]) => `${n}=${e}`));
+    console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length,
+      'total in node:', avatarMap.size);
   } catch (e) {
     console.log('[meego] avatar fetch failed:', e);
   }
