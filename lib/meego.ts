@@ -146,24 +146,42 @@ function collectAllPocEmails(raw: string): Map<string, string> {
   return map;
 }
 
-// Extract email→avatar map from raw text (handles both normal and escaped JSON)
-function collectEmailAvatarMap(raw: string): Map<string, string> {
-  const map = new Map<string, string>();
-  // The node detail has escaped JSON like: \"email\":\"user@bytedance.com\"...\"avatar\":\"https://...\"
-  // First unescape the string to make matching easier
+// Extract all name→avatar mappings from raw text (handles escaped JSON)
+// Maps both English names (from user_key like "thomas.oefverstroem") and emails to avatar URLs
+function collectAllAvatarsFromRaw(raw: string): Record<string, string> {
+  const avatars: Record<string, string> = {};
   const unescaped = raw.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
 
-  // Match email and avatar in the same JSON object (any order)
-  const regex1 = /"email"\s*:\s*"([^"]+@[^"]+)"[^}]*?"avatar"\s*:\s*"(https?:\/\/[^"]+)"/g;
-  const regex2 = /"avatar"\s*:\s*"(https?:\/\/[^"]+)"[^}]*?"email"\s*:\s*"([^"]+@[^"]+)"/g;
-  let m;
-  while ((m = regex1.exec(unescaped)) !== null) {
-    if (!map.has(m[1])) map.set(m[1], m[2]);
+  // Match user objects with user_key/email/name and avatar
+  // Pattern: {"user_key":"thomas.oefverstroem","name":"托马斯","email":"thomas.oefverstroem@bytedance.com",...}
+  // Avatar might be elsewhere in the same object
+  const userBlocks = unescaped.match(/\{[^{}]*?"(?:user_key|email)"[^{}]*?\}/g) ?? [];
+  for (const block of userBlocks) {
+    const avatarMatch = block.match(/"avatar"\s*:\s*"(https?:\/\/[^"]+)"/);
+    if (!avatarMatch) continue;
+    const avatarUrl = avatarMatch[1];
+
+    // Extract user_key (maps to English name like "first.last")
+    const keyMatch = block.match(/"user_key"\s*:\s*"([^"]+)"/);
+    if (keyMatch) {
+      // Convert user_key to display name: "thomas.oefverstroem" -> "Thomas Oefverstroem"
+      const displayName = keyMatch[1].split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+      if (!avatars[displayName]) avatars[displayName] = avatarUrl;
+    }
+
+    // Also map by email
+    const emailMatch = block.match(/"email"\s*:\s*"([^"]+@[^"]+)"/);
+    if (emailMatch && !avatars[emailMatch[1]]) {
+      avatars[emailMatch[1]] = avatarUrl;
+    }
+
+    // And by name
+    const nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/);
+    if (nameMatch && !avatars[nameMatch[1]]) {
+      avatars[nameMatch[1]] = avatarUrl;
+    }
   }
-  while ((m = regex2.exec(unescaped)) !== null) {
-    if (!map.has(m[2])) map.set(m[2], m[1]);
-  }
-  return map;
+  return avatars;
 }
 
 // Build name→avatar map by cross-referencing name→email (from roles) with email→avatar (from JSON)
@@ -491,27 +509,16 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Collect name→email pairs from brief, and avatar URLs from node detail
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
+  // Extract avatars from node detail (has user_key, email, name, avatar for all participants)
   let meegoAvatars: Record<string, string> = {};
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const nodeEmailAvatars = collectEmailAvatarMap(nodeRaw);
-    for (const [name, email] of Object.entries(pocEmails)) {
-      const avatar = nodeEmailAvatars.get(email);
-      if (avatar) meegoAvatars[name] = avatar;
-    }
-    // Also try brief (role member JSON has avatar URLs in escaped format)
-    const briefEmailAvatars = collectEmailAvatarMap(raw);
-    for (const [name, email] of Object.entries(pocEmails)) {
-      if (!meegoAvatars[name]) {
-        const avatar = briefEmailAvatars.get(email);
-        if (avatar) meegoAvatars[name] = avatar;
-      }
-    }
-    // Debug: show what emails are in each source
-    const nodeEmails = [...nodeEmailAvatars.keys()].slice(0, 3);
-    const pocEmailVals = Object.values(pocEmails).slice(0, 3);
-    console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length,
-      'node emails:', nodeEmails, 'poc emails:', pocEmailVals);
+    const allAvatars = collectAllAvatarsFromRaw(nodeRaw);
+    // Also extract from brief (role member data)
+    const briefAvatars = collectAllAvatarsFromRaw(raw);
+    // Merge: node detail first, then brief
+    meegoAvatars = { ...briefAvatars, ...allAvatars };
+    console.log('[meego] avatars found:', Object.keys(meegoAvatars).length, 'names:', Object.keys(meegoAvatars).slice(0, 5));
   } catch (e) {
     console.log('[meego] avatar fetch failed:', e);
   }
