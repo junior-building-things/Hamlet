@@ -1055,11 +1055,9 @@ export async function batchFetchAvatars(
             `${LARK_BASE_URL}/open-apis/search/v2/user?query=${encodeURIComponent(username)}&page_size=3`,
             { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } },
           );
-          const d = await res.json() as {
-            code: number; msg?: string;
-            data?: { users?: Array<{ enterprise_email?: string; avatar?: { avatar_72?: string } }> };
-          };
-          if (i === 0) console.log('[lark] search user for', email, ':', d.code, d.msg, 'users:', d.data?.users?.length ?? 0);
+          const text = await res.text();
+          let d: { code: number; msg?: string; data?: { users?: Array<{ enterprise_email?: string; avatar?: { avatar_72?: string } }> } };
+          try { d = JSON.parse(text); } catch { return; } // skip non-JSON responses silently
           if (d.code === 0) {
             for (const user of d.data?.users ?? []) {
               if (user.enterprise_email === email && user.avatar?.avatar_72) {
