@@ -1005,12 +1005,13 @@ export async function batchFetchAvatars(
 
         // If email lookup failed, try with Lark username (without @domain)
         if (!userId) {
+          const uname = email.split('@')[0];
           const res2 = await fetch(
             `${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`,
             {
               method: 'POST',
               headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ emails: [`${username}@larkoffice.com`, `${username}@feishu.cn`] }),
+              body: JSON.stringify({ emails: [`${uname}@larkoffice.com`, `${uname}@feishu.cn`] }),
             },
           );
           const d2 = await res2.json() as { code: number; data?: { email_users?: Record<string, Array<{ user_id: string }>> } };
