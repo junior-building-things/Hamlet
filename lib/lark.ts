@@ -976,6 +976,7 @@ export async function batchFetchAvatars(
 
   // Step 1: Batch resolve emails → user IDs
   const emails = [...new Set(entries.map(([, email]) => email))];
+  console.log('[lark] batch_get_id emails:', emails.slice(0, 5));
   const res = await fetch(`${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -985,6 +986,7 @@ export async function batchFetchAvatars(
     code: number; msg?: string;
     data?: { email_users?: Record<string, Array<{ user_id: string }>> };
   };
+  console.log('[lark] batch_get_id response code:', idData.code, 'email_users keys:', Object.keys(idData.data?.email_users ?? {}).length);
   if (idData.code !== 0) {
     console.warn('[lark] batch_get_id failed:', idData.code, idData.msg);
     return {};
