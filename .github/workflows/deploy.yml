@@ -1,0 +1,40 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy hamlet \
+            --source . \
+            --region asia-southeast1 \
+            --allow-unauthenticated \
+            --set-env-vars "\
+          LARK_APP_ID=${{ secrets.LARK_APP_ID }},\
+          LARK_APP_SECRET=${{ secrets.LARK_APP_SECRET }},\
+          LARK_BASE_URL=${{ secrets.LARK_BASE_URL }},\
+          OWNER_EMAIL=${{ secrets.OWNER_EMAIL }},\
+          MEEGO_USER_TOKEN=${{ secrets.MEEGO_USER_TOKEN }},\
+          MEEGO_PROJECT_KEY=${{ secrets.MEEGO_PROJECT_KEY }},\
+          GOOGLE_AI_API_KEY=${{ secrets.GOOGLE_AI_API_KEY }},\
+          SESSION_SECRET=${{ secrets.SESSION_SECRET }},\
+          SERVICE_ACCOUNT_SECRET=${{ secrets.SERVICE_ACCOUNT_SECRET }},\
+          LEGAL_APP_SECRET=${{ secrets.LEGAL_APP_SECRET }}" \
+            --quiet
