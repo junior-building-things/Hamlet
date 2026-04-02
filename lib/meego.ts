@@ -457,6 +457,16 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   // Collect name→email pairs for avatar resolution
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
 
+  // Debug: check if node detail has avatar URLs
+  try {
+    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+    const avatarMatches = nodeRaw.match(/.{0,20}(avatar|photo|头像|image_url).{0,80}/gi);
+    if (avatarMatches?.length) console.log('[meego] avatar refs in nodes:', avatarMatches.slice(0, 3));
+    // Log first assignee structure
+    const assigneeMatch = nodeRaw.match(/"owners":\[([^\]]{0,300})/);
+    if (assigneeMatch) console.log('[meego] first assignee structure:', assigneeMatch[1].slice(0, 300));
+  } catch { /* ignore */ }
+
   // Fetch version from work item brief (version fields are work-item-level, not node-level)
   // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
   let iosVersion = '';

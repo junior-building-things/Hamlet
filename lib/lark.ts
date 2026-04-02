@@ -1000,7 +1000,7 @@ export async function batchFetchAvatars(
           userId = d.data?.email_users?.[email]?.[0]?.user_id ?? '';
         }
         if (i === 0 && !userId) {
-          console.log('[lark] batch_get_id for', email, ':', d.code, d.msg, JSON.stringify(d.data?.email_users ?? {}).slice(0, 200));
+          console.log('[lark] batch_get_id enterprise email not found:', email);
         }
 
         // If email lookup failed, try with Lark username (without @domain)
