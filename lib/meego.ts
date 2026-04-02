@@ -146,18 +146,21 @@ function collectAllPocEmails(raw: string): Map<string, string> {
   return map;
 }
 
-// Extract email→avatar map from the raw brief JSON
-// The brief contains role member JSON entries with email and avatar fields
+// Extract email→avatar map from raw text (handles both normal and escaped JSON)
 function collectEmailAvatarMap(raw: string): Map<string, string> {
   const map = new Map<string, string>();
+  // The node detail has escaped JSON like: \"email\":\"user@bytedance.com\"...\"avatar\":\"https://...\"
+  // First unescape the string to make matching easier
+  const unescaped = raw.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+
   // Match email and avatar in the same JSON object (any order)
-  const regex1 = /"email":\s*"([^"]+@[^"]+)"[^}]*?"avatar":\s*"(https?:\/\/[^"]+)"/g;
-  const regex2 = /"avatar":\s*"(https?:\/\/[^"]+)"[^}]*?"email":\s*"([^"]+@[^"]+)"/g;
+  const regex1 = /"email"\s*:\s*"([^"]+@[^"]+)"[^}]*?"avatar"\s*:\s*"(https?:\/\/[^"]+)"/g;
+  const regex2 = /"avatar"\s*:\s*"(https?:\/\/[^"]+)"[^}]*?"email"\s*:\s*"([^"]+@[^"]+)"/g;
   let m;
-  while ((m = regex1.exec(raw)) !== null) {
+  while ((m = regex1.exec(unescaped)) !== null) {
     if (!map.has(m[1])) map.set(m[1], m[2]);
   }
-  while ((m = regex2.exec(raw)) !== null) {
+  while ((m = regex2.exec(unescaped)) !== null) {
     if (!map.has(m[2])) map.set(m[2], m[1]);
   }
   return map;
