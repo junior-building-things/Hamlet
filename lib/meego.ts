@@ -503,9 +503,18 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     const allAvatars = collectAllAvatarsFromRaw(nodeRaw);
     // Also extract from brief (role member data)
     const briefAvatars = collectAllAvatarsFromRaw(raw);
-    // Merge: node detail first, then brief
-    meegoAvatars = { ...briefAvatars, ...allAvatars };
-    console.log('[meego] avatars found:', Object.keys(meegoAvatars).length, 'names:', Object.keys(meegoAvatars).slice(0, 5));
+    // Merge all avatars by all keys (name, email, user_key display name)
+    const allFound = { ...briefAvatars, ...allAvatars };
+    // Map pocEmail names to avatars using email as bridge
+    for (const [name, email] of Object.entries(pocEmails)) {
+      const avatar = allFound[email] || allFound[name];
+      if (avatar) meegoAvatars[name] = avatar;
+    }
+    // Also include all display-name-keyed avatars directly
+    for (const [key, url] of Object.entries(allFound)) {
+      if (!key.includes('@') && !meegoAvatars[key]) meegoAvatars[key] = url;
+    }
+    console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, 'from', Object.keys(allFound).length, 'found');
   } catch (e) {
     console.log('[meego] avatar fetch failed:', e);
   }
