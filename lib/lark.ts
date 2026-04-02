@@ -384,7 +384,7 @@ export async function searchAbReport(
 
   // Drive search requires user_access_token; fall back to tenant token
   const searchToken = userAccessToken || await getAccessToken();
-  const readToken = await getAccessToken(); // tenant token for reading doc content
+  const readToken = userAccessToken || await getAccessToken(); // prefer user token for reading docs
 
   // Extract keywords from feature name for the search query
   const words = featureName
