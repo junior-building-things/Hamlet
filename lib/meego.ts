@@ -514,7 +514,8 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     for (const [key, url] of Object.entries(allFound)) {
       if (!key.includes('@') && !meegoAvatars[key]) meegoAvatars[key] = url;
     }
-    console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, 'from', Object.keys(allFound).length, 'found');
+    console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, 'from', Object.keys(allFound).length, 'found',
+      'allFound keys:', Object.keys(allFound).slice(0, 5), 'pocEmail entries:', Object.entries(pocEmails).slice(0, 3).map(([n,e]) => `${n}=${e}`));
   } catch (e) {
     console.log('[meego] avatar fetch failed:', e);
   }
