@@ -177,11 +177,15 @@ export function RolesView() {
   const agentRoles = ROLES.filter(r => r.isAgent);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-xl font-semibold text-white mb-1">Roles &amp; Responsibilities</h1>
-      <p className="text-sm text-gray-400 mb-6">
-        Each feature involves the following roles. Cards describe what each person (or agent) is responsible for.
-      </p>
+    <div className="max-w-6xl mx-auto">
+      <div className="px-6 pt-7 pb-2">
+        <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
+          R&R
+        </h1>
+        <p className="text-sm text-gray-500 mt-1">Each feature involves the following roles. Cards describe what each person (or agent) is responsible for.</p>
+      </div>
+
+      <div className="px-6 pb-6">
 
       {/* Human roles */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
@@ -202,6 +206,7 @@ export function RolesView() {
         {agentRoles.map(role => (
           <RoleCard key={role.key} role={role} />
         ))}
+      </div>
       </div>
     </div>
   );
