@@ -52,7 +52,7 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Pro
         />
         <NavItem
           icon={<Users className="w-4 h-4 shrink-0" />}
-          label="Roles & Responsibilities"
+          label="R&R"
           active={activeView === 'roles'}
           onClick={() => onViewChange('roles')}
         />
