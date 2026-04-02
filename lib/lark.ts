@@ -992,9 +992,13 @@ export async function batchFetchAvatars(
 
   // Build email → user_id map
   const emailToUserId = new Map<string, string>();
+  const failedEmails: string[] = [];
   for (const [email, users] of Object.entries(idData.data?.email_users ?? {})) {
     if (users?.[0]?.user_id) emailToUserId.set(email, users[0].user_id);
+    else failedEmails.push(email);
   }
+  if (failedEmails.length) console.log('[lark] emails not resolved to user_id:', failedEmails);
+  console.log('[lark] resolved', emailToUserId.size, '/', emails.length, 'emails to user IDs');
 
   // Step 2: Batch fetch user details (up to 50 at a time)
   const userIds = [...new Set(emailToUserId.values())];
@@ -1021,6 +1025,7 @@ export async function batchFetchAvatars(
       if (url) userIdToAvatar.set(user.user_id, url);
     }
   }
+  console.log('[lark] resolved', userIdToAvatar.size, '/', userIds.length, 'user IDs to avatars');
 
   // Step 3: Map back to name → avatarUrl
   const result: Record<string, string> = {};
