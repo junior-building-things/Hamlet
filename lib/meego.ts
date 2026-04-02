@@ -146,27 +146,34 @@ function collectAllPocEmails(raw: string): Map<string, string> {
   return map;
 }
 
-// Extract name→avatar pairs from the raw brief JSON
-// The brief contains role member JSON with avatar URLs like:
-// "employeeId":"123","avatar":"https://pan16.larksuitecdn.com/..."
-function collectAllPocAvatars(raw: string): Record<string, string> {
-  const avatars: Record<string, string> = {};
-  // Match patterns like "name":"托马斯"... "avatar":"https://..."
-  // The role member JSON has entries with name and avatar fields
-  const avatarRegex = /"name":\s*"([^"]+)"[^}]*?"avatar":\s*"(https?:\/\/[^"]+)"/g;
+// Extract email→avatar map from the raw brief JSON
+// The brief contains role member JSON entries with email and avatar fields
+function collectEmailAvatarMap(raw: string): Map<string, string> {
+  const map = new Map<string, string>();
+  // Match email and avatar in the same JSON object (any order)
+  const regex1 = /"email":\s*"([^"]+@[^"]+)"[^}]*?"avatar":\s*"(https?:\/\/[^"]+)"/g;
+  const regex2 = /"avatar":\s*"(https?:\/\/[^"]+)"[^}]*?"email":\s*"([^"]+@[^"]+)"/g;
   let m;
-  while ((m = avatarRegex.exec(raw)) !== null) {
-    const name = m[1].trim();
-    const url = m[2];
-    if (name && url && !avatars[name]) avatars[name] = url;
+  while ((m = regex1.exec(raw)) !== null) {
+    if (!map.has(m[1])) map.set(m[1], m[2]);
   }
-  // Also try reverse order: avatar before name
-  const avatarRegex2 = /"avatar":\s*"(https?:\/\/[^"]+)"[^}]*?"name":\s*"([^"]+)"/g;
-  while ((m = avatarRegex2.exec(raw)) !== null) {
-    const name = m[2].trim();
-    const url = m[1];
-    if (name && url && !avatars[name]) avatars[name] = url;
+  while ((m = regex2.exec(raw)) !== null) {
+    if (!map.has(m[2])) map.set(m[2], m[1]);
   }
+  return map;
+}
+
+// Build name→avatar map by cross-referencing name→email (from roles) with email→avatar (from JSON)
+function collectAllPocAvatars(raw: string): Record<string, string> {
+  const emailAvatars = collectEmailAvatarMap(raw);
+  const nameEmails = collectAllPocEmails(raw);
+  const avatars: Record<string, string> = {};
+
+  for (const [name, email] of nameEmails) {
+    const avatar = emailAvatars.get(email);
+    if (avatar) avatars[name] = avatar;
+  }
+
   return avatars;
 }
 
