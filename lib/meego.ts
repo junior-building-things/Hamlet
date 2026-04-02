@@ -501,21 +501,15 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     for (const [key, url] of avatarMap) {
       if (!key.includes('@') && !meegoAvatars[key]) meegoAvatars[key] = url;
     }
-    // Debug: log a sample owner to see actual structure
-    try {
-      const parsed = JSON.parse(nodeRaw);
-      const firstNode = parsed.list?.[0];
-      const firstOwner = firstNode?.assignees?.owners?.[0];
-      console.log('[meego] node owner sample:', JSON.stringify(firstOwner)?.slice(0, 200));
-      console.log('[meego] node assignees keys:', Object.keys(firstNode?.assignees ?? {}));
-      // Check role_assignees
-      const roleKeys = Object.keys(firstNode?.assignees?.role_assignees ?? {});
-      console.log('[meego] role_assignees keys:', roleKeys.slice(0, 5));
-      if (roleKeys.length > 0) {
-        const firstRole = firstNode.assignees.role_assignees[roleKeys[0]];
-        console.log('[meego] first role sample:', JSON.stringify(firstRole?.[0])?.slice(0, 200));
-      }
-    } catch { /* ignore */ }
+    // Debug: find where avatar URLs actually are
+    const avatarInNode = nodeRaw.match(/"avatar"\s*:\s*"(https?:\/\/[^"]{20,})"/);
+    console.log('[meego] avatar URL in node detail:', avatarInNode ? 'YES' : 'NO');
+    // Check brief
+    const avatarInBrief = raw.match(/"avatar"\s*:\s*"(https?:\/\/[^"]{20,})"/);
+    console.log('[meego] avatar URL in brief:', avatarInBrief ? avatarInBrief[1].slice(0, 80) : 'NO');
+    // Check escaped brief
+    const escapedAvatar = raw.match(/avatar.*?https?:\\{0,2}\/\\{0,2}\/[^"\\]{20,}/);
+    console.log('[meego] escaped avatar in brief:', escapedAvatar ? escapedAvatar[0].slice(0, 100) : 'NO');
     console.log('[meego] avatars resolved:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length,
       'total in node:', avatarMap.size);
   } catch (e) {
