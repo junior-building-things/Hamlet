@@ -486,14 +486,19 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
 
-  // Collect name→email pairs and avatar URLs from Meego brief
+  // Collect name→email pairs from brief, and avatar URLs from node detail
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
-  const emailAvatarMap = collectEmailAvatarMap(raw);
-  const meegoAvatars = collectAllPocAvatars(raw);
-  // Debug: find the avatar JSON structure
-  const avatarSamples = raw.match(/.{0,100}avatar.{0,100}/gi);
-  if (avatarSamples?.length) console.log('[meego] avatar sample:', avatarSamples[0]);
-  console.log('[meego] email→avatar map size:', emailAvatarMap.size, 'meego avatars:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length);
+  let meegoAvatars: Record<string, string> = {};
+  try {
+    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+    const nodeEmailAvatars = collectEmailAvatarMap(nodeRaw);
+    // Cross-reference: name→email (from brief) + email→avatar (from node detail)
+    for (const [name, email] of Object.entries(pocEmails)) {
+      const avatar = nodeEmailAvatars.get(email);
+      if (avatar) meegoAvatars[name] = avatar;
+    }
+    console.log('[meego] node avatars resolved:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length);
+  } catch { /* ignore */ }
 
   // Fetch version from work item brief (version fields are work-item-level, not node-level)
   // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
