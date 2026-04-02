@@ -126,7 +126,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     if (withUrl.length === 0) return;
     setDetailSyncTotal(withUrl.length);
     setDetailSyncCount(0);
-    const BATCH = 5;
+    const BATCH = 2; // Keep low to avoid Lark API rate limits during AB doc reads
     for (let i = 0; i < withUrl.length; i += BATCH) {
       await Promise.all(withUrl.slice(i, i + BATCH).map(async (f) => {
         try {
