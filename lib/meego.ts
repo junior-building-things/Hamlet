@@ -490,6 +490,9 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
   const emailAvatarMap = collectEmailAvatarMap(raw);
   const meegoAvatars = collectAllPocAvatars(raw);
+  // Debug: find the avatar JSON structure
+  const avatarSamples = raw.match(/.{0,100}avatar.{0,100}/gi);
+  if (avatarSamples?.length) console.log('[meego] avatar sample:', avatarSamples[0]);
   console.log('[meego] email→avatar map size:', emailAvatarMap.size, 'meego avatars:', Object.keys(meegoAvatars).length, '/', Object.keys(pocEmails).length);
 
   // Fetch version from work item brief (version fields are work-item-level, not node-level)
