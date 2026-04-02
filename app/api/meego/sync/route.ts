@@ -63,14 +63,19 @@ export async function POST(req: NextRequest) {
     const userToken = await getFreshUserToken();
     const result = await syncFeatureStatus(meegoUrl, userToken, chatId);
 
-    // Resolve POC avatars from Lark (best-effort, don't block on failure)
-    let pocAvatars: Record<string, string> = {};
-    try {
-      if (Object.keys(result.pocEmails).length > 0) {
-        pocAvatars = await batchFetchAvatars(result.pocEmails);
-      }
-    } catch (e) {
-      console.warn('Avatar fetch failed:', e);
+    // Use Meego avatars first, then try Lark as fallback
+    let pocAvatars: Record<string, string> = { ...result.meegoAvatars };
+
+    // Only try Lark if Meego didn't provide enough avatars
+    const missingEmails: Record<string, string> = {};
+    for (const [name, email] of Object.entries(result.pocEmails)) {
+      if (!pocAvatars[name]) missingEmails[name] = email;
+    }
+    if (Object.keys(missingEmails).length > 0) {
+      try {
+        const larkAvatars = await batchFetchAvatars(missingEmails);
+        Object.assign(pocAvatars, larkAvatars);
+      } catch { /* ignore */ }
     }
 
     return NextResponse.json({ ...result, pocAvatars });

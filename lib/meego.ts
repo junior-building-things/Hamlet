@@ -146,6 +146,30 @@ function collectAllPocEmails(raw: string): Map<string, string> {
   return map;
 }
 
+// Extract name→avatar pairs from the raw brief JSON
+// The brief contains role member JSON with avatar URLs like:
+// "employeeId":"123","avatar":"https://pan16.larksuitecdn.com/..."
+function collectAllPocAvatars(raw: string): Record<string, string> {
+  const avatars: Record<string, string> = {};
+  // Match patterns like "name":"托马斯"... "avatar":"https://..."
+  // The role member JSON has entries with name and avatar fields
+  const avatarRegex = /"name":\s*"([^"]+)"[^}]*?"avatar":\s*"(https?:\/\/[^"]+)"/g;
+  let m;
+  while ((m = avatarRegex.exec(raw)) !== null) {
+    const name = m[1].trim();
+    const url = m[2];
+    if (name && url && !avatars[name]) avatars[name] = url;
+  }
+  // Also try reverse order: avatar before name
+  const avatarRegex2 = /"avatar":\s*"(https?:\/\/[^"]+)"[^}]*?"name":\s*"([^"]+)"/g;
+  while ((m = avatarRegex2.exec(raw)) !== null) {
+    const name = m[2].trim();
+    const url = m[1];
+    if (name && url && !avatars[name]) avatars[name] = url;
+  }
+  return avatars;
+}
+
 // Parse last-modified date from get_workitem_brief raw text
 function parseUpdateTime(raw: string): string {
   const val = parseWorkItemField(raw, '更新时间') || parseWorkItemField(raw, 'updated_at');
@@ -401,6 +425,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   iosPackageDownloadUrl: string;
   chatId: string;
   pocEmails: Record<string, string>;
+  meegoAvatars: Record<string, string>;
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
@@ -454,18 +479,9 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
 
-  // Collect name→email pairs for avatar resolution
+  // Collect name→email pairs and avatar URLs from Meego brief
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
-
-  // Debug: check if node detail has avatar URLs
-  try {
-    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const avatarMatches = nodeRaw.match(/.{0,20}(avatar|photo|头像|image_url).{0,80}/gi);
-    if (avatarMatches?.length) console.log('[meego] avatar refs in nodes:', avatarMatches.slice(0, 3));
-    // Log first assignee structure
-    const assigneeMatch = nodeRaw.match(/"owners":\[([^\]]{0,300})/);
-    if (assigneeMatch) console.log('[meego] first assignee structure:', assigneeMatch[1].slice(0, 300));
-  } catch { /* ignore */ }
+  const meegoAvatars = collectAllPocAvatars(raw);
 
   // Fetch version from work item brief (version fields are work-item-level, not node-level)
   // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
@@ -635,6 +651,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     iosPackageDownloadUrl,
     chatId,
     pocEmails,
+    meegoAvatars,
   };
 }
 
