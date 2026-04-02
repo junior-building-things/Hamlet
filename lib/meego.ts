@@ -184,19 +184,6 @@ function collectAllAvatarsFromRaw(raw: string): Record<string, string> {
   return avatars;
 }
 
-// Build name→avatar map by cross-referencing name→email (from roles) with email→avatar (from JSON)
-function collectAllPocAvatars(raw: string): Record<string, string> {
-  const emailAvatars = collectEmailAvatarMap(raw);
-  const nameEmails = collectAllPocEmails(raw);
-  const avatars: Record<string, string> = {};
-
-  for (const [name, email] of nameEmails) {
-    const avatar = emailAvatars.get(email);
-    if (avatar) avatars[name] = avatar;
-  }
-
-  return avatars;
-}
 
 // Parse last-modified date from get_workitem_brief raw text
 function parseUpdateTime(raw: string): string {
