@@ -9,7 +9,14 @@ import { RolesView } from '@/components/RolesView';
 import { FeatureModal } from '@/components/FeatureModal';
 
 export default function Home() {
-  const [features,      setFeatures]      = useState<Feature[]>([]);
+  const [features,      setFeatures]      = useState<Feature[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('hamlet_features_v1');
+      if (stored) { const parsed = JSON.parse(stored); if (Array.isArray(parsed) && parsed.length > 0) return parsed; }
+    } catch { /* fall through */ }
+    return [];
+  });
   const [activeView,    setActiveView]    = useState<SidebarView>(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
