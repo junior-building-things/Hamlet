@@ -42,7 +42,8 @@ function useDropdown() {
 }
 
 const triggerCls  = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 flex items-center gap-2 min-w-0';
-const listBaseCls = 'absolute z-20 top-full left-0 right-0 mt-1 bg-[#13162a] border border-[#2e3460] rounded-lg shadow-2xl overflow-y-auto';
+const listDownCls = 'absolute z-20 top-full left-0 right-0 mt-1 bg-[#13162a] border border-[#2e3460] rounded-lg shadow-2xl overflow-y-auto';
+const listUpCls   = 'absolute z-20 bottom-full left-0 right-0 mb-1 bg-[#13162a] border border-[#2e3460] rounded-lg shadow-2xl overflow-y-auto';
 const itemBaseCls = 'px-3 py-2 flex items-center gap-2.5 cursor-pointer hover:bg-[#1e2240]';
 
 // ─── UserAvatar ───────────────────────────────────────────────────────────────
@@ -75,9 +76,10 @@ interface AvatarSelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   locked?: boolean;
+  dropUp?: boolean;
 }
 
-export function AvatarSelect({ options, value, onChange, placeholder = '—', locked = false }: AvatarSelectProps) {
+export function AvatarSelect({ options, value, onChange, placeholder = '—', locked = false, dropUp = false }: AvatarSelectProps) {
   const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
   const selected = options.find(o => o.value === value);
 
@@ -97,7 +99,7 @@ export function AvatarSelect({ options, value, onChange, placeholder = '—', lo
       </button>
 
       {open && (
-        <div className={listBaseCls} style={{ maxHeight }}>
+        <div className={dropUp ? listUpCls : listDownCls} style={{ maxHeight }}>
           {options.map(opt => (
             <div key={opt.value}
               className={`${itemBaseCls} ${value === opt.value ? 'bg-[#1e2240]' : ''}`}
@@ -145,7 +147,7 @@ export function CustomSelect({ options, value, onChange, placeholder, allowDesel
       </button>
 
       {open && (
-        <div className={listBaseCls} style={{ maxHeight }}>
+        <div className={listDownCls} style={{ maxHeight }}>
           {options.map(opt => (
             <div key={opt.value}
               className={`${itemBaseCls} ${value === opt.value ? 'bg-[#1e2240]' : ''}`}

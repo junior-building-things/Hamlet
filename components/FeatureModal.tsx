@@ -532,11 +532,11 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Server</FormLabel>
-                    <AvatarSelect options={SERVER_OWNERS} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" />
+                    <AvatarSelect options={SERVER_OWNERS} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" dropUp />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Tech Owner</FormLabel>
-                    <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" />
+                    <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" dropUp />
                   </div>
                 </div>
               </div>
