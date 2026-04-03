@@ -14,7 +14,7 @@ const STORAGE_KEY      = 'hamlet_features_v1';
 const STORAGE_GROUP_BY = 'hamlet_group_by';
 const STORAGE_SORT_BY  = 'hamlet_sort_by';
 const STORAGE_SORT_DIR = 'hamlet_sort_dir';
-const SYNC_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+const SYNC_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
 
