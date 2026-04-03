@@ -90,7 +90,8 @@ async function getWikiObjToken(accessToken: string, nodeToken = WIKI_NODE_TOKEN)
 // ─── Block types ──────────────────────────────────────────────────────────────
 
 interface TextRun     { content: string; text_element_style?: Record<string, unknown> }
-interface TextElement { text_run?: TextRun }
+interface MentionDoc  { token?: string; url?: string; title?: string }
+interface TextElement { text_run?: TextRun; mention_doc?: MentionDoc }
 interface LarkBlock {
   block_id:    string;
   block_type:  number;
@@ -461,20 +462,34 @@ export async function searchAbReport(
 
       for (const block of blocks) {
         for (const el of block.text?.elements ?? []) {
+          // Check text_run hyperlinks and content
           const style = el.text_run?.text_element_style as Record<string, unknown> | undefined;
           const link = style?.link as Record<string, unknown> | undefined;
           const linkUrl = typeof link?.url === 'string' ? link.url : '';
           const content = el.text_run?.content ?? '';
 
-          // Check for PRD link (case-insensitive, decode URL-encoded links)
           const decodedLink = linkUrl ? decodeURIComponent(linkUrl).toLowerCase() : '';
           const lowerContent = content.toLowerCase();
           if (prdDocToken && (decodedLink.includes(prdDocToken) || lowerContent.includes(prdDocToken))) {
             containsPrd = true;
           }
+
+          // Check mention_doc elements (document mentions like "[PRD] Feature Name")
+          if (prdDocToken && el.mention_doc) {
+            const mentionToken = (el.mention_doc.token ?? '').toLowerCase();
+            const mentionUrl = el.mention_doc.url ? decodeURIComponent(el.mention_doc.url).toLowerCase() : '';
+            if (mentionToken.includes(prdDocToken) || mentionUrl.includes(prdDocToken)) {
+              containsPrd = true;
+            }
+          }
+
+          // Check for Libra URL in all sources
           if (!libraUrl) {
-            const libraMatch = linkUrl.match(LIBRA_URL_RE) || content.match(LIBRA_URL_RE);
-            if (libraMatch) libraUrl = libraMatch[0];
+            const allUrls = [linkUrl, content, el.mention_doc?.url ?? ''];
+            for (const u of allUrls) {
+              const m = u.match(LIBRA_URL_RE);
+              if (m) { libraUrl = m[0]; break; }
+            }
           }
         }
       }
