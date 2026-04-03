@@ -458,9 +458,8 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let meegoAvatars: Record<string, string> = {};
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    const nodeData = JSON.parse(nodeRaw) as {
-      list?: Array<{ form_items?: Array<{ value?: string }> }>;
-    };
+    let nodeData: { list?: Array<{ form_items?: Array<{ value?: string }> }> };
+    try { nodeData = JSON.parse(nodeRaw); } catch { nodeData = {}; }
     // Build email → avatar map from all form item JSON values
     const emailToAvatar = new Map<string, string>();
     for (const node of nodeData.list ?? []) {
@@ -495,7 +494,8 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
           project_key: TIKTOK_PROJECT_KEY,
           user_keys: missingKeys,
         });
-        const avatarList = JSON.parse(avatarRaw) as Array<{ user_key: string; avatar_url?: string }>;
+        let avatarList: Array<{ user_key: string; avatar_url?: string }>;
+        try { avatarList = JSON.parse(avatarRaw); } catch { avatarList = []; }
         for (const u of avatarList) {
           if (!u.avatar_url) continue;
           for (const [name, email] of Object.entries(pocEmails)) {
