@@ -141,7 +141,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           if (Object.keys(newAvatars).length > 0) Object.assign(AV, newAvatars);
           setFeatures(prev => prev.map(p => p.id !== f.id ? p : {
             ...p,
-            status:          (d.status          as string) || p.status,
+            status:          ((d.status as string) && d.status !== 'Unknown') ? (d.status as string) : p.status,
             name:            (d.name             as string) || p.name,
             owner:           (d.owner            as string) || p.owner,
             meegoNodeKey:    (d.meegoNodeKey     as string) || p.meegoNodeKey,
@@ -201,6 +201,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             if (!old) return f;
             // New basic fields from MQL overwrite, but keep enriched fields from previous sync
             return { ...old, ...f,
+              // Preserve status from previous sync if MQL returns empty/Unknown
+              status:          (f.status && f.status !== 'Unknown') ? f.status : old.status,
               // Preserve enriched fields that MQL doesn't return (only overwrite if new value is non-empty)
               figmaUrl:        f.figmaUrl        || old.figmaUrl,
               abReportUrl:     f.abReportUrl     || old.abReportUrl,
@@ -304,7 +306,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       if (Object.keys(newAvatars2).length > 0) Object.assign(AV, newAvatars2);
       setFeatures(prev => prev.map(p => p.id !== feature.id ? p : {
         ...p,
-        status:          (d.status         as string) || p.status,
+        status:          ((d.status as string) && d.status !== 'Unknown') ? (d.status as string) : p.status,
         name:            (d.name            as string) || p.name,
         owner:           (d.owner           as string) || p.owner,
         meegoNodeKey:    (d.meegoNodeKey    as string) || p.meegoNodeKey,
