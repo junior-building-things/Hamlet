@@ -174,9 +174,9 @@ export function TodoView({ features, setFeatures }: Props) {
         </button>
       </div>
 
-      {/* Bulk completion cards */}
-      {(pmAcceptanceTodos.length > 0 || uiuxAcceptanceTodos.length > 0) && (
-        <div className="px-6 py-3 flex items-center gap-3 flex-wrap">
+      {/* Bulk completion cards — same vertical space as ProjectView's FilterBar */}
+      {(pmAcceptanceTodos.length > 0 || uiuxAcceptanceTodos.length > 0) ? (
+        <div className="px-6 py-3 mt-5 flex items-center gap-3 flex-wrap">
           {pmAcceptanceTodos.length > 0 && (
             <button
               onClick={() => bulkComplete('PM Acceptance', pmAcceptanceTodos)}
@@ -204,9 +204,11 @@ export function TodoView({ features, setFeatures }: Props) {
             </button>
           )}
         </div>
+      ) : (
+        <div className="mt-[52px]" />
       )}
 
-      <div className="px-6 pb-16 mt-4">
+      <div className="px-6 pb-16">
         {/* Still loading sync data */}
         {todos.length === 0 && syncing.length > 0 && (
           <div className="flex items-center gap-2 text-gray-500 py-12 justify-center">
