@@ -377,23 +377,28 @@ export async function searchAbReport(
   const empty = { abReportUrl: '', libraUrl: '' };
   if (!featureName || !prdUrl) return empty;
 
-  // Extract doc token from PRD URL to search for inside AB report docs
-  const prdTokenMatch = prdUrl.match(/\/(docx|wiki)\/([A-Za-z0-9]+)/);
-  if (!prdTokenMatch) return empty;
-  const prdDocToken = prdTokenMatch[2];
+  // Extract doc token from PRD URL (if available) to check inside AB report docs
+  // Use lowercase for case-insensitive matching (Lark URLs sometimes lowercase the token)
+  const prdDocToken = (prdUrl?.match(/\/(docx|wiki)\/([A-Za-z0-9]+)/)?.[2] ?? '').toLowerCase();
 
   // Drive search requires user_access_token; fall back to tenant token
   const searchToken = userAccessToken || await getAccessToken();
-  const readToken = userAccessToken || await getAccessToken(); // prefer user token for reading docs
+  const readToken = userAccessToken || await getAccessToken();
 
   // Extract keywords from feature name for the search query
-  const words = featureName
+  const stopWords = new Set([
+    'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'were',
+    'not', 'but', 'have', 'has', 'had', 'will', 'can', 'may', 'new', 'add',
+    'update', 'fix', 'bug', 'feature', 'report', 'test', 'user', 'users',
+    'phase', 'part', 'version',
+  ]);
+  const nameTokens = featureName
     .replace(/[\[\](){}]/g, '')
-    .split(/\s+/)
-    .filter(w => w.length > 2)
-    .slice(0, 5);
-  if (words.length === 0) return empty;
-  const nameQuery = words.join(' ');
+    .split(/[\s\-_]+/)
+    .filter(w => w.length > 2 && !stopWords.has(w.toLowerCase()))
+    .slice(0, 6);
+  if (nameTokens.length === 0) return empty;
+  const nameQuery = nameTokens.join(' ');
 
   // Search for AB-related docs mentioning the feature
   const queries = [
@@ -401,6 +406,10 @@ export async function searchAbReport(
     `A/B ${nameQuery}`,
     `AB ${nameQuery}`,
   ];
+
+  // Collect all AB candidates across queries (dedup by token)
+  const seen = new Set<string>();
+  const candidates: Array<{ token: string; type: string; title: string }> = [];
 
   for (const query of queries) {
     const searchRes = await fetch(`${LARK_BASE_URL}/open-apis/suite/docs-api/search/object`, {
@@ -415,60 +424,71 @@ export async function searchAbReport(
       code: number; msg?: string;
       data?: { docs_entities?: Array<{ docs_token: string; docs_type: string; title: string }> };
     };
-
-    if (searchData.code !== 0) {
-      console.warn('[AB search] query failed:', searchData.code, searchData.msg);
-      continue;
-    }
-
-    const docs = searchData.data?.docs_entities ?? [];
-    if (docs.length === 0) continue;
-
-    for (let di = 0; di < docs.length; di++) {
-      const doc = docs[di];
+    if (searchData.code !== 0) continue;
+    for (const doc of searchData.data?.docs_entities ?? []) {
+      if (seen.has(doc.docs_token)) continue;
+      seen.add(doc.docs_token);
       const t = doc.title.toLowerCase();
-      // Title must contain AB or A/B (case-insensitive)
-      if (!/\bab\b|a\/b/i.test(t)) continue;
+      if (/\bab\b|a\/b/i.test(t)) {
+        candidates.push({ token: doc.docs_token, type: doc.docs_type, title: doc.title });
+      }
+    }
+  }
 
-      // Rate-limit doc reads to avoid 99991400 (Lark allows ~5 req/s)
-      if (di > 0) await new Promise(r => setTimeout(r, 300));
+  if (candidates.length === 0) return empty;
 
-      // Read the doc content and check if it contains the PRD link
-      // Also extract any Libra URL found
-      try {
-        const blocks = await getDocBlocks(doc.docs_token, readToken);
-        let containsPrd = false;
-        let libraUrl = '';
+  // Score candidates by title keyword overlap with feature name
+  const lowerTokens = nameTokens.map(w => w.toLowerCase());
+  const minMatches = Math.max(1, Math.ceil(lowerTokens.length * 0.4));
 
-        for (const block of blocks) {
-          for (const el of block.text?.elements ?? []) {
-            const style = el.text_run?.text_element_style as Record<string, unknown> | undefined;
-            const link = style?.link as Record<string, unknown> | undefined;
-            const linkUrl = typeof link?.url === 'string' ? link.url : '';
-            const content = el.text_run?.content ?? '';
+  // Sort by match count (best first)
+  const scored = candidates.map(doc => {
+    const t = doc.title.toLowerCase();
+    const matchCount = lowerTokens.filter(w => t.includes(w)).length;
+    return { ...doc, matchCount };
+  }).filter(d => d.matchCount >= minMatches)
+    .sort((a, b) => b.matchCount - a.matchCount);
 
-            // Check for PRD link
-            if (linkUrl.includes(prdDocToken) || content.includes(prdDocToken)) {
-              containsPrd = true;
-            }
-            // Check for Libra URL
-            if (!libraUrl) {
-              const libraMatch = linkUrl.match(LIBRA_URL_RE) || content.match(LIBRA_URL_RE);
-              if (libraMatch) libraUrl = libraMatch[0];
-            }
+  // Try top candidates: prefer PRD-link match, fall back to best title match
+  for (let di = 0; di < Math.min(scored.length, 3); di++) {
+    const doc = scored[di];
+    if (di > 0) await new Promise(r => setTimeout(r, 300)); // rate limit
+
+    try {
+      const blocks = await getDocBlocks(doc.token, readToken);
+      let containsPrd = false;
+      let libraUrl = '';
+
+      for (const block of blocks) {
+        for (const el of block.text?.elements ?? []) {
+          const style = el.text_run?.text_element_style as Record<string, unknown> | undefined;
+          const link = style?.link as Record<string, unknown> | undefined;
+          const linkUrl = typeof link?.url === 'string' ? link.url : '';
+          const content = el.text_run?.content ?? '';
+
+          // Check for PRD link (case-insensitive, decode URL-encoded links)
+          const decodedLink = linkUrl ? decodeURIComponent(linkUrl).toLowerCase() : '';
+          const lowerContent = content.toLowerCase();
+          if (prdDocToken && (decodedLink.includes(prdDocToken) || lowerContent.includes(prdDocToken))) {
+            containsPrd = true;
+          }
+          if (!libraUrl) {
+            const libraMatch = linkUrl.match(LIBRA_URL_RE) || content.match(LIBRA_URL_RE);
+            if (libraMatch) libraUrl = libraMatch[0];
           }
         }
-
-        if (containsPrd) {
-          console.log('[AB match] found:', doc.title, '— contains PRD link, libra:', libraUrl || 'none');
-          return {
-            abReportUrl: `https://bytedance.sg.larkoffice.com/${doc.docs_type}/${doc.docs_token}`,
-            libraUrl,
-          };
-        }
-      } catch (e) {
-        console.warn('[AB match] failed to read doc:', doc.title, e);
       }
+
+      if (containsPrd) {
+        console.log('[AB match] PRD match:', doc.title);
+        return {
+          abReportUrl: `https://bytedance.sg.larkoffice.com/${doc.type}/${doc.token}`,
+          libraUrl,
+        };
+      }
+
+    } catch (e) {
+      console.warn('[AB match] failed to read doc:', doc.title, e);
     }
   }
 
