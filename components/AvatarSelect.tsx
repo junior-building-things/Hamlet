@@ -53,7 +53,8 @@ export function UserAvatar({ name, url, size = 5 }: { name: string; url?: string
   const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   const dim = `w-${size} h-${size}`;
   if (url && !imgFailed) {
-    return <img src={url} alt={name} className={`${dim} rounded-full object-cover flex-shrink-0`} onError={() => setImgFailed(true)} />;
+    const isAgent = url.includes('_assistant.png');
+    return <img src={url} alt={name} className={`${dim} rounded-full object-cover flex-shrink-0`} style={isAgent ? { objectPosition: 'center 30%' } : undefined} onError={() => setImgFailed(true)} />;
   }
   return (
     <div className={`${dim} rounded-full bg-blue-800 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0`}>
