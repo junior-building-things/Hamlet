@@ -55,7 +55,7 @@ interface TooltipPos { top: number; left: number }
 function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
   pocs: Poc[]; pos: TooltipPos; mounted: boolean;
   onEnter?: () => void; onLeave?: () => void;
-  onAddClick?: () => void;
+  onAddClick?: (pos: TooltipPos) => void;
 }) {
   if (!mounted) return null;
   return createPortal(
@@ -77,17 +77,6 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
                    border-l-transparent border-r-transparent border-t-[#1e2240]"
       />
       <div className="flex flex-col gap-1.5">
-        {onAddClick && (
-          <button
-            onClick={onAddClick}
-            className="flex items-center gap-2 py-1 px-1 -mx-1 rounded-lg hover:bg-[#1e2240] transition-colors cursor-pointer"
-          >
-            <div className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center">
-              <Plus className="w-3 h-3 text-purple-400" />
-            </div>
-            <span className="text-xs text-purple-400 font-medium">Add Agent</span>
-          </button>
-        )}
         {pocs.map(poc => (
           <div key={poc.name} className="flex items-center gap-2">
             <UserAvatar name={poc.name} url={poc.url} size={5} />
@@ -97,6 +86,20 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
             </div>
           </div>
         ))}
+        {onAddClick && (
+          <button
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              onAddClick({ top: r.top, left: r.left + r.width / 2 });
+            }}
+            className="flex items-center gap-2 py-1 px-1 -mx-1 rounded-lg hover:bg-[#1e2240] transition-colors cursor-pointer"
+          >
+            <div className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center">
+              <Plus className="w-3 h-3 text-purple-400" />
+            </div>
+            <span className="text-xs text-purple-400 font-medium">Agent</span>
+          </button>
+        )}
       </div>
     </div>,
     document.body,
@@ -209,7 +212,7 @@ function RingAvatar({ poc, ringColor = '#13162a' }: { poc: Poc; ringColor?: stri
 // ─── "+N" overflow bubble with hover tooltip ──────────────────────────────────
 
 function OverflowBubble({ rest, ringColor = '#13162a', onAddClick }: {
-  rest: Poc[]; ringColor?: string; onAddClick?: () => void;
+  rest: Poc[]; ringColor?: string; onAddClick?: (pos: TooltipPos) => void;
 }) {
   const { open, pos, mounted, ref, onEnter, onLeave } = useHoverTooltip();
 
@@ -269,8 +272,10 @@ export function TeamAvatars({ feature, ringColor = '#13162a', onToggleAgent }: P
   const shown = pocs.slice(0, 2);
   const rest  = pocs.slice(2);
 
-  function openPicker() {
-    if (addRef.current) {
+  function openPicker(fromPos?: TooltipPos) {
+    if (fromPos) {
+      setPickerPos(fromPos);
+    } else if (addRef.current) {
       const r = addRef.current.getBoundingClientRect();
       setPickerPos({ top: r.top, left: r.left + r.width / 2 });
     }
