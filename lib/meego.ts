@@ -449,10 +449,37 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
   const contentDesigner = parseRoleMember(raw, 'Content Designer');
 
-  // Collect name→email pairs from brief, and avatar URLs from node detail
+  // Collect name→email pairs from brief
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
-  // Meego MCP doesn't include avatar URLs — avatars are resolved via Lark API in sync route
-  const meegoAvatars: Record<string, string> = {};
+
+  // Resolve avatars via Meego MCP search_user_info (uses user_key = email prefix)
+  let meegoAvatars: Record<string, string> = {};
+  try {
+    const userKeys = [...new Set(Object.values(pocEmails).map(email => email.split('@')[0]))];
+    if (userKeys.length > 0) {
+      const avatarRaw = await callMeegoMcp('search_user_info', {
+        project_key: TIKTOK_PROJECT_KEY,
+        user_keys: userKeys,
+      });
+      const avatarList = JSON.parse(avatarRaw) as Array<{ user_key: string; avatar_url?: string; name_en?: string; name_cn?: string }>;
+      // Build user_key → avatar_url map
+      const keyToAvatar = new Map<string, string>();
+      const keyToName = new Map<string, string>();
+      for (const u of avatarList) {
+        if (u.avatar_url) keyToAvatar.set(u.user_key, u.avatar_url);
+        if (u.name_en) keyToName.set(u.user_key, u.name_en);
+        if (u.name_cn) keyToName.set(u.user_key, u.name_cn);
+      }
+      // Map display name → avatar URL
+      for (const [name, email] of Object.entries(pocEmails)) {
+        const key = email.split('@')[0];
+        const avatar = keyToAvatar.get(key);
+        if (avatar) meegoAvatars[name] = avatar;
+      }
+    }
+  } catch (e) {
+    console.warn('[meego] avatar fetch via search_user_info failed:', e);
+  }
 
   // Fetch version from work item brief (version fields are work-item-level, not node-level)
   // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
