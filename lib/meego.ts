@@ -103,15 +103,14 @@ function parseWorkItemField(raw: string, fieldName: string): string {
 }
 
 // Extract display names from role member value "Name1(email1),Name2(email2)"
-// Handles names with commas like "Han, Dongwoo(email)" by splitting on "),Name" boundaries
+// Handles names with commas ("Han, Dongwoo") and parentheses ("Xuan Sheng (盛煊)")
 function extractNames(value: string): string {
   if (!value || value === '未填写') return '';
   const names: string[] = [];
-  // Match everything before (email) — including commas in the name
-  const regex = /([^()]+?)\s*\([^)]*@[^)]+\)/g;
+  // Match: name (may contain parens/commas) followed by (email@domain)
+  const regex = /(.*?)\([^()]*@[^()]+\)/g;
   let m;
   while ((m = regex.exec(value)) !== null) {
-    // Remove leading comma from the name (separator between entries)
     const name = m[1].replace(/^,\s*/, '').trim();
     if (name) names.push(name);
   }
@@ -122,7 +121,7 @@ function extractNames(value: string): string {
 function extractNameEmailPairs(value: string): Array<{ name: string; email: string }> {
   if (!value || value === '未填写') return [];
   const pairs: Array<{ name: string; email: string }> = [];
-  const regex = /([^()]+?)\s*\(([^)]+@[^)]+)\)/g;
+  const regex = /(.*?)\(([^()]*@[^()]+)\)/g;
   let m;
   while ((m = regex.exec(value)) !== null) {
     const name = m[1].replace(/^,\s*/, '').trim();
