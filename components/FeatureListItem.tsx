@@ -18,9 +18,10 @@ interface Props {
   completing?: boolean;
   onComplete?: (feature: Feature) => void;
   pinned?: boolean;
+  onToggleAgent?: (featureId: string, agentKey: string) => void;
 }
 
-export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete, pinned }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete, pinned, onToggleAgent }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
   return (
@@ -114,7 +115,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
 
       {/* Team avatars */}
       <div className="hidden sm:flex items-center py-3 pl-4">
-        <TeamAvatars feature={feature} ringColor="#13162a" />
+        <TeamAvatars feature={feature} ringColor="#13162a" onToggleAgent={onToggleAgent} />
       </div>
 
       {/* Comment Summary */}

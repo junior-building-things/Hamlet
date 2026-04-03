@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { Plus, Check } from 'lucide-react';
 import { Feature } from '@/lib/types';
 import { AV } from '@/lib/avatars';
 import { UserAvatar } from './AvatarSelect';
@@ -17,7 +18,12 @@ const ROLE_ORDER: Array<{ key: keyof Feature; label: string }> = [
   { key: 'daOwner',         label: 'DS' },
 ];
 
-interface Poc { name: string; role: string; url?: string }
+export const AVAILABLE_AGENTS = [
+  { key: 'pm-assistant', label: 'PM Assistant', shortName: 'PM Agent', icon: '/pm_assistant.png' },
+  { key: 'rd-assistant', label: 'RD Assistant', shortName: 'RD Agent', icon: '/rd_assistant.png' },
+];
+
+interface Poc { name: string; role: string; url?: string; isAgent?: boolean }
 
 function buildPocs(feature: Feature): Poc[] {
   const seen = new Set<string>();
@@ -32,6 +38,13 @@ function buildPocs(feature: Feature): Poc[] {
       pocs.push({ name, role: label, url: feature.avatars?.[name] || AV[name] });
     }
   }
+  // Append assigned agents
+  for (const agentKey of feature.agents ?? []) {
+    const agent = AVAILABLE_AGENTS.find(a => a.key === agentKey);
+    if (agent) {
+      pocs.push({ name: agent.label, role: agent.shortName, url: agent.icon, isAgent: true });
+    }
+  }
   return pocs;
 }
 
@@ -39,9 +52,10 @@ function buildPocs(feature: Feature): Poc[] {
 
 interface TooltipPos { top: number; left: number }
 
-function PocTooltip({ pocs, pos, mounted, onEnter, onLeave }: {
+function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
   pocs: Poc[]; pos: TooltipPos; mounted: boolean;
   onEnter?: () => void; onLeave?: () => void;
+  onAddClick?: () => void;
 }) {
   if (!mounted) return null;
   return createPortal(
@@ -63,6 +77,17 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave }: {
                    border-l-transparent border-r-transparent border-t-[#1e2240]"
       />
       <div className="flex flex-col gap-1.5">
+        {onAddClick && (
+          <button
+            onClick={onAddClick}
+            className="flex items-center gap-2 py-1 px-1 -mx-1 rounded-lg hover:bg-[#1e2240] transition-colors cursor-pointer"
+          >
+            <div className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center">
+              <Plus className="w-3 h-3 text-purple-400" />
+            </div>
+            <span className="text-xs text-purple-400 font-medium">Add Agent</span>
+          </button>
+        )}
         {pocs.map(poc => (
           <div key={poc.name} className="flex items-center gap-2">
             <UserAvatar name={poc.name} url={poc.url} size={5} />
@@ -73,6 +98,63 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave }: {
           </div>
         ))}
       </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ─── Agent picker portal ─────────────────────────────────────────────────────
+
+function AgentPicker({ pos, mounted, assignedAgents, onToggle, onClose }: {
+  pos: TooltipPos; mounted: boolean;
+  assignedAgents: string[];
+  onToggle: (agentKey: string) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [onClose]);
+
+  if (!mounted) return null;
+  return createPortal(
+    <div
+      ref={ref}
+      className="fixed bg-[#0e1120] border border-[#2e3460] rounded-xl shadow-2xl py-1.5 px-1.5 min-w-[180px]"
+      style={{
+        top:       pos.top - 8,
+        left:      pos.left,
+        zIndex:    10000,
+        transform: 'translateX(-50%) translateY(-100%)',
+      }}
+    >
+      <div
+        className="absolute top-full left-1/2 -translate-x-1/2
+                   border-l-[5px] border-r-[5px] border-t-[5px]
+                   border-l-transparent border-r-transparent border-t-[#2e3460]"
+      />
+      {AVAILABLE_AGENTS.map(agent => {
+        const assigned = assignedAgents.includes(agent.key);
+        return (
+          <button
+            key={agent.key}
+            onClick={() => onToggle(agent.key)}
+            className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-[#1e2240] transition-colors cursor-pointer"
+          >
+            <img src={agent.icon} alt="" className="w-6 h-6 object-contain shrink-0" />
+            <div className="flex-1 text-left min-w-0">
+              <p className="text-xs text-white leading-tight">{agent.label}</p>
+              <p className="text-[10px] text-gray-500 leading-tight">{agent.shortName}</p>
+            </div>
+            {assigned && <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />}
+          </button>
+        );
+      })}
     </div>,
     document.body,
   );
@@ -102,7 +184,7 @@ function useHoverTooltip() {
     hideTimer.current = setTimeout(() => setOpen(false), 150);
   }, []);
 
-  return { open, pos, mounted, ref, onEnter, onLeave };
+  return { open, setOpen, pos, mounted, ref, onEnter, onLeave };
 }
 
 // ─── Single avatar with hover tooltip ────────────────────────────────────────
@@ -126,7 +208,9 @@ function RingAvatar({ poc, ringColor = '#13162a' }: { poc: Poc; ringColor?: stri
 
 // ─── "+N" overflow bubble with hover tooltip ──────────────────────────────────
 
-function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColor?: string }) {
+function OverflowBubble({ rest, ringColor = '#13162a', onAddClick }: {
+  rest: Poc[]; ringColor?: string; onAddClick?: () => void;
+}) {
   const { open, pos, mounted, ref, onEnter, onLeave } = useHoverTooltip();
 
   return (
@@ -142,7 +226,23 @@ function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColo
       >
         +{rest.length}
       </div>
-      {open && <PocTooltip pocs={rest} pos={pos} mounted={mounted} onEnter={onEnter} onLeave={onLeave} />}
+      {open && <PocTooltip pocs={rest} pos={pos} mounted={mounted} onEnter={onEnter} onLeave={onLeave} onAddClick={onAddClick} />}
+    </div>
+  );
+}
+
+// ─── "+" add agent circle ────────────────────────────────────────────────────
+
+function AddAgentCircle({ ringColor = '#13162a', onClick }: { ringColor?: string; onClick: () => void }) {
+  return (
+    <div style={{ marginLeft: '-5px', zIndex: 0 }}>
+      <button
+        onClick={onClick}
+        className="w-6 h-6 rounded-full bg-[#1e2240] flex items-center justify-center cursor-pointer hover:bg-[#252a4a] transition-colors"
+        style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
+      >
+        <Plus className="w-3 h-3 text-gray-400" />
+      </button>
     </div>
   );
 }
@@ -151,19 +251,38 @@ function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColo
 
 interface Props {
   feature: Feature;
-  /** Background colour of the card row — used for the avatar ring/separator. */
   ringColor?: string;
+  onToggleAgent?: (featureId: string, agentKey: string) => void;
 }
 
-export function TeamAvatars({ feature, ringColor = '#13162a' }: Props) {
+export function TeamAvatars({ feature, ringColor = '#13162a', onToggleAgent }: Props) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerPos, setPickerPos]   = useState<TooltipPos>({ top: 0, left: 0 });
+  const [mounted, setMounted]       = useState(false);
+  const addRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
+
   const pocs  = buildPocs(feature);
-  if (pocs.length === 0) return <span className="text-gray-600 text-xs">—</span>;
+  if (pocs.length === 0 && !onToggleAgent) return <span className="text-gray-600 text-xs">—</span>;
 
   const shown = pocs.slice(0, 2);
   const rest  = pocs.slice(2);
 
+  function openPicker() {
+    if (addRef.current) {
+      const r = addRef.current.getBoundingClientRect();
+      setPickerPos({ top: r.top, left: r.left + r.width / 2 });
+    }
+    setShowPicker(true);
+  }
+
+  function handleToggle(agentKey: string) {
+    onToggleAgent?.(feature.id, agentKey);
+  }
+
   return (
-    <div className="flex items-center">
+    <div ref={addRef} className="flex items-center">
       {shown.map((poc, i) => (
         <div
           key={poc.name}
@@ -172,8 +291,19 @@ export function TeamAvatars({ feature, ringColor = '#13162a' }: Props) {
           <RingAvatar poc={poc} ringColor={ringColor} />
         </div>
       ))}
-      {rest.length > 0 && (
-        <OverflowBubble rest={rest} ringColor={ringColor} />
+      {rest.length > 0 ? (
+        <OverflowBubble rest={rest} ringColor={ringColor} onAddClick={onToggleAgent ? openPicker : undefined} />
+      ) : onToggleAgent ? (
+        <AddAgentCircle ringColor={ringColor} onClick={openPicker} />
+      ) : null}
+      {showPicker && mounted && (
+        <AgentPicker
+          pos={pickerPos}
+          mounted={mounted}
+          assignedAgents={feature.agents ?? []}
+          onToggle={handleToggle}
+          onClose={() => setShowPicker(false)}
+        />
       )}
     </div>
   );

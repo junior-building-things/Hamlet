@@ -51,4 +51,5 @@ export interface Feature {
   commentSummary?: string;
   chatId?: string;
   avatars?: Record<string, string>;
+  agents?: string[];
 }

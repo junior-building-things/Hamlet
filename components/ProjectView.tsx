@@ -173,6 +173,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             iosPackageDownloadUrl: (d.iosPackageDownloadUrl as string) || p.iosPackageDownloadUrl,
             chatId:          (d.chatId           as string) || p.chatId,
             avatars:         { ...p.avatars, ...newAvatars },
+            agents:          p.agents,
             lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
           }));
         } catch { /* ignore per-card errors */ }
@@ -229,6 +230,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
               versionHistory:  trackVersion(old.versionHistory, f.iosVersion || old.iosVersion),
               canCompleteNode: f.canCompleteNode   ?? old.canCompleteNode,
               avatars:         old.avatars,
+              agents:          old.agents,
               lastUpdated:     f.lastUpdated       || old.lastUpdated,
             };
           });
@@ -336,6 +338,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
         chatId:          (d.chatId        as string) || p.chatId,
         avatars:         { ...p.avatars, ...newAvatars2 },
+        agents:          p.agents,
         lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
       }));
     } catch { /* ignore */ }
@@ -505,6 +508,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
               packageDownloadUrl: (d.packageDownloadUrl as string) || f.packageDownloadUrl,
               chatId:          (d.chatId as string) || f.chatId,
               avatars:         { ...f.avatars, ...na3 },
+              agents:          f.agents,
               lastUpdated:     f.lastUpdated || (d.lastUpdated as string) || '',
             }));
           })
@@ -517,12 +521,21 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     }
   }
 
+  function handleToggleAgent(featureId: string, agentKey: string) {
+    setFeatures(prev => prev.map(f => {
+      if (f.id !== featureId) return f;
+      const agents = f.agents ?? [];
+      const has = agents.includes(agentKey);
+      return { ...f, agents: has ? agents.filter(a => a !== agentKey) : [...agents, agentKey] };
+    }));
+  }
+
   function renderListRows(items: Feature[]) {
     return items.map(f => (
       <FeatureListItem key={f.id} feature={f} syncing={syncingId === f.id}
         onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne}
         completing={completingId === f.id} onComplete={handleComplete}
-        pinned={f.id === pinnedId} />
+        pinned={f.id === pinnedId} onToggleAgent={handleToggleAgent} />
     ));
   }
 
