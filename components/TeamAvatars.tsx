@@ -104,8 +104,7 @@ function RingAvatar({ poc, ringColor = '#13162a' }: { poc: Poc; ringColor?: stri
   return (
     <div
       ref={ref}
-      className="rounded-lg cursor-default"
-      style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
+      className="cursor-default"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >

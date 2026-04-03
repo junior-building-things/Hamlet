@@ -53,7 +53,7 @@ export function UserAvatar({ name, url, size = 5 }: { name: string; url?: string
   const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   const dim = `w-${size} h-${size}`;
   if (url && !imgFailed) {
-    return <img src={url} alt={name} className={`${dim} rounded-lg object-cover flex-shrink-0`} onError={() => setImgFailed(true)} />;
+    return <img src={url} alt={name} className={`${dim} object-contain flex-shrink-0`} onError={() => setImgFailed(true)} />;
   }
   return (
     <div className={`${dim} rounded-lg bg-blue-800 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0`}>
