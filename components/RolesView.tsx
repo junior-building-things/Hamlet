@@ -9,6 +9,7 @@ interface Role {
   description: string;
   responsibilities: string[];
   isAgent?: boolean;
+  icon?: string;
 }
 
 const ROLES: Role[] = [
@@ -148,6 +149,7 @@ const ROLES: Role[] = [
     shortName: 'RD Agent',
     description: 'An AI agent that monitors the Meego group chat for the project. Follows up on unanswered questions from engineering POCs to QA or PM — for example, if a PM doesn\'t respond to a question, the agent will tag them again later.',
     isAgent: true,
+    icon: '/rd_assistant.png',
     responsibilities: [
       'Monitor the feature group chat for unanswered questions',
       'Follow up with PM or QA if they haven\'t responded',
@@ -162,6 +164,7 @@ const ROLES: Role[] = [
     shortName: 'PM Agent',
     description: 'An AI agent that assists the PM by monitoring project progress from the PM perspective. Flags when milestones are missed — for example, if a feature was supposed to merge today but the Meego status hasn\'t been updated.',
     isAgent: true,
+    icon: '/pm_assistant.png',
     responsibilities: [
       'Monitor Meego workflow nodes for stale or overdue transitions',
       'Alert PM when expected milestones are missed',
@@ -223,7 +226,9 @@ function RoleCard({ role }: { role: Role }) {
             ? 'bg-purple-500/20 text-purple-300'
             : 'bg-blue-500/20 text-blue-300'
         }`}>
-          {role.isAgent ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
+          {role.icon
+            ? <img src={role.icon} alt={role.title} className="w-6 h-6 object-contain" />
+            : role.isAgent ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
         </div>
         <div>
           <h3 className="text-sm font-semibold text-white">{role.title}</h3>
