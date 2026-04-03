@@ -458,7 +458,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_max-content_max-content_max-content_max-content_max-content_max-content_max-content] sm:gap-x-1.5 sm:gap-y-2';
+  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_max-content_max-content_max-content_max-content_max-content_max-content_max-content_max-content] sm:gap-x-1.5 sm:gap-y-2';
 
   async function handleComplete(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {

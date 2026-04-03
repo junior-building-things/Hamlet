@@ -11,6 +11,7 @@ export function FeatureListHeader() {
       <span className="pl-4">Team</span>
       <span className="pl-4">Summary</span>
       <span className="pl-4">Action</span>
+      <span></span>
     </div>
   );
 }

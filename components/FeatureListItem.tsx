@@ -138,6 +138,20 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         )}
       </div>
 
+      {/* Sync button */}
+      <div className="hidden sm:flex items-center pr-4 py-3">
+        {feature.meegoUrl && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onSync(feature); }}
+            disabled={syncing}
+            className="text-gray-500 hover:text-blue-400 disabled:opacity-40 transition-colors"
+            title="Sync this feature"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+          </button>
+        )}
+      </div>
+
       {/* Package modal */}
       {showPackage && (feature.packageQrUrl || feature.iosPackageQrUrl) && (
         <PackageModal
