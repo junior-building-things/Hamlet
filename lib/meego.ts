@@ -454,33 +454,60 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   // Collect name→email pairs from brief
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
 
-  // Resolve avatars via Meego MCP search_user_info (uses user_key = email prefix)
+  // Resolve avatars from node detail form items (role fields contain JSON with avatar URLs)
   let meegoAvatars: Record<string, string> = {};
   try {
-    const userKeys = [...new Set(Object.values(pocEmails).map(email => email.split('@')[0]))];
-    if (userKeys.length > 0) {
-      const avatarRaw = await callMeegoMcp('search_user_info', {
-        project_key: TIKTOK_PROJECT_KEY,
-        user_keys: userKeys,
-      });
-      const avatarList = JSON.parse(avatarRaw) as Array<{ user_key: string; avatar_url?: string; name_en?: string; name_cn?: string }>;
-      // Build user_key → avatar_url map
-      const keyToAvatar = new Map<string, string>();
-      const keyToName = new Map<string, string>();
-      for (const u of avatarList) {
-        if (u.avatar_url) keyToAvatar.set(u.user_key, u.avatar_url);
-        if (u.name_en) keyToName.set(u.user_key, u.name_en);
-        if (u.name_cn) keyToName.set(u.user_key, u.name_cn);
-      }
-      // Map display name → avatar URL
-      for (const [name, email] of Object.entries(pocEmails)) {
-        const key = email.split('@')[0];
-        const avatar = keyToAvatar.get(key);
-        if (avatar) meegoAvatars[name] = avatar;
+    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+    const nodeData = JSON.parse(nodeRaw) as {
+      list?: Array<{ form_items?: Array<{ value?: string }> }>;
+    };
+    // Build email → avatar map from all form item JSON values
+    const emailToAvatar = new Map<string, string>();
+    for (const node of nodeData.list ?? []) {
+      for (const fi of node.form_items ?? []) {
+        const v = fi.value ?? '';
+        if (!v.includes('avatar')) continue;
+        // Parse JSON arrays or objects containing avatar URLs
+        const avatarRegex = /"email"\s*:\s*"([^"]+@[^"]+)"[^}]*"avatar"\s*:\s*"([^"]+)"/g;
+        let m;
+        while ((m = avatarRegex.exec(v)) !== null) {
+          emailToAvatar.set(m[1], m[2]);
+        }
+        // Also try reversed order: avatar before email
+        const avatarRegex2 = /"avatar"\s*:\s*"([^"]+)"[^}]*"email"\s*:\s*"([^"]+@[^"]+)"/g;
+        while ((m = avatarRegex2.exec(v)) !== null) {
+          if (!emailToAvatar.has(m[2])) emailToAvatar.set(m[2], m[1]);
+        }
       }
     }
+    // Map display name → avatar URL using pocEmails (name → email)
+    for (const [name, email] of Object.entries(pocEmails)) {
+      const avatar = emailToAvatar.get(email);
+      if (avatar) meegoAvatars[name] = avatar;
+    }
+    // Fallback: try search_user_info for any remaining names
+    const missingKeys = Object.entries(pocEmails)
+      .filter(([name]) => !meegoAvatars[name])
+      .map(([, email]) => email.split('@')[0]);
+    if (missingKeys.length > 0) {
+      try {
+        const avatarRaw = await callMeegoMcp('search_user_info', {
+          project_key: TIKTOK_PROJECT_KEY,
+          user_keys: missingKeys,
+        });
+        const avatarList = JSON.parse(avatarRaw) as Array<{ user_key: string; avatar_url?: string }>;
+        for (const u of avatarList) {
+          if (!u.avatar_url) continue;
+          for (const [name, email] of Object.entries(pocEmails)) {
+            if (email.split('@')[0] === u.user_key && !meegoAvatars[name]) {
+              meegoAvatars[name] = u.avatar_url;
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
   } catch (e) {
-    console.warn('[meego] avatar fetch via search_user_info failed:', e);
+    console.warn('[meego] avatar fetch failed:', e);
   }
 
   // Fetch version from work item brief (version fields are work-item-level, not node-level)
