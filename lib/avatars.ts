@@ -1,20 +1,64 @@
-/** Shared avatar URL map — keyed by display name. */
+/** Lego avatar map — keyed by email prefix (filename without .png). */
+const LEGO_AVATARS: Record<string, string> = {
+  'thomas.oefverstroem': '/avatars/thomas.oefverstroem.png',
+  'austin.lee':          '/avatars/austin.lee.png',
+  'kyle.chan':            '/avatars/kyle.chan.png',
+  'sheng.xuan':          '/avatars/sheng.xuan.png',
+  'tianyang.ni':          '/avatars/tianyang.ni.png',
+  'lionel.lew':           '/avatars/lionel.lew.png',
+  'tao.zhu':              '/avatars/tao.zhu.png',
+  'xiaobo.tian':          '/avatars/xiaobo.tian.png',
+  'renshengnan.1208':     '/avatars/renshengnan.1208.png',
+  'shashank.singh':       '/avatars/shashank.singh.png',
+  'shenfangyuan':         '/avatars/shenfangyuan.png',
+};
+
+const FALLBACKS = ['/avatars/fallback1.png', '/avatars/fallback2.png'];
+
+/** Get a deterministic fallback avatar based on the name string. */
+function fallbackAvatar(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+  return FALLBACKS[Math.abs(hash) % FALLBACKS.length];
+}
+
+/** Resolve a display name to a lego avatar URL. */
+export function getLegoAvatar(name: string, email?: string): string {
+  // Try email prefix first
+  if (email) {
+    const key = email.split('@')[0];
+    if (LEGO_AVATARS[key]) return LEGO_AVATARS[key];
+  }
+  // Try matching by name parts in the email keys
+  const lower = name.toLowerCase();
+  for (const [key, url] of Object.entries(LEGO_AVATARS)) {
+    const parts = key.split('.');
+    if (parts.every(p => lower.includes(p))) return url;
+  }
+  return fallbackAvatar(name);
+}
+
+/** Shared avatar URL map — keyed by display name. Populated with lego avatars. */
 export const AV: Record<string, string> = {
-  'Thomas':        'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00tl_59bdfbf7-09d8-485f-8904-7b97678b85hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Austin Lee':    'https://pan16.larksuitecdn.com/static-resource/v1/v2_cf35e3a3-be89-4e2f-9998-b813f928f77h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Kyle Chan':     'https://pan16.larksuitecdn.com/static-resource/v1/v2_042084af-a296-44f0-a9b5-0116f934742h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Xuan Sheng':    'https://s1-imfile.feishucdn.com/static-resource/v1/d118fefe-52ae-4b21-8aa5-c99a20748c7g~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  '盛煊':          'https://s1-imfile.feishucdn.com/static-resource/v1/d118fefe-52ae-4b21-8aa5-c99a20748c7g~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Tianyang Ni':   'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00vr_0a4c671c-c533-46aa-9fac-fd51782d7ehu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  '倪天洋':        'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00vr_0a4c671c-c533-46aa-9fac-fd51782d7ehu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Rishou Bao':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_0068_cc598725-854f-41e0-bb58-0cb5ee5cachu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  '包日守':        'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_0068_cc598725-854f-41e0-bb58-0cb5ee5cachu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Kim Li':        'https://pan16.larksuitecdn.com/static-resource/v1/v3_00qf_51fb0974-66d5-4069-aff5-c2de14bde7ch~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Lionel Lew':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00f1_17ab3065-3434-4398-9a00-247d1d7880hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Edward Lin':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00104_8c5bf311-78ed-45cf-ab81-47bd4032a6hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Tao Zhu':       'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00fg_2e6b01f3-4700-473a-9ebb-698203fdbahu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Hazel Li':      'https://pan16.larksuitecdn.com/static-resource/v1/v3_00tj_78445933-31f7-4349-adcb-3e11d4e0b64h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Xiaobo Tian':   'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00l5_7ccb4901-d79c-4997-9538-b90bfae341hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Spring Ren':    'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00tb_ad7c948b-ed8f-4462-83f5-3ffb3783b1hu~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
-  'Yunyi Yang':    'https://pan16.larksuitecdn.com/static-resource/v1/v2_f5fcd3b3-5752-4ab4-ab0f-310ebc15c31h~?image_size=40x40&cut_type=&quality=&format=png&sticker_format=.webp',
+  'Thomas':        LEGO_AVATARS['thomas.oefverstroem'],
+  'Austin Lee':    LEGO_AVATARS['austin.lee'],
+  'Kyle Chan':     LEGO_AVATARS['kyle.chan'],
+  'Xuan Sheng':    LEGO_AVATARS['sheng.xuan'],
+  '盛煊':          LEGO_AVATARS['sheng.xuan'],
+  'Tianyang Ni':   LEGO_AVATARS['tianyang.ni'],
+  '倪天洋':        LEGO_AVATARS['tianyang.ni'],
+  'Rishou Bao':    FALLBACKS[0],
+  '包日守':        FALLBACKS[0],
+  'Kim Li':        FALLBACKS[1],
+  'Lionel Lew':    LEGO_AVATARS['lionel.lew'],
+  'Edward Lin':    FALLBACKS[0],
+  'Tao Zhu':       LEGO_AVATARS['tao.zhu'],
+  'Hazel Li':      FALLBACKS[1],
+  'Xiaobo Tian':   LEGO_AVATARS['xiaobo.tian'],
+  'Spring Ren':    LEGO_AVATARS['renshengnan.1208'],
+  '任胜男':        LEGO_AVATARS['renshengnan.1208'],
+  'Yunyi Yang':    FALLBACKS[0],
+  'Shashank Singh': LEGO_AVATARS['shashank.singh'],
+  'Fangyuan Shen': LEGO_AVATARS['shenfangyuan'],
+  '沈方元':        LEGO_AVATARS['shenfangyuan'],
 };
