@@ -104,7 +104,8 @@ function RingAvatar({ poc, ringColor = '#13162a' }: { poc: Poc; ringColor?: stri
   return (
     <div
       ref={ref}
-      className="cursor-default"
+      className="rounded-full cursor-default"
+      style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -127,7 +128,7 @@ function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColo
       onMouseLeave={onLeave}
     >
       <div
-        className="w-6 h-6 rounded-lg bg-[#1e2240] flex items-center justify-center text-[9px] font-semibold text-gray-300 cursor-default select-none"
+        className="w-6 h-6 rounded-full bg-[#1e2240] flex items-center justify-center text-[9px] font-semibold text-gray-300 cursor-default select-none"
         style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
       >
         +{rest.length}

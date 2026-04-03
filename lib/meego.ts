@@ -1,6 +1,5 @@
 import { Priority, Feature } from './types';
 import { extractFigmaUrlFromPrd, searchAbReport, joinFeatureChat, getPackageQrUrl, searchLibraInChat } from './lark';
-import { getLegoAvatar } from './avatars';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const MY_EMAIL = process.env.OWNER_EMAIL!;
@@ -455,10 +454,52 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   // Collect name→email pairs from brief
   const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
 
-  // Resolve lego avatars for all POC members by email
-  const meegoAvatars: Record<string, string> = {};
-  for (const [name, email] of Object.entries(pocEmails)) {
-    meegoAvatars[name] = getLegoAvatar(name, email);
+  // Resolve avatars from node detail form items (role fields contain JSON with avatar URLs)
+  let meegoAvatars: Record<string, string> = {};
+  try {
+    const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+    let nodeData: { list?: Array<{ form_items?: Array<{ value?: string }> }> };
+    try { nodeData = JSON.parse(nodeRaw); } catch { nodeData = {}; }
+    const emailToAvatar = new Map<string, string>();
+    for (const node of nodeData.list ?? []) {
+      for (const fi of node.form_items ?? []) {
+        const v = fi.value ?? '';
+        if (!v.includes('avatar')) continue;
+        const re1 = /"email"\s*:\s*"([^"]+@[^"]+)"[^}]*"avatar"\s*:\s*"([^"]+)"/g;
+        let m;
+        while ((m = re1.exec(v)) !== null) emailToAvatar.set(m[1], m[2]);
+        const re2 = /"avatar"\s*:\s*"([^"]+)"[^}]*"email"\s*:\s*"([^"]+@[^"]+)"/g;
+        while ((m = re2.exec(v)) !== null) { if (!emailToAvatar.has(m[2])) emailToAvatar.set(m[2], m[1]); }
+      }
+    }
+    for (const [name, email] of Object.entries(pocEmails)) {
+      const avatar = emailToAvatar.get(email);
+      if (avatar) meegoAvatars[name] = avatar;
+    }
+    // Fallback: search_user_info for remaining names
+    const missingKeys = Object.entries(pocEmails)
+      .filter(([name]) => !meegoAvatars[name])
+      .map(([, email]) => email.split('@')[0]);
+    if (missingKeys.length > 0) {
+      try {
+        const avatarRaw = await callMeegoMcp('search_user_info', {
+          project_key: TIKTOK_PROJECT_KEY,
+          user_keys: missingKeys,
+        });
+        let avatarList: Array<{ user_key: string; avatar_url?: string }>;
+        try { avatarList = JSON.parse(avatarRaw); } catch { avatarList = []; }
+        for (const u of avatarList) {
+          if (!u.avatar_url) continue;
+          for (const [name, email] of Object.entries(pocEmails)) {
+            if (email.split('@')[0] === u.user_key && !meegoAvatars[name]) {
+              meegoAvatars[name] = u.avatar_url;
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  } catch (e) {
+    console.warn('[meego] avatar fetch failed:', e);
   }
 
   // Fetch version from work item brief (version fields are work-item-level, not node-level)

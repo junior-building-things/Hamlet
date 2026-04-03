@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncFeatureStatus } from '@/lib/meego';
-import { refreshUserToken } from '@/lib/lark';
+import { batchFetchAvatars, refreshUserToken } from '@/lib/lark';
 import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
 import { cookies } from 'next/headers';
 
@@ -65,8 +65,20 @@ export async function POST(req: NextRequest) {
     const userToken = await getFreshUserToken();
     const result = await syncFeatureStatus(meegoUrl, userToken, chatId);
 
-    // Lego avatars are resolved locally in meego.ts — no Lark API needed
-    return NextResponse.json({ ...result, pocAvatars: result.meegoAvatars });
+    // Use Meego avatars first, then try Lark as fallback
+    let pocAvatars: Record<string, string> = { ...result.meegoAvatars };
+    const missingEmails: Record<string, string> = {};
+    for (const [name, email] of Object.entries(result.pocEmails)) {
+      if (!pocAvatars[name]) missingEmails[name] = email;
+    }
+    if (Object.keys(missingEmails).length > 0) {
+      try {
+        const larkAvatars = await batchFetchAvatars(missingEmails, userToken);
+        Object.assign(pocAvatars, larkAvatars);
+      } catch { /* ignore */ }
+    }
+
+    return NextResponse.json({ ...result, pocAvatars });
   } catch (err) {
     console.error('Meego sync error:', err);
     return NextResponse.json(
