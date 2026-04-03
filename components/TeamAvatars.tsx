@@ -39,17 +39,22 @@ function buildPocs(feature: Feature): Poc[] {
 
 interface TooltipPos { top: number; left: number }
 
-function PocTooltip({ pocs, pos, mounted }: { pocs: Poc[]; pos: TooltipPos; mounted: boolean }) {
+function PocTooltip({ pocs, pos, mounted, onEnter, onLeave }: {
+  pocs: Poc[]; pos: TooltipPos; mounted: boolean;
+  onEnter?: () => void; onLeave?: () => void;
+}) {
   if (!mounted) return null;
   return createPortal(
     <div
-      className="fixed bg-[#0e1120] border border-[#1e2240] rounded-xl shadow-2xl py-2 px-3 min-w-[160px] pointer-events-none"
+      className="fixed bg-[#0e1120] border border-[#1e2240] rounded-xl shadow-2xl py-2 px-3 min-w-[160px]"
       style={{
         top:       pos.top - 8,
         left:      pos.left,
         zIndex:    9999,
         transform: 'translateX(-50%) translateY(-100%)',
       }}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
     >
       {/* Arrow pointing downward */}
       <div
@@ -80,10 +85,12 @@ function useHoverTooltip() {
   const [pos,     setPos]     = useState<TooltipPos>({ top: 0, left: 0 });
   const [mounted, setMounted] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
   const onEnter = useCallback(() => {
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
     if (ref.current) {
       const r = ref.current.getBoundingClientRect();
       setPos({ top: r.top, left: r.left + r.width / 2 });
@@ -91,7 +98,9 @@ function useHoverTooltip() {
     setOpen(true);
   }, []);
 
-  const onLeave = useCallback(() => setOpen(false), []);
+  const onLeave = useCallback(() => {
+    hideTimer.current = setTimeout(() => setOpen(false), 150);
+  }, []);
 
   return { open, pos, mounted, ref, onEnter, onLeave };
 }
@@ -110,7 +119,7 @@ function RingAvatar({ poc, ringColor = '#13162a' }: { poc: Poc; ringColor?: stri
       onMouseLeave={onLeave}
     >
       <UserAvatar name={poc.name} url={poc.url} size={6} />
-      {open && <PocTooltip pocs={[poc]} pos={pos} mounted={mounted} />}
+      {open && <PocTooltip pocs={[poc]} pos={pos} mounted={mounted} onEnter={onEnter} onLeave={onLeave} />}
     </div>
   );
 }
@@ -133,7 +142,7 @@ function OverflowBubble({ rest, ringColor = '#13162a' }: { rest: Poc[]; ringColo
       >
         +{rest.length}
       </div>
-      {open && <PocTooltip pocs={rest} pos={pos} mounted={mounted} />}
+      {open && <PocTooltip pocs={rest} pos={pos} mounted={mounted} onEnter={onEnter} onLeave={onLeave} />}
     </div>
   );
 }
