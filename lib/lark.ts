@@ -1408,3 +1408,119 @@ export async function sendFeatureCard(opts: {
     console.log('[lark] feature card sent to PM group:', opts.name);
   }
 }
+
+// ─── Chat message reading & thread replies (for agents) ─────────────────────
+
+export interface ChatMessage {
+  message_id: string;
+  msg_type: string;
+  create_time: string;
+  sender: { sender_type: string; sender_id?: { open_id?: string; user_id?: string } };
+  body?: { content?: string };
+  parent_id?: string;       // set if this is a thread reply
+  root_id?: string;         // root message of a thread
+  mentions?: Array<{ key: string; id: { open_id?: string; user_id?: string }; name: string }>;
+}
+
+/**
+ * Read chat messages since a given timestamp. Returns newest-first.
+ */
+export async function readChatMessages(
+  chatId: string, sinceMs: number, token: string, pageSize = 50,
+): Promise<ChatMessage[]> {
+  const messages: ChatMessage[] = [];
+  let pageToken = '';
+
+  while (true) {
+    const params = new URLSearchParams({
+      container_id_type: 'chat',
+      container_id: chatId,
+      start_time: String(Math.floor(sinceMs / 1000)),
+      end_time: String(Math.floor(Date.now() / 1000)),
+      sort_type: 'ByCreateTimeDesc',
+      page_size: String(pageSize),
+    });
+    if (pageToken) params.set('page_token', pageToken);
+
+    const res = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/messages?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await parseJson(res, 'read_messages') as {
+      code: number; msg?: string;
+      data?: { items?: ChatMessage[]; has_more?: boolean; page_token?: string };
+    };
+    if (data.code !== 0) {
+      if (data.code !== 230002) console.warn('[lark] read messages failed:', data.code, data.msg);
+      break;
+    }
+    messages.push(...(data.data?.items ?? []));
+    if (!data.data?.has_more || !data.data?.page_token) break;
+    pageToken = data.data.page_token;
+  }
+
+  return messages;
+}
+
+/**
+ * Send a text message to a chat, optionally as a thread reply.
+ */
+export async function sendTextMessage(
+  chatId: string, text: string, token: string, replyToMsgId?: string,
+): Promise<string | null> {
+  const body: Record<string, unknown> = {
+    receive_id: chatId,
+    msg_type: 'text',
+    content: JSON.stringify({ text }),
+  };
+  if (replyToMsgId) {
+    body.reply_in_thread = true;
+  }
+
+  const url = replyToMsgId
+    ? `${LARK_BASE_URL}/open-apis/im/v1/messages/${replyToMsgId}/reply`
+    : `${LARK_BASE_URL}/open-apis/im/v1/messages?receive_id_type=chat_id`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(replyToMsgId ? { msg_type: 'text', content: JSON.stringify({ text }) } : body),
+  });
+  const data = await parseJson(res, 'send_text') as { code: number; msg?: string; data?: { message_id?: string } };
+  if (data.code !== 0) {
+    console.warn('[lark] send text failed:', data.code, data.msg);
+    return null;
+  }
+  return data.data?.message_id ?? null;
+}
+
+/**
+ * Resolve emails to Lark open_ids for @mentions.
+ */
+export async function resolveOpenIds(
+  emails: string[], token: string,
+): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  for (let i = 0; i < emails.length; i += 5) {
+    const batch = emails.slice(i, i + 5);
+    try {
+      const res = await fetch(
+        `${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emails: batch }),
+        },
+      );
+      const d = await res.json() as {
+        code: number;
+        data?: { user_list?: Array<{ email?: string; user_id?: string }> };
+      };
+      if (d.code === 0) {
+        for (const u of d.data?.user_list ?? []) {
+          if (u.email && u.user_id) result[u.email] = u.user_id;
+        }
+      }
+    } catch { /* skip */ }
+  }
+  return result;
+}

@@ -145,8 +145,8 @@ const ROLES: Role[] = [
   },
   {
     key: 'rd-assistant',
-    title: 'RD Agent',
-    shortName: 'RD Assistant',
+    title: 'Mia',
+    shortName: 'RD Agent',
     description: 'An AI agent that monitors the Meego group chat for the project. Follows up on unanswered questions from engineering POCs to QA or PM — for example, if a PM doesn\'t respond to a question, the agent will tag them again later.',
     isAgent: true,
     icon: '/rd_assistant.png',
@@ -160,8 +160,8 @@ const ROLES: Role[] = [
   },
   {
     key: 'pm-assistant',
-    title: 'PM Agent',
-    shortName: 'PM Assistant',
+    title: 'Rio',
+    shortName: 'PM Agent',
     description: 'An AI agent that assists the PM by monitoring project progress from the PM perspective. Flags when milestones are missed — for example, if a feature was supposed to merge today but the Meego status hasn\'t been updated.',
     isAgent: true,
     icon: '/pm_assistant.png',

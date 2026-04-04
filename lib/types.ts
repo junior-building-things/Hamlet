@@ -52,4 +52,5 @@ export interface Feature {
   chatId?: string;
   avatars?: Record<string, string>;
   agents?: string[];
+  agentLastRun?: string;
 }

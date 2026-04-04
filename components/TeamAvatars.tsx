@@ -19,8 +19,8 @@ const ROLE_ORDER: Array<{ key: keyof Feature; label: string }> = [
 ];
 
 export const AVAILABLE_AGENTS = [
-  { key: 'pm-assistant', label: 'PM Assistant', shortName: 'PM Agent', icon: '/pm_assistant.png' },
-  { key: 'rd-assistant', label: 'RD Assistant', shortName: 'RD Agent', icon: '/rd_assistant.png' },
+  { key: 'pm-assistant', label: 'Rio', shortName: 'PM Agent', icon: '/pm_assistant.png' },
+  { key: 'rd-assistant', label: 'Mia', shortName: 'RD Agent', icon: '/rd_assistant.png' },
 ];
 
 interface Poc { name: string; role: string; url?: string; isAgent?: boolean }
