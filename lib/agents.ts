@@ -164,7 +164,7 @@ async function runUnansweredCheck(
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
   for (const msg of unanswered.slice(0, 3)) { // limit to 3 per run
     try {
