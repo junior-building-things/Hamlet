@@ -46,8 +46,9 @@ export interface MeegoFeature {
   meegoUrl: string;
   overallStatusKey: string;         // e.g. 'end', 'scheduled', 'in_experiment'
   overallStatusName: string;        // e.g. '已完成', '开发中', '实验中'
-  currentNodeId: string;            // e.g. 'state_41', 'PM_acceptance' (picked node)
-  currentNodeName: string;          // e.g. 'iOS 开发', 'PM验收' (picked node display name)
+  allNodeIds: string[];             // every entry in work_item_current_node (for filtering)
+  currentNodeId: string;            // pickedNode.id — most-relevant node (for display/risk)
+  currentNodeName: string;          // pickedNode.name — for display
   chatId?: string;
   iosVersion?: string;
   lastUpdatedIso?: string;          // YYYY-MM-DD
@@ -84,50 +85,24 @@ export interface DigestRunResult {
   unansweredFindings: UnansweredFinding[];
 }
 
-// ─── Status filters (by Meego ID, not name) ──────────────────────────────
+// ─── In-dev filter (by Meego node IDs) ───────────────────────────────────
 
 /**
- * Overall work_item_status.key values that mean the feature is NOT in dev.
- * These come from the top-level work_item_attribute.work_item_status.key field.
- * Using IDs (not Chinese names) so the filter keeps working if Meego renames statuses.
+ * A feature is considered "in development" ONLY if at least one of its
+ * currently-active nodes is a mobile platform dev stage:
+ *   - state_41 → iOS 开发 (iOS Dev)
+ *   - state_42 → Android 开发 (Android Dev)
+ *
+ * Using IDs (not Chinese names) so the filter keeps working if Meego
+ * renames statuses. Extend this set if more dev node IDs are discovered.
  */
-const NOT_IN_DEV_OVERALL_KEYS = new Set<string>([
-  'end',       // 已完成 — Done
+const DEV_NODE_IDS = new Set<string>([
+  'state_41',  // iOS 开发
+  'state_42',  // Android 开发
 ]);
 
-/**
- * Node IDs that mean the feature is outside the active dev window (either
- * pre-dev preparation or post-dev acceptance). Compared against the `id`
- * field of entries in `work_item_current_node`.
- */
-const NOT_IN_DEV_NODE_IDS = new Set<string>([
-  // Post-dev acceptance stages
-  'PM_acceptance',  // PM验收 — PM Acceptance
-  'UAT_UIUX',       // UI&UX验收 — UI/UX Acceptance
-  // Pre-dev preparation stages (extend as we encounter more IDs)
-  // 'state_61',   // 依赖判断 — Dependency Check — keeping in dev for now
-]);
-
-/**
- * Node IDs where QA has effectively started — used to scope the
- * "not in QA yet" freeze-pressure risk checks.
- */
-const QA_OR_LATER_NODE_IDS = new Set<string>([
-  'qa_test_preparation',  // QA测试准备
-  'state_34',             // 自动化测试 — Automated Testing
-  'UAT_UIUX',             // UI&UX验收
-  'launch_ab',            // AB实验
-  'PM_acceptance',        // PM验收
-]);
-
-function isInDev(overallKey: string, pickedNodeId: string): boolean {
-  if (NOT_IN_DEV_OVERALL_KEYS.has(overallKey)) return false;
-  if (pickedNodeId && NOT_IN_DEV_NODE_IDS.has(pickedNodeId)) return false;
-  return true;
-}
-
-function isQaOrLater(pickedNodeId: string): boolean {
-  return QA_OR_LATER_NODE_IDS.has(pickedNodeId);
+function isInDev(allActiveNodeIds: string[]): boolean {
+  return allActiveNodeIds.some(id => DEV_NODE_IDS.has(id));
 }
 
 // ─── Node priority (for picking the most-advanced active node) ────────────
@@ -317,6 +292,7 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
     meegoUrl,
     overallStatusKey: overall.key,
     overallStatusName: overall.name,
+    allNodeIds: activeNodes.map(n => n.key).filter(Boolean),
     currentNodeId: pickedNode?.key ?? '',
     currentNodeName: pickedNode?.name ?? '',
     iosVersion: undefined,
@@ -440,21 +416,19 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
   const reasons: string[] = [];
   const levels: RiskLevel[] = [];
 
-  const inQaOrLater = isQaOrLater(feature.currentNodeId);
-
-  // Freeze pressure — only when we know the target version
+  // Freeze pressure — because in-dev now means iOS or Android dev is actively
+  // in progress, any freeze approaching is a concern (the "not yet in QA" check
+  // is implicit: if dev is still active, QA can't have started).
   if (feature.iosVersion) {
     const freezeDate = await getCodeFreezeDate(feature.iosVersion);
     if (freezeDate) {
       const days = businessDaysUntil(freezeDate);
-      if (!inQaOrLater) {
-        if (days <= 2) {
-          reasons.push(`Code freeze in ${days} business day${days === 1 ? '' : 's'} but not yet in QA (target: v${feature.iosVersion})`);
-          levels.push('red');
-        } else if (days <= 5) {
-          reasons.push(`Code freeze in ${days} business days and not yet in QA (target: v${feature.iosVersion})`);
-          levels.push('yellow');
-        }
+      if (days <= 2) {
+        reasons.push(`Code freeze in ${days} business day${days === 1 ? '' : 's'} but dev still in progress (target: v${feature.iosVersion})`);
+        levels.push('red');
+      } else if (days <= 5) {
+        reasons.push(`Code freeze in ${days} business days with dev still in progress (target: v${feature.iosVersion})`);
+        levels.push('yellow');
       }
     }
   }
@@ -650,21 +624,24 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
 
-  // Log the actual status distribution by node ID (stable) with names for readability
+  // Log distribution of active node IDs across all features (how many times
+  // each ID appears as one of a feature's active nodes). This is what the
+  // filter actually operates on.
   const nodeIdCounts = new Map<string, number>();
-  const overallKeyCounts = new Map<string, number>();
   for (const f of features) {
-    const nodeLabel = f.currentNodeId || '(no current node)';
-    const overallLabel = `${f.overallStatusKey || '(none)'}(${f.overallStatusName})`;
-    nodeIdCounts.set(nodeLabel, (nodeIdCounts.get(nodeLabel) ?? 0) + 1);
-    overallKeyCounts.set(overallLabel, (overallKeyCounts.get(overallLabel) ?? 0) + 1);
+    if (f.allNodeIds.length === 0) {
+      nodeIdCounts.set('(no active nodes)', (nodeIdCounts.get('(no active nodes)') ?? 0) + 1);
+    } else {
+      for (const id of f.allNodeIds) {
+        nodeIdCounts.set(id, (nodeIdCounts.get(id) ?? 0) + 1);
+      }
+    }
   }
-  console.log(`[digests] current node ID distribution: ${[...nodeIdCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ')}`);
-  console.log(`[digests] overall status distribution: ${[...overallKeyCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ')}`);
+  console.log(`[digests] active node ID counts: ${[...nodeIdCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ')}`);
 
-  // Step 3: Filter to in-dev features using the stable IDs (overall key + node id)
-  const inDev = features.filter(f => isInDev(f.overallStatusKey, f.currentNodeId));
-  console.log(`[digests] ${inDev.length} features in dev (after ID filter)`);
+  // Step 3: Filter to in-dev features — ONLY if iOS or Android dev is actively running
+  const inDev = features.filter(f => isInDev(f.allNodeIds));
+  console.log(`[digests] ${inDev.length} features with iOS/Android dev in progress`);
 
   // Step 4: Evaluate risk
   const riskFindings: RiskFinding[] = [];
