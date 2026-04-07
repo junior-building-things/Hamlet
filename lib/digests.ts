@@ -1172,6 +1172,23 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     `[digests] resolved iOS version ${resolvedMobile}/${mobileCount}, server launch date ${resolvedServer}/${serverCount}`,
   );
 
+  // Discovery aid (TEMPORARY): if there are no server-only features in this
+  // run, run resolveServerPlannedLaunchDate against the first mobile feature
+  // anyway so the field-name fallback can log the discovered key. Remove
+  // once SERVER_PLANNED_LAUNCH_FIELD_KEYS is populated.
+  if (serverCount === 0 && SERVER_PLANNED_LAUNCH_FIELD_KEYS.length === 0) {
+    const probe = inDev.find(f => f.pipelineKind === 'mobile');
+    if (probe) {
+      console.log(`[digests] discovery probe: resolving Server Planned Launch Date on mobile feature "${probe.name}"`);
+      try {
+        const probed = await resolveServerPlannedLaunchDate(probe.meegoUrl);
+        console.log(`[digests] discovery probe result: "${probed}"`);
+      } catch (e) {
+        console.warn('[digests] discovery probe failed:', e);
+      }
+    }
+  }
+
   // Step 4: Evaluate risk
   const riskFindings: RiskFinding[] = [];
   for (const feature of inDev) {
