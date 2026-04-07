@@ -158,9 +158,15 @@ const MOBILE_DEV_NODE_IDS = new Set<string>([
   'state_41',  // iOS 开发
   'state_42',  // Android 开发
 ]);
-const SERVER_DEV_NODE_ID = 'state_43';
+// Multiple Meego work item templates exist with different keys for the
+// server-dev stage. Both should classify a feature as server-only when no
+// mobile dev is active.
+const SERVER_DEV_NODE_IDS = new Set<string>([
+  'state_43',           // legacy template
+  'server_development', // newer template used by some teams
+]);
 
-const DEV_NODE_IDS = new Set<string>([...MOBILE_DEV_NODE_IDS, SERVER_DEV_NODE_ID]);
+const DEV_NODE_IDS = new Set<string>([...MOBILE_DEV_NODE_IDS, ...SERVER_DEV_NODE_IDS]);
 
 function isInDev(allActiveNodeIds: string[]): boolean {
   return allActiveNodeIds.some(id => DEV_NODE_IDS.has(id));
@@ -169,7 +175,7 @@ function isInDev(allActiveNodeIds: string[]): boolean {
 /** Classify whether an in-dev feature should use the mobile or server pipeline. */
 function classifyPipelineKind(allActiveNodeIds: string[]): 'mobile' | 'server' | undefined {
   if (allActiveNodeIds.some(id => MOBILE_DEV_NODE_IDS.has(id))) return 'mobile';
-  if (allActiveNodeIds.includes(SERVER_DEV_NODE_ID)) return 'server';
+  if (allActiveNodeIds.some(id => SERVER_DEV_NODE_IDS.has(id))) return 'server';
   return undefined;
 }
 
