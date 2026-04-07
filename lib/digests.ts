@@ -10,7 +10,7 @@ import { getCodeFreezeDate } from './merge-calendar';
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
-async function callMeegoMcp(toolName: string, args: Record<string, unknown>): Promise<string> {
+async function callMeegoMcpOnce(toolName: string, args: Record<string, unknown>): Promise<string> {
   const token = process.env.MEEGO_USER_TOKEN;
   if (!token) throw new Error('MEEGO_USER_TOKEN not configured');
 
@@ -28,7 +28,39 @@ async function callMeegoMcp(toolName: string, args: Record<string, unknown>): Pr
   if (!res.ok) throw new Error(`Meego MCP HTTP error: ${res.status}`);
   const data = await res.json() as { error?: { message: string }; result?: { content?: Array<{ text?: string }> } };
   if (data.error) throw new Error(`Meego MCP error: ${data.error.message}`);
-  return data.result?.content?.[0]?.text ?? '';
+
+  // The response may contain multiple content items. Pick the first one that
+  // looks like the real payload (JSON, markdown, or any substantive text) —
+  // not a rate-limit stub or a log_id footer.
+  const items = data.result?.content ?? [];
+  for (const item of items) {
+    const text = (item.text ?? '').trim();
+    if (!text) continue;
+    if (/^rate limit/i.test(text)) continue;
+    if (/^log_?id:/i.test(text)) continue;
+    return text;
+  }
+
+  // If every item looked like rate-limit / log_id, surface that as the raw
+  // text so the retry wrapper can detect it.
+  return items[0]?.text ?? '';
+}
+
+/**
+ * Call Meego MCP with retry-on-rate-limit. The MCP enforces a 5 QPS limit
+ * per token; we stay under it in normal flow but occasionally bursts trip
+ * the limit and the response comes back as the literal string "rate limit, qps: 5".
+ */
+async function callMeegoMcp(toolName: string, args: Record<string, unknown>): Promise<string> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const text = await callMeegoMcpOnce(toolName, args);
+    if (!/^rate limit/i.test(text.trim())) return text;
+    // Exponential-ish backoff: 600ms, 1200ms, 2400ms, 4800ms
+    const wait = 600 * Math.pow(2, attempt);
+    console.log(`[digests] Meego rate limited, retrying in ${wait}ms (attempt ${attempt + 1})`);
+    await new Promise(r => setTimeout(r, wait));
+  }
+  throw new Error('Meego MCP rate limited after 4 retries');
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -53,7 +85,8 @@ export interface MeegoFeature {
   iosVersion?: string;
   lastUpdatedIso?: string;          // YYYY-MM-DD
   prd?: string;
-  roles: Record<string, string[]>;
+  roles: Record<string, string[]>;  // keyed by role key (e.g. 'Tech_Owner'), NOT name
+  roleDisplayNames: Record<string, string>; // role key → display name (for formatting)
   roleEmails: Record<string, string>;
   activeNodeOwnerEmails: string;
 }
@@ -185,6 +218,12 @@ function parseActiveNodes(raw: string): ParsedActiveNode[] {
     });
 }
 
+interface BriefField {
+  key?: string;
+  name?: string;
+  value?: unknown;
+}
+
 interface BriefJson {
   work_item_attribute?: {
     work_item_status?: { key?: string; name?: string };
@@ -198,7 +237,39 @@ interface BriefJson {
     owners?: Array<{ key?: string; name?: string; email?: string }>;
     actual_begin_time?: string;
   }>;
-  work_item_fields?: Record<string, unknown>;
+  work_item_fields?: BriefField[];
+}
+
+/** Get a single field value from the work_item_fields array by key. */
+function getField(fields: BriefField[] | undefined, key: string): unknown {
+  return fields?.find(f => f.key === key)?.value;
+}
+
+/** Get a string-typed field (handles both plain strings and {value, label}). */
+function getStringField(fields: BriefField[] | undefined, key: string): string {
+  const v = getField(fields, key);
+  if (typeof v === 'string') return v;
+  if (v && typeof v === 'object' && 'value' in v) {
+    const obj = v as Record<string, unknown>;
+    return typeof obj.value === 'string' ? obj.value : '';
+  }
+  return '';
+}
+
+/** Get the ISO date string from a timestamp field like start_time. */
+function getDateField(fields: BriefField[] | undefined, key: string): string {
+  const v = getField(fields, key);
+  if (v && typeof v === 'object') {
+    const obj = v as Record<string, unknown>;
+    const iso = typeof obj.iso_time === 'string' ? obj.iso_time : '';
+    if (iso) {
+      const m = iso.match(/(\d{4}-\d{2}-\d{2})/);
+      if (m) return m[1];
+    }
+    const ts = typeof obj.timestamp === 'number' ? obj.timestamp : 0;
+    if (ts > 0) return new Date(ts).toISOString().split('T')[0];
+  }
+  return '';
 }
 
 /** Extract active nodes from the parsed brief JSON. */
@@ -219,13 +290,25 @@ function parseOverallStatus(json: BriefJson): { key: string; name: string } {
   return { key: s?.key ?? '', name: s?.name ?? '' };
 }
 
-/** Extract roles and name→email map from the parsed brief JSON. */
-function parseRolesFromJson(json: BriefJson): { roles: Record<string, string[]>; emails: Record<string, string> } {
+/**
+ * Extract roles and name→email map from the parsed brief JSON.
+ * Roles are keyed by the stable Meego role key (e.g. `Tech_Owner`, `PM`, `iOS`)
+ * rather than the display name (`Tech owner`, `PM`, `iOS`) so the filter keeps
+ * working if Meego relabels a role. Display names are cached alongside for the
+ * digest text.
+ */
+function parseRolesFromJson(json: BriefJson): {
+  roles: Record<string, string[]>;        // role key → list of member display names
+  roleDisplayNames: Record<string, string>; // role key → display name (for formatting)
+  emails: Record<string, string>;          // member display name → email
+} {
   const roles: Record<string, string[]> = {};
+  const roleDisplayNames: Record<string, string> = {};
   const emails: Record<string, string> = {};
   for (const roleEntry of json.work_item_attribute?.role_members ?? []) {
-    const roleName = roleEntry.name;
-    if (!roleName) continue;
+    const roleKey = roleEntry.key;
+    if (!roleKey) continue;
+    if (roleEntry.name) roleDisplayNames[roleKey] = roleEntry.name;
     const memberNames: string[] = [];
     for (const m of roleEntry.members ?? []) {
       if (m.name) {
@@ -233,9 +316,9 @@ function parseRolesFromJson(json: BriefJson): { roles: Record<string, string[]>;
         if (m.email) emails[m.name] = m.email;
       }
     }
-    if (memberNames.length > 0) roles[roleName] = memberNames;
+    if (memberNames.length > 0) roles[roleKey] = memberNames;
   }
-  return { roles, emails };
+  return { roles, roleDisplayNames, emails };
 }
 
 /** Fallback markdown field parser (kept for PRD / updated_at which may not be in typed JSON). */
@@ -254,7 +337,7 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
   try {
     raw = await callMeegoMcp('get_workitem_brief', {
       url: meegoUrl,
-      fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'created_at'],
+      fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'start_time', 'updated_at'],
     });
   } catch (e) {
     console.warn(`[digests] failed to fetch brief for ${name}:`, e);
@@ -273,17 +356,13 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
   const overall = parseOverallStatus(json);
   const activeNodes = parseActiveNodesFromJson(json);
   const pickedNode = pickActiveNode(activeNodes);
+  const fields = json.work_item_fields;
 
-  // PRD and lastUpdated aren't in the typed JSON schema — try to parse from the raw string
-  const prd = parseWorkItemField(raw, 'PRD');
-  const updatedStr = parseWorkItemField(raw, '更新时间');
-  let lastUpdatedIso = '';
-  if (updatedStr) {
-    const m = updatedStr.match(/(\d{4}-\d{2}-\d{2})/);
-    if (m) lastUpdatedIso = m[1];
-  }
+  // Extract PRD, updated time, etc. from the typed work_item_fields array
+  const prd = getStringField(fields, 'wiki');
+  const lastUpdatedIso = getDateField(fields, 'updated_at') || getDateField(fields, 'start_time');
 
-  const { roles, emails: roleEmails } = parseRolesFromJson(json);
+  const { roles, roleDisplayNames, emails: roleEmails } = parseRolesFromJson(json);
   const activeNodeOwnerEmails = pickedNode?.owners ?? '';
 
   return {
@@ -295,13 +374,98 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
     allNodeIds: activeNodes.map(n => n.key).filter(Boolean),
     currentNodeId: pickedNode?.key ?? '',
     currentNodeName: pickedNode?.name ?? '',
-    iosVersion: undefined,
+    iosVersion: undefined,  // resolved later for in-dev features only
     lastUpdatedIso,
     prd: prd || undefined,
     roles,
+    roleDisplayNames,
     roleEmails,
     activeNodeOwnerEmails,
   };
+}
+
+// ─── iOS version resolution ───────────────────────────────────────────────
+
+/**
+ * Resolve the iOS planned version (e.g. "44.9") for a work item.
+ *
+ * The version is stored as a node-level field (`field_08a9ca`) on the
+ * `qa_test_preparation` node, containing a JSON array of version work item IDs.
+ * Each version ID must be resolved via another get_workitem_brief call to get
+ * the version name, then the shortest numeric version (e.g. 44.9) is returned.
+ *
+ * Only called for already-filtered in-dev features to minimise MCP load.
+ */
+async function resolveIosVersion(meegoUrl: string): Promise<string> {
+  let nodeRaw: string;
+  try {
+    nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+  } catch {
+    return '';
+  }
+
+  interface NodeFormItem { field_key?: string; field_name?: string; value?: string; value_label?: string }
+  interface NodeEntry { basic?: { node_key?: string; name?: string }; form_items?: NodeFormItem[] }
+  let nodeData: { list?: NodeEntry[] };
+  try {
+    nodeData = JSON.parse(nodeRaw) as { list?: NodeEntry[] };
+  } catch {
+    return '';
+  }
+
+  // Collect work item IDs from field_08a9ca (iOS) then field_c88970 (Android) as fallback
+  function collectVersionIds(fieldKey: string): number[] {
+    const ids: number[] = [];
+    for (const node of nodeData.list ?? []) {
+      for (const fi of node.form_items ?? []) {
+        if (fi.field_key !== fieldKey) continue;
+        try {
+          const parsed = JSON.parse(fi.value ?? '[]') as number[];
+          for (const id of parsed) if (!ids.includes(id)) ids.push(id);
+        } catch { /* skip */ }
+      }
+    }
+    return ids;
+  }
+
+  let versionIds = collectVersionIds('field_08a9ca');
+  if (versionIds.length === 0) versionIds = collectVersionIds('field_c88970');
+  if (versionIds.length === 0) return '';
+
+  // Resolve each version work item ID → version name → short form (e.g. 44.9)
+  const names: string[] = [];
+  for (const id of versionIds) {
+    try {
+      const versionRaw = await callMeegoMcp('get_workitem_brief', {
+        url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/version/detail/${id}`,
+      });
+      // Version brief: look for work item name in the JSON or markdown
+      try {
+        const parsed = JSON.parse(versionRaw) as BriefJson;
+        const vname = parsed.work_item_attribute?.work_item_name;
+        if (vname) names.push(vname);
+      } catch {
+        // Fallback to markdown parsing for older-format responses
+        const nameMatch = versionRaw.match(/工作项名称\s*\|\s*([^|\n]+)/);
+        if (nameMatch) names.push(nameMatch[1].trim());
+      }
+    } catch { /* skip */ }
+  }
+
+  // Extract short numeric version (e.g. "44.9" from "TikTok-M-iOS-44.9.0") and pick the lowest
+  const shortNames = names
+    .map(n => {
+      const m = n.match(/(\d+\.\d+)(?:\.\d+)?$/);
+      return m ? m[1] : '';
+    })
+    .filter(Boolean);
+  if (shortNames.length === 0) return '';
+  shortNames.sort((a, b) => {
+    const [aMaj, aMin] = a.split('.').map(Number);
+    const [bMaj, bMin] = b.split('.').map(Number);
+    return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
+  });
+  return shortNames[0];
 }
 
 // ─── Feature discovery via list_todo + MQL (raw Chinese statuses) ─────────
@@ -410,7 +574,22 @@ function maxLevel(levels: RiskLevel[]): RiskLevel {
 
 // ─── Risk evaluation (Task 4) ──────────────────────────────────────────────
 
-const REQUIRED_ROLES = ['PM', 'Tech owner', 'iOS', 'Android', 'Server', 'QA'];
+// Role keys (stable IDs) required to exist for an in-dev feature.
+// These are the `key` values from work_item_attribute.role_members, e.g.:
+//   key="PM"         name="PM"
+//   key="Tech_Owner" name="Tech owner"
+//   key="iOS"        name="iOS"
+//   key="Android"    name="Android"
+//   key="Server"     name="Server"
+//   key="QA"         name="QA"
+const REQUIRED_ROLE_KEYS: Array<{ key: string; label: string }> = [
+  { key: 'PM',         label: 'PM' },
+  { key: 'Tech_Owner', label: 'Tech Owner' },
+  { key: 'iOS',        label: 'iOS' },
+  { key: 'Android',    label: 'Android' },
+  { key: 'Server',     label: 'Server' },
+  { key: 'QA',         label: 'QA' },
+];
 
 export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFinding> {
   const reasons: string[] = [];
@@ -440,10 +619,10 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
     levels.push('red');
   }
 
-  // Missing owner check
+  // Missing owner check (by stable role key)
   const missing: string[] = [];
-  for (const role of REQUIRED_ROLES) {
-    if (!feature.roles[role] || feature.roles[role].length === 0) missing.push(role);
+  for (const { key, label } of REQUIRED_ROLE_KEYS) {
+    if (!feature.roles[key] || feature.roles[key].length === 0) missing.push(label);
   }
   if (missing.length > 0) {
     reasons.push(`Missing ${missing.join(', ')} owner${missing.length === 1 ? '' : 's'}`);
@@ -460,6 +639,19 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
   return { level, reasons, feature };
 }
 
+/** Format a feature line for the digest, including version, stage, and tech owner. */
+function formatFeatureLine(f: MeegoFeature): string {
+  const parts: string[] = [];
+  const stage = f.currentNodeName || f.overallStatusName;
+  if (stage) parts.push(stage);
+  if (f.iosVersion) parts.push(`v${f.iosVersion}`);
+  // Look up Tech Owner by stable role key (Tech_Owner), not display name
+  const techOwner = (f.roles['Tech_Owner'] ?? []).join(', ');
+  if (techOwner) parts.push(`Tech: ${techOwner}`);
+  const meta = parts.join(' · ');
+  return `• ${f.name}${meta ? ` (${meta})` : ''}`;
+}
+
 export function formatRiskDigest(findings: RiskFinding[]): string {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const red = findings.filter(f => f.level === 'red');
@@ -473,9 +665,7 @@ export function formatRiskDigest(findings: RiskFinding[]): string {
   if (red.length > 0) {
     lines.push(`🔴 High-risk (${red.length})`);
     for (const f of red) {
-      const ver = f.feature.iosVersion ? `, v${f.feature.iosVersion}` : '';
-      const stage = f.feature.currentNodeName || f.feature.overallStatusName;
-      lines.push(`• ${f.feature.name} (${stage}${ver})`);
+      lines.push(formatFeatureLine(f.feature));
       for (const r of f.reasons) lines.push(`   · ${r}`);
     }
     lines.push('');
@@ -484,9 +674,7 @@ export function formatRiskDigest(findings: RiskFinding[]): string {
   if (yellow.length > 0) {
     lines.push(`🟡 Watch (${yellow.length})`);
     for (const f of yellow) {
-      const ver = f.feature.iosVersion ? `, v${f.feature.iosVersion}` : '';
-      const stage = f.feature.currentNodeName || f.feature.overallStatusName;
-      lines.push(`• ${f.feature.name} (${stage}${ver})`);
+      lines.push(formatFeatureLine(f.feature));
       for (const r of f.reasons) lines.push(`   · ${r}`);
     }
     lines.push('');
@@ -495,9 +683,7 @@ export function formatRiskDigest(findings: RiskFinding[]): string {
   if (green.length > 0) {
     lines.push(`🟢 Healthy (${green.length})`);
     for (const f of green) {
-      const ver = f.feature.iosVersion ? `, v${f.feature.iosVersion}` : '';
-      const stage = f.feature.currentNodeName || f.feature.overallStatusName;
-      lines.push(`• ${f.feature.name} (${stage}${ver}) — on track`);
+      lines.push(`${formatFeatureLine(f.feature)} — on track`);
     }
     lines.push('');
   }
@@ -511,7 +697,9 @@ export function formatRiskDigest(findings: RiskFinding[]): string {
 
 // ─── Unanswered Q&A check (Task 5) ─────────────────────────────────────────
 
-const STAKEHOLDER_ROLES = ['PM', 'UI&UX', 'Tech owner', 'iOS', 'Android', 'Server', 'QA'];
+// Stakeholder role KEYS (stable IDs) — anyone with an @-mention in these
+// roles whose question goes unanswered is surfaced in the digest.
+const STAKEHOLDER_ROLE_KEYS = ['PM', 'UI_UX', 'UI&UX', 'Tech_Owner', 'iOS', 'Android', 'Server', 'QA'];
 
 export async function collectUnansweredForFeature(
   feature: MeegoFeature, sinceMs: number, token: string,
@@ -519,8 +707,8 @@ export async function collectUnansweredForFeature(
   if (!feature.chatId) return null;
 
   const stakeholderEmails = new Set<string>();
-  for (const role of STAKEHOLDER_ROLES) {
-    const names = feature.roles[role] ?? [];
+  for (const roleKey of STAKEHOLDER_ROLE_KEYS) {
+    const names = feature.roles[roleKey] ?? [];
     for (const name of names) {
       const email = feature.roleEmails[name];
       if (email) stakeholderEmails.add(email);
@@ -642,6 +830,17 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Step 3: Filter to in-dev features — ONLY if iOS or Android dev is actively running
   const inDev = features.filter(f => isInDev(f.allNodeIds));
   console.log(`[digests] ${inDev.length} features with iOS/Android dev in progress`);
+
+  // Step 3b: Resolve iOS version for in-dev features (expensive, so only done after filtering)
+  for (const f of inDev) {
+    try {
+      f.iosVersion = await resolveIosVersion(f.meegoUrl);
+      await new Promise(r => setTimeout(r, 300));
+    } catch (e) {
+      console.warn(`[digests] iOS version lookup failed for ${f.name}:`, e);
+    }
+  }
+  console.log(`[digests] resolved iOS version for ${inDev.filter(f => f.iosVersion).length}/${inDev.length} in-dev features`);
 
   // Step 4: Evaluate risk
   const riskFindings: RiskFinding[] = [];
