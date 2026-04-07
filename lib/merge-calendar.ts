@@ -16,9 +16,18 @@ async function fetchCalendar(): Promise<Map<string, Date>> {
 
   try {
     const content = await readDocContent(MERGE_CALENDAR_URL);
+    console.log('[merge-calendar] fetched doc content, length:', content.length);
+    if (content.length === 0) {
+      console.warn('[merge-calendar] doc content is empty — readDocContent may have failed or returned nothing');
+      return map;
+    }
+    // Log a short preview so we can see the shape of the doc
+    console.log('[merge-calendar] first 500 chars:', content.slice(0, 500));
+
     // The calendar doc likely has a table with version numbers and dates
     // Look for patterns like "44.6" followed by dates in various formats
     const lines = content.split('\n');
+    console.log(`[merge-calendar] parsing ${lines.length} lines`);
 
     for (const line of lines) {
       // Match version numbers like 44.6, 44.7, 45.0
@@ -52,6 +61,8 @@ async function fetchCalendar(): Promise<Map<string, Date>> {
         }
       }
     }
+
+    console.log(`[merge-calendar] parsed ${map.size} version entries:`, [...map.entries()].slice(0, 10).map(([v, d]) => `${v}=${d.toISOString().slice(0, 10)}`).join(', '));
   } catch (e) {
     console.warn('[merge-calendar] failed to fetch/parse calendar:', e);
   }
