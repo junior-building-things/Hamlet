@@ -1,5 +1,5 @@
 import { Feature } from './types';
-import { readChatMessages, resolveOpenIds, sendDmByEmail, ChatMessage } from './lark';
+import { readChatMessages, resolveOpenIds, sendDmByEmail, sendPostDmByEmail, ChatMessage, PostParagraph, PostInline } from './lark';
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
 
@@ -639,60 +639,142 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
   return { level, reasons, feature };
 }
 
-/** Format a feature line for the digest, including version, stage, and tech owner. */
-function formatFeatureLine(f: MeegoFeature): string {
-  const parts: string[] = [];
-  const stage = f.currentNodeName || f.overallStatusName;
-  if (stage) parts.push(stage);
-  if (f.iosVersion) parts.push(`v${f.iosVersion}`);
-  // Look up Tech Owner by stable role key (Tech_Owner), not display name
-  const techOwner = (f.roles['Tech_Owner'] ?? []).join(', ');
-  if (techOwner) parts.push(`Tech: ${techOwner}`);
-  const meta = parts.join(' · ');
-  return `• ${f.name}${meta ? ` (${meta})` : ''}`;
+// ─── Status bucketing for the card-style digest ──────────────────────────
+
+/**
+ * Map a Meego work item's current node + overall status to a generic bucket
+ * label shown in the digest. The user-facing label is intentionally coarse
+ * (In Development / In QA / In AB Test / Launched) — the exact stage doesn't
+ * matter for the digest reader.
+ */
+function bucketStatus(currentNodeId: string, overallStatusKey: string): string {
+  if (overallStatusKey === 'end') return 'Launched';
+  // QA-stage node IDs observed in the [digests] active node ID counts log:
+  //   qa_test_preparation, state_40 / 41 / 42 / 46 (various QA / UAT stages)
+  if (currentNodeId === 'qa_test_preparation') return 'In QA';
+  if (/^state_(40|41|42|46)$/.test(currentNodeId)) return 'In QA';
+  if (currentNodeId === 'UAT_UIUX') return 'In QA';
+  // AB experiment stages
+  if (currentNodeId === 'launch_ab' || /ab_?(test|experiment)/i.test(currentNodeId)) return 'In AB Test';
+  // Default for everything else that passed the in-dev filter
+  return 'In Development';
 }
 
-export function formatRiskDigest(findings: RiskFinding[]): string {
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  const red = findings.filter(f => f.level === 'red');
-  const yellow = findings.filter(f => f.level === 'yellow');
-  const green = findings.filter(f => f.level === 'green');
+/** Format a freeze date as `D MMM` in Singapore time, e.g. "16 Apr". */
+function formatFreezeDate(d: Date): string {
+  return d.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'Asia/Singapore',
+  });
+}
 
-  const lines: string[] = [];
-  lines.push(`📊 Daily Risk Digest — ${today}`);
-  lines.push('');
+/** Map a risk level to its display emoji + label. */
+function levelDisplay(level: RiskLevel): { emoji: string; label: string } {
+  if (level === 'red')    return { emoji: '🔴', label: 'High' };
+  if (level === 'yellow') return { emoji: '🟡', label: 'Medium' };
+  return { emoji: '🟢', label: 'Low' };
+}
 
-  if (red.length > 0) {
-    lines.push(`🔴 High-risk (${red.length})`);
-    for (const f of red) {
-      lines.push(formatFeatureLine(f.feature));
-      for (const r of f.reasons) lines.push(`   · ${r}`);
-    }
-    lines.push('');
+/** Build a `* Key: value` paragraph as a single text inline element. */
+function bullet(key: string, value: string): PostParagraph {
+  return [{ tag: 'text', text: `* ${key}: ${value}` }];
+}
+
+/** Build the header paragraph for one feature card with clickable PRD/Meego links. */
+function buildHeaderParagraph(f: MeegoFeature, level: RiskLevel): PostParagraph {
+  const { emoji } = levelDisplay(level);
+  const parts: PostInline[] = [
+    { tag: 'text', text: `${emoji} ${f.name} (` },
+  ];
+
+  const links: PostInline[] = [];
+  if (f.prd) links.push({ tag: 'a', text: 'PRD', href: f.prd });
+  links.push({ tag: 'a', text: 'Meego', href: f.meegoUrl });
+
+  for (let i = 0; i < links.length; i++) {
+    if (i > 0) parts.push({ tag: 'text', text: ', ' });
+    parts.push(links[i]);
+  }
+  parts.push({ tag: 'text', text: ')' });
+  return parts;
+}
+
+/**
+ * Build a single feature's card as a list of post paragraphs, e.g.:
+ *
+ *   🟢 Feature Name (PRD, Meego)
+ *   * Tech Owner: Kyle Chan, Hao Sun
+ *   * Status: In Development
+ *   * Version: 44.9 (16 Apr)
+ *   * Risk: Low
+ *   <blank line>
+ */
+async function buildFeatureCard(finding: RiskFinding): Promise<PostParagraph[]> {
+  const f = finding.feature;
+  const paragraphs: PostParagraph[] = [];
+
+  // Header line: emoji + name + (PRD, Meego)
+  paragraphs.push(buildHeaderParagraph(f, finding.level));
+
+  // Tech Owner — show only if at least one is set
+  const techOwners = (f.roles['Tech_Owner'] ?? []).join(', ');
+  if (techOwners) paragraphs.push(bullet('Tech Owner', techOwners));
+
+  // Status (generic bucket)
+  paragraphs.push(bullet('Status', bucketStatus(f.currentNodeId, f.overallStatusKey)));
+
+  // Version + freeze date
+  if (f.iosVersion) {
+    let versionText = f.iosVersion;
+    try {
+      const freeze = await getCodeFreezeDate(f.iosVersion);
+      if (freeze) versionText = `${f.iosVersion} (${formatFreezeDate(freeze)})`;
+    } catch { /* fall back to plain version */ }
+    paragraphs.push(bullet('Version', versionText));
   }
 
-  if (yellow.length > 0) {
-    lines.push(`🟡 Watch (${yellow.length})`);
-    for (const f of yellow) {
-      lines.push(formatFeatureLine(f.feature));
-      for (const r of f.reasons) lines.push(`   · ${r}`);
-    }
-    lines.push('');
+  // Risk: Level (reasons in parens if any)
+  const { label } = levelDisplay(finding.level);
+  const riskValue = finding.reasons.length > 0
+    ? `${label} (${finding.reasons.join(', ')})`
+    : label;
+  paragraphs.push(bullet('Risk', riskValue));
+
+  // Blank line as visual separator between cards
+  paragraphs.push([]);
+
+  return paragraphs;
+}
+
+/**
+ * Build the full risk digest as a Lark `post` message — title plus all
+ * paragraphs across every card. Cards are ordered red → yellow → green so
+ * the highest-risk items appear first.
+ */
+export async function buildRiskDigestPost(findings: RiskFinding[]): Promise<{ title: string; paragraphs: PostParagraph[] }> {
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
+  });
+  const title = `🔥 Daily Risk Assessment — ${today}`;
+
+  const sorted = findings.slice().sort((a, b) => {
+    const order: Record<RiskLevel, number> = { red: 0, yellow: 1, green: 2 };
+    return order[a.level] - order[b.level];
+  });
+
+  const paragraphs: PostParagraph[] = [];
+  if (sorted.length === 0) {
+    paragraphs.push([{ tag: 'text', text: 'No features currently in development.' }]);
+    return { title, paragraphs };
   }
 
-  if (green.length > 0) {
-    lines.push(`🟢 Healthy (${green.length})`);
-    for (const f of green) {
-      lines.push(`${formatFeatureLine(f.feature)} — on track`);
-    }
-    lines.push('');
+  for (const finding of sorted) {
+    const card = await buildFeatureCard(finding);
+    paragraphs.push(...card);
   }
 
-  if (findings.length === 0) {
-    lines.push('No features currently in development.');
-  }
-
-  return lines.join('\n').trim();
+  return { title, paragraphs };
 }
 
 // ─── Unanswered Q&A check (Task 5) ─────────────────────────────────────────
@@ -870,12 +952,14 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // TODO: resolve chatId via lark chat search or by adding it to fetchMeegoFeature.
   const unansweredFindings: UnansweredFinding[] = [];
 
-  // Step 7: Send risk digest (always)
+  // Step 7: Send risk digest (always) — card-style rich text post
   let riskSent = false;
   if (rioToken) {
-    const riskText = formatRiskDigest(riskFindings);
-    console.log('[digests] risk digest:\n' + riskText);
-    const id = await sendDmByEmail(ownerEmail, riskText, rioToken);
+    const post = await buildRiskDigestPost(riskFindings);
+    // Log a flat-text preview for debugging — only the first inline element of each paragraph
+    const preview = [post.title, ...post.paragraphs.map(p => p.map(el => el.tag === 'text' ? el.text : el.text).join(''))].join('\n');
+    console.log('[digests] risk digest:\n' + preview);
+    const id = await sendPostDmByEmail(ownerEmail, post.title, post.paragraphs, rioToken);
     riskSent = id !== null;
   }
 

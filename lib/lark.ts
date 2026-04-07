@@ -1522,6 +1522,55 @@ export async function sendDmByEmail(
 }
 
 /**
+ * A single inline element inside a Lark `post` paragraph.
+ * Either a plain text run or a clickable hyperlink.
+ */
+export type PostInline =
+  | { tag: 'text'; text: string }
+  | { tag: 'a'; text: string; href: string };
+
+/** A `post` paragraph is an array of inline elements. Empty array = blank line. */
+export type PostParagraph = PostInline[];
+
+/**
+ * Send a 1:1 DM to a user by enterprise email as a Lark `post` (rich text)
+ * message. Supports inline hyperlinks via {tag:'a', text, href} elements,
+ * which is required for rendering clickable PRD/Meego links in the daily
+ * risk digest.
+ */
+export async function sendPostDmByEmail(
+  email: string, title: string, paragraphs: PostParagraph[], token: string,
+): Promise<string | null> {
+  const content = {
+    post: {
+      en_us: {
+        title,
+        content: paragraphs,
+      },
+    },
+  };
+
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/im/v1/messages?receive_id_type=email`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        receive_id: email,
+        msg_type: 'post',
+        content: JSON.stringify(content),
+      }),
+    },
+  );
+  const data = await parseJson(res, 'send_post_dm') as { code: number; msg?: string; data?: { message_id?: string } };
+  if (data.code !== 0) {
+    console.warn('[lark] send post DM failed:', data.code, data.msg);
+    return null;
+  }
+  return data.data?.message_id ?? null;
+}
+
+/**
  * Resolve emails to Lark open_ids for @mentions.
  */
 export async function resolveOpenIds(
