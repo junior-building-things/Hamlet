@@ -937,9 +937,10 @@ async function buildFeatureSectionContent(finding: RiskFinding): Promise<string>
     lines.push(`**Tech Owner:** ${escapeMd(techOwners)}`);
   }
 
-  // Generic status bucket — server-only features get a more specific label.
+  // Generic status bucket — always "In Development" for in-dev features
+  // (regardless of mobile vs server pipeline).
   const statusLabel = f.pipelineKind === 'server'
-    ? 'In Server Development'
+    ? 'In Development'
     : bucketStatus(f.currentNodeId, f.overallStatusKey);
   lines.push(`**Status:** ${statusLabel}`);
 
