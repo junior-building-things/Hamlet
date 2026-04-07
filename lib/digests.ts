@@ -6,6 +6,7 @@ import {
   sendTextMessage,
   sendInteractiveCardToChat,
   joinFeatureChat,
+  getLarkBotToken,
   ChatMessage,
   CardSection,
   CardHeaderTemplate,
@@ -1247,22 +1248,32 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     `[digests] resolved iOS version ${resolvedMobile}/${mobileCount}, server launch date ${resolvedServer}/${serverCount}`,
   );
 
-  // Step 3c: Fetch Rio's token early — used for both chat lookups (Step 3d),
-  // chat-risk message reads (Step 4) and the final digest card send (Step 7).
+  // Step 3c: Fetch tokens early.
+  //   - Rio token: needed for the final digest card send (Step 7).
+  //   - Main Lark bot token: needed for chat lookups (Step 3d) and chat-risk
+  //     message reads (Step 4). The main Lark bot is already a member of the
+  //     feature group chats (Hamlet's existing flow adds it via
+  //     joinFeatureChat). Rio isn't in those chats by default, so Rio's
+  //     token can't search or read them even with the right scopes.
   let rioToken = '';
   try {
     rioToken = await getAgentToken('rio');
   } catch (e) {
     console.warn('[digests] failed to get Rio token:', e);
   }
+  let botToken = '';
+  try {
+    botToken = await getLarkBotToken();
+  } catch (e) {
+    console.warn('[digests] failed to get Lark bot token:', e);
+  }
 
-  // Step 3d: Resolve each in-dev feature's Lark chat ID using Rio's token.
-  // Rio now has im:chat:read so the chat-search call works against the
-  // chats Rio is a member of.
-  if (rioToken) {
+  // Step 3d: Resolve each in-dev feature's Lark chat ID via the main Lark
+  // bot (which has both im:chat:read and chat membership).
+  if (botToken) {
     for (const f of inDev) {
       try {
-        const chatId = await joinFeatureChat(f.name, rioToken, f.meegoUrl, true);
+        const chatId = await joinFeatureChat(f.name, undefined, f.meegoUrl, true);
         if (chatId) f.chatId = chatId;
       } catch (e) {
         console.warn(`[digests] chat lookup failed for ${f.name}:`, e);
@@ -1281,8 +1292,8 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     try {
       const finding = await evaluateFeatureRisk(feature);
 
-      if (feature.chatId && rioToken) {
-        const chatRisk = await evaluateChatRisk(feature.chatId, feature.name, rioToken);
+      if (feature.chatId && botToken) {
+        const chatRisk = await evaluateChatRisk(feature.chatId, feature.name, botToken);
         if (chatRisk.level !== 'none') {
           finding.reasons.push(chatRisk.summary || 'risk called out in chat');
           finding.level = maxLevel([finding.level, chatRisk.level]);
