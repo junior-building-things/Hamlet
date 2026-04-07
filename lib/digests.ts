@@ -82,6 +82,31 @@ async function callMeegoMcp(toolName: string, args: Record<string, unknown>): Pr
   throw new Error('Meego MCP rate limited after 4 retries');
 }
 
+/**
+ * One-shot discovery helper: list every Meego MCP tool name + description.
+ * Runs the standard MCP `tools/list` JSON-RPC method (no arguments). Used by
+ * the digest endpoint to identify the activity-log tool name on first run;
+ * delete this function once the tool name is hardcoded.
+ */
+export async function listMeegoMcpTools(): Promise<Array<{ name: string; description?: string }>> {
+  const token = process.env.MEEGO_USER_TOKEN;
+  if (!token) throw new Error('MEEGO_USER_TOKEN not configured');
+  const res = await fetch(MEEGO_MCP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Mcp-Token': token },
+    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'tools/list' }),
+  });
+  if (!res.ok) throw new Error(`Meego MCP tools/list HTTP error: ${res.status}`);
+  const data = await res.json() as {
+    error?: { message: string };
+    result?: { tools?: Array<{ name?: string; description?: string }> };
+  };
+  if (data.error) throw new Error(`Meego MCP tools/list error: ${data.error.message}`);
+  return (data.result?.tools ?? [])
+    .filter((t): t is { name: string; description?: string } => typeof t.name === 'string')
+    .map(t => ({ name: t.name, description: t.description }));
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type RiskLevel = 'red' | 'yellow' | 'green';
@@ -1255,6 +1280,20 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Destination for both the risk digest and the unanswered Q&A digest.
   // Previously DM'd to OWNER_EMAIL; now posted to the PM group chat.
   const targetChatId = PM_GROUP_CHAT_ID;
+
+  // Discovery probe (TEMPORARY): list every Meego MCP tool name so we can
+  // identify the activity-log tool. Remove once it's hardcoded.
+  try {
+    const tools = await listMeegoMcpTools();
+    const candidates = tools.filter(t =>
+      /history|activity|changelog|operate.?log|audit|edit/i.test(t.name) ||
+      (t.description && /history|activity|changelog|edit|operate/i.test(t.description)),
+    );
+    console.log(`[digests] Meego MCP tool count: ${tools.length}; candidates for activity log: ${JSON.stringify(candidates)}`);
+    console.log(`[digests] all Meego MCP tool names: ${tools.map(t => t.name).join(', ')}`);
+  } catch (e) {
+    console.warn('[digests] tools/list probe failed:', e);
+  }
 
   // Step 1: Discover all PM-owned work items
   const allIds = await fetchAllPmOwnedIds(TIKTOK_PROJECT_KEY);
