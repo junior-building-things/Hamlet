@@ -14,6 +14,13 @@ import {
 } from './lark';
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
+import {
+  loadChatRiskState,
+  saveChatRiskState,
+  pruneStaleRisks,
+  dropExitedFeatures,
+  PersistedChatRisk,
+} from './digest-state';
 
 // Direct Meego MCP client — duplicated here so the digest pipeline can talk to
 // Meego without going through Hamlet's translation layer. We want raw Chinese
@@ -841,17 +848,39 @@ export interface ChatRiskFinding {
   summary: string;
 }
 
+/** Optional prior-risk context handed to Gemini so it can carry / clear / escalate. */
+export interface PriorChatRisk {
+  level: 'yellow' | 'red';
+  summary: string;
+  raisedAtIso: string;
+}
+
 /**
  * Read the last 24h of messages in a feature's Meego group chat and use
  * Gemini 2.5 Flash Lite to detect whether a team member has called out a
- * risk to the feature's progress. Returns the risk level + a short summary
- * suitable for embedding into the daily risk digest.
+ * risk to the feature's progress.
+ *
+ * Carry-forward semantics:
+ *   - No new messages, no prior risk → none.
+ *   - No new messages, prior risk    → carry the prior risk forward as-is
+ *                                      (Gemini is NOT called).
+ *   - New messages, no prior risk    → fresh evaluation against new messages.
+ *   - New messages, prior risk       → evaluation with prior risk in the
+ *                                      prompt so Gemini can decide whether
+ *                                      it has been resolved, escalated,
+ *                                      replaced, or is still active.
  */
 export async function evaluateChatRisk(
-  chatId: string, featureName: string, rioToken: string,
+  chatId: string,
+  featureName: string,
+  rioToken: string,
+  prior?: PriorChatRisk,
 ): Promise<ChatRiskFinding> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) return { level: 'none', summary: '' };
+  if (!apiKey) {
+    // If we don't have Gemini, we can still carry the prior risk forward.
+    return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
+  }
 
   // Pull messages — newest first per readChatMessages contract.
   let messages: ChatMessage[] = [];
@@ -859,9 +888,20 @@ export async function evaluateChatRisk(
     messages = await readChatMessages(chatId, Date.now() - CHAT_RISK_WINDOW_MS, rioToken);
   } catch (e) {
     console.warn(`[digests] chat read failed for ${featureName}:`, e);
+    // Read failed: don't lose a prior risk just because we couldn't read.
+    return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
+  }
+
+  // No new chatter — carry the prior risk forward unchanged. Skip Gemini.
+  if (messages.length === 0) {
+    if (prior) {
+      console.log(
+        `[digests] Gemini chat risk for "${featureName}" (0 msgs/24h, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
+      );
+      return { level: prior.level, summary: prior.summary };
+    }
     return { level: 'none', summary: '' };
   }
-  if (messages.length === 0) return { level: 'none', summary: '' };
 
   // Format chronologically (oldest first), strip out Lark text JSON wrapper.
   const formatted = messages
@@ -879,9 +919,26 @@ export async function evaluateChatRisk(
     })
     .filter(Boolean)
     .join('\n');
-  if (!formatted) return { level: 'none', summary: '' };
+  if (!formatted) {
+    return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
+  }
 
-  const prompt = `You are reviewing the last 24 hours of messages from a TikTok PM team chat for the feature "${featureName}". Decide whether any message indicates a NEW risk to the feature's progress, timeline, or successful launch.
+  // Build the prompt — different intro depending on whether there's a prior
+  // risk to evaluate against.
+  const priorBlock = prior
+    ? `A previously detected risk is currently being tracked for this feature:
+  Level:   ${prior.level}
+  Summary: "${prior.summary}"
+  Raised:  ${prior.raisedAtIso.slice(0, 10)}
+
+Your job is to decide what the CURRENT risk situation is, given both the prior risk and the new messages below:
+- If the new messages clearly resolve the prior risk and no new risk has surfaced → "none"
+- If the prior risk is still relevant (or hasn't been touched) → carry it forward (re-state the same level + a short summary)
+- If the new messages confirm or worsen the prior risk → escalate (bump level and update the summary)
+- If a new unrelated risk has been raised → replace the prior summary with the new one (use whichever level fits)
+
+Be conservative about clearing a risk: only return "none" if there is clear evidence the issue is resolved. Silence does NOT mean resolution.`
+    : `Decide whether any of the messages below indicate a risk to the feature's progress, timeline, or successful launch.
 
 A "risk" is something a team member has called out that may delay, block, or compromise the feature. Examples that count as risk:
 - Tech owner says they need more time or won't hit the deadline
@@ -893,7 +950,11 @@ Do NOT flag as a risk:
 - Routine status updates ("PRD updated", "merged X")
 - Open questions still being discussed
 - Risks that have already been resolved in the same conversation
-- Off-topic or social conversation
+- Off-topic or social conversation`;
+
+  const prompt = `You are reviewing the last 24 hours of messages from a TikTok PM team chat for the feature "${featureName}".
+
+${priorBlock}
 
 Messages (oldest first):
 ${formatted}
@@ -901,7 +962,7 @@ ${formatted}
 Respond with ONLY a single JSON object on one line, no markdown fences:
 {"level":"none"|"yellow"|"red","summary":"<short clause, max 12 words, lowercase, no trailing period; empty string when level is none>"}
 
-Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky was called out.`;
+Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -918,14 +979,16 @@ Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing r
     const summary = (parsed.summary ?? '').trim();
     // Log the parsed result on one line so Cloud Run doesn't split the
     // multiline raw response into separate entries.
+    const priorTag = prior ? `, prior=${prior.level}` : '';
     console.log(
-      `[digests] Gemini chat risk for "${featureName}" (${messages.length} msgs/24h): ${JSON.stringify({ level, summary })}`,
+      `[digests] Gemini chat risk for "${featureName}" (${messages.length} msgs/24h${priorTag}): ${JSON.stringify({ level, summary })}`,
     );
     if (level === 'none') return { level, summary: '' };
     return { level, summary };
   } catch (e) {
     console.warn(`[digests] Gemini chat risk eval failed for ${featureName}:`, e);
-    return { level: 'none', summary: '' };
+    // Gemini failed — fall back to carrying the prior risk if any.
+    return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
   }
 }
 
@@ -1292,13 +1355,45 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // over the last 24h of chat messages via Gemini 2.5 Flash Lite. The chat
   // risk is folded into the same RiskFinding so it appears alongside the
   // deadline / staleness / PRD reasons in the card.
+  //
+  // Persisted state: a prior chat risk for a feature (from the last digest
+  // run) is loaded from GCS and passed to Gemini so it can carry forward,
+  // escalate, replace, or clear the existing risk based on the latest
+  // 24h of messages. After the loop runs, the updated state is written
+  // back to GCS.
+  const riskState = await loadChatRiskState();
+  console.log(`[digests] loaded chat-risk state with ${Object.keys(riskState.features).length} prior entries`);
+
   const riskFindings: RiskFinding[] = [];
   for (const feature of inDev) {
     try {
       const finding = await evaluateFeatureRisk(feature);
 
       if (feature.chatId && botToken) {
-        const chatRisk = await evaluateChatRisk(feature.chatId, feature.name, botToken);
+        const prior = riskState.features[feature.workItemId];
+        const chatRisk = await evaluateChatRisk(
+          feature.chatId,
+          feature.name,
+          botToken,
+          prior ? { level: prior.level, summary: prior.summary, raisedAtIso: prior.raisedAtIso } : undefined,
+        );
+
+        // Update state: store / carry / clear based on the latest finding.
+        if (chatRisk.level === 'none') {
+          // Cleared — drop any prior entry.
+          delete riskState.features[feature.workItemId];
+        } else {
+          const nowIso = new Date().toISOString();
+          const next: PersistedChatRisk = {
+            name: feature.name,
+            level: chatRisk.level,
+            summary: chatRisk.summary,
+            raisedAtIso: prior?.raisedAtIso ?? nowIso,
+            lastSeenIso: nowIso,
+          };
+          riskState.features[feature.workItemId] = next;
+        }
+
         if (chatRisk.level !== 'none') {
           finding.reasons.push(chatRisk.summary || 'risk called out in chat');
           finding.level = maxLevel([finding.level, chatRisk.level]);
@@ -1310,6 +1405,16 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       console.warn(`[digests] risk eval failed for ${feature.name}:`, e);
     }
   }
+
+  // Step 4b: Save the updated chat-risk state. Drop entries for features
+  // that are no longer in the in-dev set, plus a hard 14-day max age cap.
+  const inDevIds = new Set(inDev.map(f => f.workItemId));
+  const exited = dropExitedFeatures(riskState, inDevIds);
+  if (exited.length > 0) console.log(`[digests] dropped ${exited.length} exited features from chat-risk state: ${exited.join(', ')}`);
+  const stale = pruneStaleRisks(riskState);
+  if (stale.length > 0) console.log(`[digests] pruned ${stale.length} stale entries from chat-risk state: ${stale.join(', ')}`);
+  await saveChatRiskState(riskState);
+  console.log(`[digests] saved chat-risk state with ${Object.keys(riskState.features).length} active entries`);
   const severityOrder: Record<RiskLevel, number> = { red: 0, yellow: 1, green: 2 };
   riskFindings.sort((a, b) => severityOrder[a.level] - severityOrder[b.level]);
 
