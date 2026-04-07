@@ -94,11 +94,12 @@ export interface MeegoFeature {
   iosVersion?: string;
   // Pipeline kind controls how the deadline is resolved + displayed:
   //   'mobile' → uses iOS/Android version + merge calendar code freeze date
-  //   'server' → uses the Server开发 (state_43) node Schedule end date
+  //   'server' → uses the "Server Planned Launch Date" Meego field
   pipelineKind?: 'mobile' | 'server';
-  // Expected end of server development for server-only features (ISO YYYY-MM-DD).
-  // Sourced from the Schedule field on the Server开发 (state_43) node.
-  serverEndDate?: string;
+  // Server planned launch date for server-only features (ISO YYYY-MM-DD).
+  // Sourced from the "Server Planned Launch Date" form item — looked up by
+  // its stable Meego field key.
+  serverPlannedLaunchDate?: string;
   lastUpdatedIso?: string;          // YYYY-MM-DD
   prd?: string;
   priority?: string;                // e.g. 'P0', 'P1'
@@ -147,8 +148,8 @@ export interface DigestRunResult {
  * Mobile dev (state_41 / state_42) takes priority for risk evaluation: a
  * feature with both mobile AND server dev active is treated as a mobile
  * feature and uses the merge-calendar code freeze date. Only features whose
- * sole active dev stage is server dev fall back to the Server Schedule's
- * expected end date.
+ * sole active dev stage is server dev fall back to the "Server Planned
+ * Launch Date" field.
  *
  * Using IDs (not Chinese names) so the filter keeps working if Meego renames
  * statuses.
@@ -521,39 +522,27 @@ async function resolveIosVersion(meegoUrl: string): Promise<string> {
   return shortNames[0];
 }
 
-// ─── Server schedule end date resolution ─────────────────────────────────
+// ─── Server planned launch date resolution ───────────────────────────────
 
 /**
- * Known field keys for the Server开发 (state_43) "Schedule" / "排期" form item.
- * Discovered from a live fetch — field_key is the literal string "schedule",
- * field_name is "排期". The lookup still has a name-based fallback in case the
- * key shifts, but this is the stable ID we want to use first.
+ * Known field keys for the "Server Planned Launch Date" form item across any
+ * Meego node. Add IDs here as they're discovered. The lookup falls back to a
+ * name-based search and logs the discovered key so new IDs can be promoted
+ * to this list after a single deploy.
  */
-const SERVER_SCHEDULE_FIELD_KEYS: string[] = ['schedule'];
+const SERVER_PLANNED_LAUNCH_FIELD_KEYS: string[] = [];
 
 /**
- * Pull a YYYY-MM-DD end date out of a raw Schedule field value. Schedule
- * fields in Meego come back in a few different shapes:
- *   - `{"start_time": <ms|seconds|iso>, "end_time": <…>}`
- *   - `{"begin_time": …, "end_time": …}`
- *   - `[<start>, <end>]`
- * We accept all of them defensively because the docs aren't precise about
- * the exact value format per field type.
+ * Pull a YYYY-MM-DD date out of a raw Meego field value. Date fields come
+ * back in several shapes: ISO strings, timestamps in seconds or milliseconds,
+ * or wrapped objects like `{iso_time, timestamp}`. We accept all defensively.
  */
-function extractEndDateFromScheduleValue(rawValue: string): string {
+function extractDateFromValue(rawValue: string): string {
   if (!rawValue) return '';
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawValue);
-  } catch {
-    // Not JSON — try to find a YYYY-MM-DD inline as a last resort.
-    const matches = rawValue.match(/\d{4}-\d{2}-\d{2}/g);
-    return matches ? matches[matches.length - 1] : '';
-  }
 
   function toIso(value: unknown): string {
     if (typeof value === 'number' && value > 0) {
-      const ms = value > 1e12 ? value : value * 1000; // assume seconds < 1e12
+      const ms = value > 1e12 ? value : value * 1000; // assume seconds when < 1e12
       const d = new Date(ms);
       if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
     }
@@ -565,41 +554,43 @@ function extractEndDateFromScheduleValue(rawValue: string): string {
     }
     if (value && typeof value === 'object') {
       const obj = value as Record<string, unknown>;
-      // Some Meego fields wrap the timestamp like {iso_time: '...', timestamp: 17xxxx}
       if (typeof obj.iso_time === 'string') return toIso(obj.iso_time);
       if (typeof obj.timestamp === 'number') return toIso(obj.timestamp);
+      // Date-range objects: pick the start, since the field itself is meant
+      // to represent a single launch date — anything else is conservative.
+      const single =
+        (typeof obj.value === 'number' || typeof obj.value === 'string') ? obj.value : null;
+      if (single !== null) return toIso(single);
     }
     return '';
   }
 
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    const obj = parsed as Record<string, unknown>;
-    const candidates = [
-      obj.end_time, obj.finish_time, obj.expected_end_time, obj.due_time, obj.end,
-    ];
-    for (const c of candidates) {
-      const iso = toIso(c);
-      if (iso) return iso;
-    }
-  }
+  // Try plain JSON first.
+  try {
+    const parsed = JSON.parse(rawValue);
+    const iso = toIso(parsed);
+    if (iso) return iso;
+  } catch { /* not JSON, fall through */ }
 
-  if (Array.isArray(parsed) && parsed.length >= 2) {
-    return toIso(parsed[1]);
-  }
-
-  return '';
+  // Plain string fallback.
+  return toIso(rawValue);
 }
 
 /**
- * Resolve the expected server-development end date for a feature whose only
- * active dev stage is Server开发 (state_43). The Schedule field lives on the
- * state_43 node form items; we look it up by known field key first, then by
- * a name match (`schedule`/`排期`) and log the discovered field key so it can
- * be promoted to the hard-coded list.
+ * Resolve the "Server Planned Launch Date" for a server-only feature.
+ *
+ * The field is a node-level form item — we don't yet know which node, so we
+ * walk every node returned by `get_node_detail` looking for it. Lookup
+ * order:
+ *   1. Known stable field keys (SERVER_PLANNED_LAUNCH_FIELD_KEYS)
+ *   2. Name match: any of "Server Planned Launch Date", "服务端预计上线日期",
+ *      similar variants
+ * The discovered field key + node key + raw value are logged on first hit so
+ * we can promote the key to the hard-coded list.
  *
  * Returns ISO YYYY-MM-DD or empty string when nothing usable is found.
  */
-async function resolveServerEndDate(meegoUrl: string): Promise<string> {
+async function resolveServerPlannedLaunchDate(meegoUrl: string): Promise<string> {
   let nodeRaw: string;
   try {
     nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
@@ -616,45 +607,48 @@ async function resolveServerEndDate(meegoUrl: string): Promise<string> {
     return '';
   }
 
-  // Find the Server开发 (state_43) node entry.
-  const serverNode = (nodeData.list ?? []).find(n => n.basic?.node_key === SERVER_DEV_NODE_ID);
-  if (!serverNode) return '';
-  const items = serverNode.form_items ?? [];
-
-  // 1) Lookup by known schedule field key.
-  let scheduleItem: NodeFormItem | undefined;
-  for (const fi of items) {
-    if (fi.field_key && SERVER_SCHEDULE_FIELD_KEYS.includes(fi.field_key)) {
-      scheduleItem = fi;
-      break;
-    }
-  }
-
-  // 2) Fallback: match by field_name. Log the discovered key so we can
-  // promote it to SERVER_SCHEDULE_FIELD_KEYS in a follow-up commit.
-  if (!scheduleItem) {
-    for (const fi of items) {
-      const name = (fi.field_name ?? '').toLowerCase().trim();
-      const alias = (fi.field_alias ?? '').toLowerCase().trim();
-      if (name === 'schedule' || alias === 'schedule' || /排期/.test(fi.field_name ?? '')) {
-        scheduleItem = fi;
-        console.log(
-          `[digests] discovered Server Schedule field key=${fi.field_key} name=${fi.field_name} value=${(fi.value ?? '').slice(0, 200)}`,
-        );
-        break;
+  // 1) Lookup by known stable field key, walking every node.
+  for (const node of nodeData.list ?? []) {
+    for (const fi of node.form_items ?? []) {
+      if (fi.field_key && SERVER_PLANNED_LAUNCH_FIELD_KEYS.includes(fi.field_key)) {
+        const iso = extractDateFromValue(fi.value ?? '');
+        if (iso) return iso;
       }
     }
   }
 
-  if (!scheduleItem) {
-    // Log all form item names so we can identify the right field offline if
-    // none of the heuristics matched.
-    const summary = items.map(i => `${i.field_key ?? '?'}=${i.field_name ?? '?'}`).join('; ');
-    console.log(`[digests] no Server Schedule field found on state_43; available form items: ${summary}`);
-    return '';
+  // 2) Fallback: name match. Lots of variants supported because we're not
+  // yet sure exactly how the field is labelled.
+  const NAME_RE = /server\s*planned\s*launch\s*date|服务端\s*预计\s*上线\s*日期|服务端\s*计划\s*上线|server\s*launch\s*date/i;
+  for (const node of nodeData.list ?? []) {
+    for (const fi of node.form_items ?? []) {
+      const name = fi.field_name ?? '';
+      const alias = fi.field_alias ?? '';
+      if (NAME_RE.test(name) || NAME_RE.test(alias)) {
+        console.log(
+          `[digests] discovered Server Planned Launch Date field on node=${node.basic?.node_key} key=${fi.field_key} name=${fi.field_name} value=${(fi.value ?? '').slice(0, 200)}`,
+        );
+        const iso = extractDateFromValue(fi.value ?? '');
+        if (iso) return iso;
+        // Found the field but value is empty — return empty so the missing-
+        // schedule risk fires downstream.
+        return '';
+      }
+    }
   }
 
-  return extractEndDateFromScheduleValue(scheduleItem.value ?? '');
+  // No match anywhere — log every form item name across every node so we can
+  // pick the right one offline.
+  const summary = (nodeData.list ?? [])
+    .map(n => {
+      const items = (n.form_items ?? [])
+        .map(i => `${i.field_key ?? '?'}=${i.field_name ?? '?'}`)
+        .join(', ');
+      return `${n.basic?.node_key ?? '?'}[${items}]`;
+    })
+    .join(' | ');
+  console.log(`[digests] no Server Planned Launch Date field found; available nodes/fields: ${summary}`);
+  return '';
 }
 
 // ─── Feature discovery via list_todo + MQL (raw Chinese statuses) ─────────
@@ -787,9 +781,9 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
   const levels: RiskLevel[] = [];
 
   // Deadline pressure. Mobile features use the merge calendar code freeze
-  // date for their planned version; server-only features use the expected
-  // end date from the Server Schedule on the state_43 node. The "not yet in
-  // QA" check is implicit — if dev is still active, QA can't have started.
+  // date for their planned version; server-only features use the "Server
+  // Planned Launch Date" field. The "not yet in QA" check is implicit — if
+  // dev is still active, QA can't have started.
   if (feature.pipelineKind === 'mobile' && feature.iosVersion) {
     const freezeDate = await getCodeFreezeDate(feature.iosVersion);
     if (freezeDate) {
@@ -803,23 +797,23 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
       }
     }
   } else if (feature.pipelineKind === 'server') {
-    if (feature.serverEndDate) {
-      const endDate = new Date(feature.serverEndDate);
-      if (!isNaN(endDate.getTime())) {
-        const days = businessDaysUntil(endDate);
-        const display = formatFreezeDate(endDate);
+    if (feature.serverPlannedLaunchDate) {
+      const launchDate = new Date(feature.serverPlannedLaunchDate);
+      if (!isNaN(launchDate.getTime())) {
+        const days = businessDaysUntil(launchDate);
+        const display = formatFreezeDate(launchDate);
         if (days <= 2) {
-          reasons.push(`Server scheduled to finish in ${days} business day${days === 1 ? '' : 's'} but dev still in progress (target: ${display})`);
+          reasons.push(`Server planned to launch in ${days} business day${days === 1 ? '' : 's'} but dev still in progress (target: ${display})`);
           levels.push('red');
         } else if (days <= 5) {
-          reasons.push(`Server scheduled to finish in ${days} business days with dev still in progress (target: ${display})`);
+          reasons.push(`Server planned to launch in ${days} business days with dev still in progress (target: ${display})`);
           levels.push('yellow');
         }
       }
     } else {
-      // No schedule entered on the Server开发 node — surface as a yellow
-      // risk so the PM nudges the server team to fill it in.
-      reasons.push('Server schedule not set on Server开发 node');
+      // No planned launch date on the work item — surface as a yellow risk
+      // so the PM nudges the server team to fill it in.
+      reasons.push('Server planned launch date not set');
       levels.push('yellow');
     }
   }
@@ -942,7 +936,7 @@ async function buildFeatureSectionContent(finding: RiskFinding): Promise<string>
   lines.push(`**Status:** ${statusLabel}`);
 
   // Deadline display: mobile features show their planned version + code freeze
-  // date; server-only features show the Server Schedule end date.
+  // date; server-only features show the Server Planned Launch Date.
   if (f.pipelineKind === 'mobile' && f.iosVersion) {
     let versionText = f.iosVersion;
     try {
@@ -950,10 +944,10 @@ async function buildFeatureSectionContent(finding: RiskFinding): Promise<string>
       if (freeze) versionText = `${f.iosVersion} (${formatFreezeDate(freeze)})`;
     } catch { /* fall back to plain version */ }
     lines.push(`**Version:** ${escapeMd(versionText)}`);
-  } else if (f.pipelineKind === 'server' && f.serverEndDate) {
-    const endDate = new Date(f.serverEndDate);
-    if (!isNaN(endDate.getTime())) {
-      lines.push(`**Server end:** ${formatFreezeDate(endDate)}`);
+  } else if (f.pipelineKind === 'server' && f.serverPlannedLaunchDate) {
+    const launchDate = new Date(f.serverPlannedLaunchDate);
+    if (!isNaN(launchDate.getTime())) {
+      lines.push(`**Planned launch:** ${formatFreezeDate(launchDate)}`);
     }
   }
 
@@ -1157,15 +1151,15 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
 
   // Step 3b: Resolve the deadline source per pipeline kind. Mobile features
   // need their planned iOS/Android version (used to look up the merge
-  // calendar code freeze date); server-only features need the Server Schedule
-  // end date from the state_43 node. Both calls are expensive so only run
-  // after the in-dev filter.
+  // calendar code freeze date); server-only features need the "Server Planned
+  // Launch Date" Meego field. Both calls are expensive so only run after
+  // the in-dev filter.
   for (const f of inDev) {
     try {
       if (f.pipelineKind === 'mobile') {
         f.iosVersion = await resolveIosVersion(f.meegoUrl);
       } else if (f.pipelineKind === 'server') {
-        f.serverEndDate = await resolveServerEndDate(f.meegoUrl);
+        f.serverPlannedLaunchDate = await resolveServerPlannedLaunchDate(f.meegoUrl);
       }
       await new Promise(r => setTimeout(r, 300));
     } catch (e) {
@@ -1173,9 +1167,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     }
   }
   const resolvedMobile = inDev.filter(f => f.pipelineKind === 'mobile' && f.iosVersion).length;
-  const resolvedServer = inDev.filter(f => f.pipelineKind === 'server' && f.serverEndDate).length;
+  const resolvedServer = inDev.filter(f => f.pipelineKind === 'server' && f.serverPlannedLaunchDate).length;
   console.log(
-    `[digests] resolved iOS version ${resolvedMobile}/${mobileCount}, server end date ${resolvedServer}/${serverCount}`,
+    `[digests] resolved iOS version ${resolvedMobile}/${mobileCount}, server launch date ${resolvedServer}/${serverCount}`,
   );
 
   // Step 4: Evaluate risk
