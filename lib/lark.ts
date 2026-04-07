@@ -594,9 +594,22 @@ async function resolveDocId(url: string): Promise<string> {
  */
 export async function readDocContent(docUrl: string): Promise<string> {
   const docId = await resolveDocId(docUrl);
+  console.log(`[readDocContent] resolved docId=${docId} from url=${docUrl}`);
 
   const token  = await getAccessToken();
   const blocks = await getDocBlocks(docId, token);
+  console.log(`[readDocContent] got ${blocks.length} blocks`);
+
+  // Distribution of block_type values (for diagnosing docs that return zero text)
+  const typeCounts = new Map<number, number>();
+  let withText = 0;
+  for (const b of blocks) {
+    typeCounts.set(b.block_type, (typeCounts.get(b.block_type) ?? 0) + 1);
+    if (blockText(b).trim()) withText++;
+  }
+  console.log(
+    `[readDocContent] block_type counts: ${[...typeCounts.entries()].map(([t, n]) => `${t}:${n}`).join(', ')}, ${withText} have text`,
+  );
 
   const lines: string[] = [];
   for (const b of blocks) {

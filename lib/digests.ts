@@ -707,12 +707,14 @@ function levelDisplay(level: RiskLevel): { emoji: string; label: string } {
 }
 
 /**
- * Escape Lark `lark_md` special characters (`*`, `_`, `~`, `` ` ``, `[`, `]`)
- * in user-supplied text so a feature name containing e.g. `*` doesn't break
- * the card layout.
+ * Escape lark_md formatting markers in user-supplied text. We only escape
+ * `*` and `_` (bold/italic) because Lark's lark_md parser doesn't reliably
+ * strip backslashes in front of other chars — so escaping `[` renders as a
+ * literal `\[` in the card. Square brackets are safe as long as they aren't
+ * followed by a `(url)` clause, which is unlikely in feature names.
  */
 function escapeMd(text: string): string {
-  return text.replace(/([\\*_~`\[\]])/g, '\\$1');
+  return text.replace(/([*_])/g, '\\$1');
 }
 
 /**
