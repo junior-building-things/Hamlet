@@ -40,6 +40,16 @@ async function getAccessToken(): Promise<string> {
   return cachedToken;
 }
 
+/**
+ * Public accessor for the main Lark app's tenant access token. Used by the
+ * digest pipeline (which lives outside this file) to call chat search /
+ * message read endpoints with the same scopes the rest of the codebase
+ * relies on. Cached + refreshed by the same logic as getAccessToken.
+ */
+export async function getLarkBotToken(): Promise<string> {
+  return getAccessToken();
+}
+
 // ─── Root folder cache ────────────────────────────────────────────────────────
 
 let cachedRootFolder    = '';

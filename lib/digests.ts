@@ -6,6 +6,7 @@ import {
   sendTextMessage,
   sendInteractiveCardToChat,
   joinFeatureChat,
+  getLarkBotToken,
   ChatMessage,
   CardSection,
   CardHeaderTemplate,
@@ -845,9 +846,12 @@ export interface ChatRiskFinding {
  * Gemini 2.5 Flash Lite to detect whether a team member has called out a
  * risk to the feature's progress. Returns the risk level + a short summary
  * suitable for embedding into the daily risk digest.
+ *
+ * Uses the main Lark bot token (not Rio) because the read endpoint needs
+ * `im:message:read` scope which is granted to the main app.
  */
 export async function evaluateChatRisk(
-  chatId: string, featureName: string, rioToken: string,
+  chatId: string, featureName: string, botToken: string,
 ): Promise<ChatRiskFinding> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) return { level: 'none', summary: '' };
@@ -855,7 +859,7 @@ export async function evaluateChatRisk(
   // Pull messages — newest first per readChatMessages contract.
   let messages: ChatMessage[] = [];
   try {
-    messages = await readChatMessages(chatId, Date.now() - CHAT_RISK_WINDOW_MS, rioToken);
+    messages = await readChatMessages(chatId, Date.now() - CHAT_RISK_WINDOW_MS, botToken);
   } catch (e) {
     console.warn(`[digests] chat read failed for ${featureName}:`, e);
     return { level: 'none', summary: '' };
@@ -1247,22 +1251,30 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     `[digests] resolved iOS version ${resolvedMobile}/${mobileCount}, server launch date ${resolvedServer}/${serverCount}`,
   );
 
-  // Step 3c: Get Rio token early — needed for both chat lookups (Step 3d) and
-  // sending the digest itself (Step 7).
+  // Step 3c: Get tokens early.
+  //   - Rio token is needed to send the final digest card (Step 7).
+  //   - The main Lark bot token has the chat-search + message-read scopes
+  //     and is already a member of the feature group chats, so use it for
+  //     chat lookups (Step 3d) and qualitative chat-risk reads (Step 4).
   let rioToken = '';
   try {
     rioToken = await getAgentToken('rio');
   } catch (e) {
     console.warn('[digests] failed to get Rio token:', e);
   }
+  let botToken = '';
+  try {
+    botToken = await getLarkBotToken();
+  } catch (e) {
+    console.warn('[digests] failed to get Lark bot token:', e);
+  }
 
-  // Step 3d: Resolve each in-dev feature's Lark chat ID. We pass Rio's token
-  // to joinFeatureChat so the search runs against chats Rio is a member of
-  // (Rio is the bot we'll use to read messages from those chats below).
-  if (rioToken) {
+  // Step 3d: Resolve each in-dev feature's Lark chat ID via the main Lark
+  // bot (which has im:chat:read scope and is already in the feature chats).
+  if (botToken) {
     for (const f of inDev) {
       try {
-        const chatId = await joinFeatureChat(f.name, rioToken, f.meegoUrl, true);
+        const chatId = await joinFeatureChat(f.name, undefined, f.meegoUrl, true);
         if (chatId) f.chatId = chatId;
       } catch (e) {
         console.warn(`[digests] chat lookup failed for ${f.name}:`, e);
@@ -1281,8 +1293,8 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     try {
       const finding = await evaluateFeatureRisk(feature);
 
-      if (feature.chatId && rioToken) {
-        const chatRisk = await evaluateChatRisk(feature.chatId, feature.name, rioToken);
+      if (feature.chatId && botToken) {
+        const chatRisk = await evaluateChatRisk(feature.chatId, feature.name, botToken);
         if (chatRisk.level !== 'none') {
           finding.reasons.push(chatRisk.summary || 'risk called out in chat');
           finding.level = maxLevel([finding.level, chatRisk.level]);
