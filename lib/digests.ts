@@ -1,9 +1,11 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Feature } from './types';
 import {
   readChatMessages,
   resolveOpenIds,
   sendTextMessage,
   sendInteractiveCardToChat,
+  joinFeatureChat,
   ChatMessage,
   CardSection,
   CardHeaderTemplate,
@@ -823,6 +825,104 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
   return { level, reasons, feature };
 }
 
+// ─── Qualitative chat risk (Gemini 2.5 Flash Lite) ────────────────────────
+
+/**
+ * Hard cap on how many of the most-recent messages we hand to Gemini per
+ * feature. Keeps the prompt size predictable and the model fast even if a
+ * very chatty group has hundreds of messages in 24h.
+ */
+const CHAT_RISK_MAX_MESSAGES = 80;
+const CHAT_RISK_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export interface ChatRiskFinding {
+  level: 'none' | 'yellow' | 'red';
+  summary: string;
+}
+
+/**
+ * Read the last 24h of messages in a feature's Meego group chat and use
+ * Gemini 2.5 Flash Lite to detect whether a team member has called out a
+ * risk to the feature's progress. Returns the risk level + a short summary
+ * suitable for embedding into the daily risk digest.
+ */
+export async function evaluateChatRisk(
+  chatId: string, featureName: string, rioToken: string,
+): Promise<ChatRiskFinding> {
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey) return { level: 'none', summary: '' };
+
+  // Pull messages — newest first per readChatMessages contract.
+  let messages: ChatMessage[] = [];
+  try {
+    messages = await readChatMessages(chatId, Date.now() - CHAT_RISK_WINDOW_MS, rioToken);
+  } catch (e) {
+    console.warn(`[digests] chat read failed for ${featureName}:`, e);
+    return { level: 'none', summary: '' };
+  }
+  if (messages.length === 0) return { level: 'none', summary: '' };
+
+  // Format chronologically (oldest first), strip out Lark text JSON wrapper.
+  const formatted = messages
+    .slice(0, CHAT_RISK_MAX_MESSAGES)
+    .reverse()
+    .map(m => {
+      let text = '';
+      try {
+        const parsed = JSON.parse(m.body?.content ?? '{}') as { text?: string };
+        text = parsed.text ?? '';
+      } catch {
+        text = m.body?.content ?? '';
+      }
+      return text.trim();
+    })
+    .filter(Boolean)
+    .join('\n');
+  if (!formatted) return { level: 'none', summary: '' };
+
+  const prompt = `You are reviewing the last 24 hours of messages from a TikTok PM team chat for the feature "${featureName}". Decide whether any message indicates a NEW risk to the feature's progress, timeline, or successful launch.
+
+A "risk" is something a team member has called out that may delay, block, or compromise the feature. Examples that count as risk:
+- Tech owner says they need more time or won't hit the deadline
+- An unresolved blocker or dependency slipping
+- Quality concerns, scope creep, or readiness doubts
+- Anyone explicitly saying "this is at risk", "we may not make it", or similar
+
+Do NOT flag as a risk:
+- Routine status updates ("PRD updated", "merged X")
+- Open questions still being discussed
+- Risks that have already been resolved in the same conversation
+- Off-topic or social conversation
+
+Messages (oldest first):
+${formatted}
+
+Respond with ONLY a single JSON object on one line, no markdown fences:
+{"level":"none"|"yellow"|"red","summary":"<short clause, max 12 words, lowercase, no trailing period; empty string when level is none>"}
+
+Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky was called out.`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim();
+    // Strip optional ```json fences if Gemini ignored the instruction
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+    const parsed = JSON.parse(cleaned) as { level?: string; summary?: string };
+    const level: ChatRiskFinding['level'] =
+      parsed.level === 'red' ? 'red' :
+      parsed.level === 'yellow' ? 'yellow' :
+      'none';
+    const summary = (parsed.summary ?? '').trim();
+    if (level === 'none') return { level, summary: '' };
+    return { level, summary };
+  } catch (e) {
+    console.warn(`[digests] Gemini chat risk eval failed for ${featureName}:`, e);
+    return { level: 'none', summary: '' };
+  }
+}
+
 // ─── Status bucketing for the card-style digest ──────────────────────────
 
 /**
@@ -1147,11 +1247,48 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     `[digests] resolved iOS version ${resolvedMobile}/${mobileCount}, server launch date ${resolvedServer}/${serverCount}`,
   );
 
-  // Step 4: Evaluate risk
+  // Step 3c: Get Rio token early — needed for both chat lookups (Step 3d) and
+  // sending the digest itself (Step 7).
+  let rioToken = '';
+  try {
+    rioToken = await getAgentToken('rio');
+  } catch (e) {
+    console.warn('[digests] failed to get Rio token:', e);
+  }
+
+  // Step 3d: Resolve each in-dev feature's Lark chat ID. We pass Rio's token
+  // to joinFeatureChat so the search runs against chats Rio is a member of
+  // (Rio is the bot we'll use to read messages from those chats below).
+  if (rioToken) {
+    for (const f of inDev) {
+      try {
+        const chatId = await joinFeatureChat(f.name, rioToken, f.meegoUrl, true);
+        if (chatId) f.chatId = chatId;
+      } catch (e) {
+        console.warn(`[digests] chat lookup failed for ${f.name}:`, e);
+      }
+    }
+    const resolvedChats = inDev.filter(f => f.chatId).length;
+    console.log(`[digests] resolved Lark chat for ${resolvedChats}/${inDev.length} in-dev features`);
+  }
+
+  // Step 4: Evaluate risk — Meego signals first, then a qualitative pass
+  // over the last 24h of chat messages via Gemini 2.5 Flash Lite. The chat
+  // risk is folded into the same RiskFinding so it appears alongside the
+  // deadline / staleness / PRD reasons in the card.
   const riskFindings: RiskFinding[] = [];
   for (const feature of inDev) {
     try {
       const finding = await evaluateFeatureRisk(feature);
+
+      if (feature.chatId && rioToken) {
+        const chatRisk = await evaluateChatRisk(feature.chatId, feature.name, rioToken);
+        if (chatRisk.level !== 'none') {
+          finding.reasons.push(chatRisk.summary || 'risk called out in chat');
+          finding.level = maxLevel([finding.level, chatRisk.level]);
+        }
+      }
+
       riskFindings.push(finding);
     } catch (e) {
       console.warn(`[digests] risk eval failed for ${feature.name}:`, e);
@@ -1160,19 +1297,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   const severityOrder: Record<RiskLevel, number> = { red: 0, yellow: 1, green: 2 };
   riskFindings.sort((a, b) => severityOrder[a.level] - severityOrder[b.level]);
 
-  // Step 5: Get Rio token for DM delivery + chat reads
-  let rioToken = '';
-  try {
-    rioToken = await getAgentToken('rio');
-  } catch (e) {
-    console.warn('[digests] failed to get Rio token:', e);
-  }
-
   // Step 6: Collect unanswered questions
-  // NOTE: feature.chatId is not resolved in this raw pipeline (we don't have
-  // chat lookup here). For v1 we skip unanswered checks since we don't know
-  // which Lark chat corresponds to each feature without going through Hamlet.
-  // TODO: resolve chatId via lark chat search or by adding it to fetchMeegoFeature.
+  // NOTE: chatId is now resolved in Step 3d, so this could be enabled — but
+  // for the current run we still skip until the unanswered Q&A flow is
+  // wired up to use it.
   const unansweredFindings: UnansweredFinding[] = [];
 
   // Step 7: Send risk digest (always) — interactive card with per-feature
