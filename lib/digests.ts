@@ -1281,13 +1281,33 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Previously DM'd to OWNER_EMAIL; now posted to the PM group chat.
   const targetChatId = PM_GROUP_CHAT_ID;
 
-  // Discovery probe (TEMPORARY): call get_workitem_op_record on the test
-  // feature so we can see the response shape (timestamps, field name format,
-  // before/after values). Remove once we've implemented the parser.
+  // Discovery probe (TEMPORARY): call get_workitem_op_record on a feature
+  // that's been around long enough to have real field modifications, so we
+  // can see what version + planned-launch-date changes actually look like.
+  // Filter the records down to entries that touch fields we care about.
   try {
-    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/7074054514`;
+    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6740389019`; // AI Self in Mix Studio
     const sample = await callMeegoMcp('get_workitem_op_record', { url: probeUrl });
-    console.log(`[digests] op_record probe (thomas test) length=${sample.length}, sample: ${sample.slice(0, 1500)}`);
+    interface OpRecord {
+      operation_type?: string;
+      operation_time?: number;
+      record_contents?: Array<{
+        object?: { object_type?: string; object_value?: string };
+        object_property?: string;
+        old?: unknown;
+        new?: unknown;
+      }>;
+    }
+    const parsed = JSON.parse(sample) as { has_more?: boolean; total?: number; op_records?: OpRecord[] };
+    const records = parsed.op_records ?? [];
+    const fieldRecords = records.filter(r =>
+      (r.record_contents ?? []).some(c =>
+        c.object?.object_type === 'field' ||
+        (typeof c.object_property === 'string' && /field_|version|launch|date/i.test(c.object_property)),
+      ),
+    );
+    console.log(`[digests] op_record AI Self probe: ${records.length} records, has_more=${parsed.has_more}, ${fieldRecords.length} touching fields`);
+    console.log(`[digests] op_record AI Self field records sample: ${JSON.stringify(fieldRecords.slice(0, 3)).slice(0, 1500)}`);
   } catch (e) {
     console.warn('[digests] op_record probe failed:', e);
   }
