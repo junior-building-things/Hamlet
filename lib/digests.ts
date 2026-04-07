@@ -1281,33 +1281,47 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Previously DM'd to OWNER_EMAIL; now posted to the PM group chat.
   const targetChatId = PM_GROUP_CHAT_ID;
 
-  // Discovery probe (TEMPORARY): call get_workitem_op_record on a feature
-  // that's been around long enough to have real field modifications, so we
-  // can see what version + planned-launch-date changes actually look like.
-  // Filter the records down to entries that touch fields we care about.
+  // Discovery probe (TEMPORARY): walk every page of get_workitem_op_record
+  // for the test feature and dump records that touch field_cde888 (Server
+  // Planned Launch Date) or field_08a9ca (iOS version), plus any node_mod
+  // entries on qa_test_preparation. Helps us see what the launch-date edit
+  // actually looks like end-to-end so we can write a parser.
   try {
-    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6740389019`; // AI Self in Mix Studio
-    const sample = await callMeegoMcp('get_workitem_op_record', { url: probeUrl });
     interface OpRecord {
       operation_type?: string;
       operation_time?: number;
+      op_record_module?: string;
+      operator?: string;
       record_contents?: Array<{
         object?: { object_type?: string; object_value?: string };
-        object_property?: string;
+        object_property?: string | null;
         old?: unknown;
         new?: unknown;
       }>;
     }
-    const parsed = JSON.parse(sample) as { has_more?: boolean; total?: number; op_records?: OpRecord[] };
-    const records = parsed.op_records ?? [];
-    const fieldRecords = records.filter(r =>
-      (r.record_contents ?? []).some(c =>
-        c.object?.object_type === 'field' ||
-        (typeof c.object_property === 'string' && /field_|version|launch|date/i.test(c.object_property)),
-      ),
+    interface OpRecordPage { has_more?: boolean; start_from?: string; total?: number; op_records?: OpRecord[] }
+    async function fetchAllOp(url: string): Promise<OpRecord[]> {
+      const all: OpRecord[] = [];
+      let startFrom: string | undefined;
+      for (let page = 0; page < 10; page++) {
+        const args: Record<string, unknown> = { url };
+        if (startFrom) args.start_from = startFrom;
+        const raw = await callMeegoMcp('get_workitem_op_record', args);
+        const parsed = JSON.parse(raw) as OpRecordPage;
+        all.push(...(parsed.op_records ?? []));
+        if (!parsed.has_more || !parsed.start_from) break;
+        startFrom = parsed.start_from;
+      }
+      return all;
+    }
+    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/7074054514`; // thomas test
+    const records = await fetchAllOp(probeUrl);
+    const targetFieldKeys = new Set(['field_cde888', 'field_08a9ca', 'field_c88970']);
+    const fieldHits = records.filter(r =>
+      (r.record_contents ?? []).some(c => c.object?.object_value && targetFieldKeys.has(c.object.object_value)),
     );
-    console.log(`[digests] op_record AI Self probe: ${records.length} records, has_more=${parsed.has_more}, ${fieldRecords.length} touching fields`);
-    console.log(`[digests] op_record AI Self field records sample: ${JSON.stringify(fieldRecords.slice(0, 3)).slice(0, 1500)}`);
+    console.log(`[digests] op_record thomas test: ${records.length} total records, ${fieldHits.length} touching target fields`);
+    console.log(`[digests] op_record thomas test field hits: ${JSON.stringify(fieldHits).slice(0, 2500)}`);
   } catch (e) {
     console.warn('[digests] op_record probe failed:', e);
   }
