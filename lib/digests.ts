@@ -1,5 +1,15 @@
 import { Feature } from './types';
-import { readChatMessages, resolveOpenIds, sendDmByEmail, sendPostDmByEmail, ChatMessage, PostParagraph, PostInline } from './lark';
+import {
+  readChatMessages,
+  resolveOpenIds,
+  sendTextMessage,
+  sendInteractiveCardToChat,
+  ChatMessage,
+  CardSection,
+  CardButton,
+  CardHeaderTemplate,
+  PM_GROUP_CHAT_ID,
+} from './lark';
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
 
@@ -85,6 +95,7 @@ export interface MeegoFeature {
   iosVersion?: string;
   lastUpdatedIso?: string;          // YYYY-MM-DD
   prd?: string;
+  priority?: string;                // e.g. 'P0', 'P1'
   roles: Record<string, string[]>;  // keyed by role key (e.g. 'Tech_Owner'), NOT name
   roleDisplayNames: Record<string, string>; // role key → display name (for formatting)
   roleEmails: Record<string, string>;
@@ -256,6 +267,23 @@ function getStringField(fields: BriefField[] | undefined, key: string): string {
   return '';
 }
 
+/**
+ * Get a select-option field's display label. Priority comes back as either a
+ * plain string or a `{ value, label }` object depending on the field type;
+ * we prefer label for user-facing text.
+ */
+function getLabelField(fields: BriefField[] | undefined, key: string): string {
+  const v = getField(fields, key);
+  if (typeof v === 'string') return v;
+  if (v && typeof v === 'object') {
+    const obj = v as Record<string, unknown>;
+    if (typeof obj.label === 'string') return obj.label;
+    if (typeof obj.name === 'string') return obj.name;
+    if (typeof obj.value === 'string') return obj.value;
+  }
+  return '';
+}
+
 /** Get the ISO date string from a timestamp field like start_time. */
 function getDateField(fields: BriefField[] | undefined, key: string): string {
   const v = getField(fields, key);
@@ -361,6 +389,7 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
   // Extract PRD, updated time, etc. from the typed work_item_fields array
   const prd = getStringField(fields, 'wiki');
   const lastUpdatedIso = getDateField(fields, 'updated_at') || getDateField(fields, 'start_time');
+  const priority = getLabelField(fields, 'priority');
 
   const { roles, roleDisplayNames, emails: roleEmails } = parseRolesFromJson(json);
   const activeNodeOwnerEmails = pickedNode?.owners ?? '';
@@ -377,6 +406,7 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
     iosVersion: undefined,  // resolved later for in-dev features only
     lastUpdatedIso,
     prd: prd || undefined,
+    priority: priority || undefined,
     roles,
     roleDisplayNames,
     roleEmails,
@@ -676,53 +706,40 @@ function levelDisplay(level: RiskLevel): { emoji: string; label: string } {
   return { emoji: '🟢', label: 'Low' };
 }
 
-/** Build a `* Key: value` paragraph as a single text inline element. */
-function bullet(key: string, value: string): PostParagraph {
-  return [{ tag: 'text', text: `* ${key}: ${value}` }];
-}
-
-/** Build the header paragraph for one feature card with clickable PRD/Meego links. */
-function buildHeaderParagraph(f: MeegoFeature, level: RiskLevel): PostParagraph {
-  const { emoji } = levelDisplay(level);
-  const parts: PostInline[] = [
-    { tag: 'text', text: `${emoji} ${f.name} (` },
-  ];
-
-  const links: PostInline[] = [];
-  if (f.prd) links.push({ tag: 'a', text: 'PRD', href: f.prd });
-  links.push({ tag: 'a', text: 'Meego', href: f.meegoUrl });
-
-  for (let i = 0; i < links.length; i++) {
-    if (i > 0) parts.push({ tag: 'text', text: ', ' });
-    parts.push(links[i]);
-  }
-  parts.push({ tag: 'text', text: ')' });
-  return parts;
+/**
+ * Escape Lark `lark_md` special characters (`*`, `_`, `~`, `` ` ``, `[`, `]`)
+ * in user-supplied text so a feature name containing e.g. `*` doesn't break
+ * the card layout.
+ */
+function escapeMd(text: string): string {
+  return text.replace(/([\\*_~`\[\]])/g, '\\$1');
 }
 
 /**
- * Build a single feature's card as a list of post paragraphs, e.g.:
- *
- *   🟢 Feature Name (PRD, Meego)
- *   * Tech Owner: Kyle Chan, Hao Sun
- *   * Status: In Development
- *   * Version: 44.9 (16 Apr)
- *   * Risk: Low
- *   <blank line>
+ * Build the lark_md content block for one feature in the risk digest card.
+ * Uses bold for the feature name and a bullet list for the details.
  */
-async function buildFeatureCard(finding: RiskFinding): Promise<PostParagraph[]> {
+async function buildFeatureSectionContent(finding: RiskFinding): Promise<string> {
   const f = finding.feature;
-  const paragraphs: PostParagraph[] = [];
+  const { emoji, label } = levelDisplay(finding.level);
 
-  // Header line: emoji + name + (PRD, Meego)
-  paragraphs.push(buildHeaderParagraph(f, finding.level));
+  const lines: string[] = [];
+  // Bold header with coloured dot + feature name
+  lines.push(`**${emoji} ${escapeMd(f.name)}**`);
 
-  // Tech Owner — show only if at least one is set
+  // Priority (if known)
+  if (f.priority) {
+    lines.push(`**Priority:** ${escapeMd(f.priority)}`);
+  }
+
+  // Tech Owner — only if populated
   const techOwners = (f.roles['Tech_Owner'] ?? []).join(', ');
-  if (techOwners) paragraphs.push(bullet('Tech Owner', techOwners));
+  if (techOwners) {
+    lines.push(`**Tech Owner:** ${escapeMd(techOwners)}`);
+  }
 
-  // Status (generic bucket)
-  paragraphs.push(bullet('Status', bucketStatus(f.currentNodeId, f.overallStatusKey)));
+  // Generic status bucket
+  lines.push(`**Status:** ${bucketStatus(f.currentNodeId, f.overallStatusKey)}`);
 
   // Version + freeze date
   if (f.iosVersion) {
@@ -731,29 +748,33 @@ async function buildFeatureCard(finding: RiskFinding): Promise<PostParagraph[]> 
       const freeze = await getCodeFreezeDate(f.iosVersion);
       if (freeze) versionText = `${f.iosVersion} (${formatFreezeDate(freeze)})`;
     } catch { /* fall back to plain version */ }
-    paragraphs.push(bullet('Version', versionText));
+    lines.push(`**Version:** ${escapeMd(versionText)}`);
   }
 
-  // Risk: Level (reasons in parens if any)
-  const { label } = levelDisplay(finding.level);
+  // Risk: level with reasons in parens if any
   const riskValue = finding.reasons.length > 0
-    ? `${label} (${finding.reasons.join(', ')})`
+    ? `${label} (${finding.reasons.map(escapeMd).join(', ')})`
     : label;
-  paragraphs.push(bullet('Risk', riskValue));
+  lines.push(`**Risk:** ${riskValue}`);
 
-  // Visual separator between cards. Lark rejects empty paragraph arrays
-  // (`invalid message content`), so use a single non-empty text element.
-  paragraphs.push([{ tag: 'text', text: ' ' }]);
-
-  return paragraphs;
+  return lines.join('\n');
 }
 
 /**
- * Build the full risk digest as a Lark `post` message — title plus all
- * paragraphs across every card. Cards are ordered red → yellow → green so
- * the highest-risk items appear first.
+ * Build the full risk digest as a Lark interactive card. Each feature is a
+ * section with its own buttons (Open in Meego + Open PRD), separated by
+ * horizontal rules. The card header is always red because this is a risk
+ * assessment message — individual feature risk is conveyed by the emoji
+ * dot in each section header.
+ *
+ * Cards are ordered red → yellow → green so the highest-risk items appear
+ * first.
  */
-export async function buildRiskDigestPost(findings: RiskFinding[]): Promise<{ title: string; paragraphs: PostParagraph[] }> {
+export async function buildRiskDigestCard(findings: RiskFinding[]): Promise<{
+  title: string;
+  template: CardHeaderTemplate;
+  sections: CardSection[];
+}> {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
   });
@@ -764,18 +785,31 @@ export async function buildRiskDigestPost(findings: RiskFinding[]): Promise<{ ti
     return order[a.level] - order[b.level];
   });
 
-  const paragraphs: PostParagraph[] = [];
+  // Header colour reflects the highest risk found in the digest.
+  const topLevel: RiskLevel = sorted[0]?.level ?? 'green';
+  const template: CardHeaderTemplate =
+    topLevel === 'red' ? 'red' :
+    topLevel === 'yellow' ? 'orange' :
+    'green';
+
+  const sections: CardSection[] = [];
   if (sorted.length === 0) {
-    paragraphs.push([{ tag: 'text', text: 'No features currently in development.' }]);
-    return { title, paragraphs };
+    sections.push({ content: 'No features currently in development.' });
+    return { title, template, sections };
   }
 
   for (const finding of sorted) {
-    const card = await buildFeatureCard(finding);
-    paragraphs.push(...card);
+    const content = await buildFeatureSectionContent(finding);
+    const buttons: CardButton[] = [
+      { text: 'Open in Meego', url: finding.feature.meegoUrl, type: 'primary' },
+    ];
+    if (finding.feature.prd) {
+      buttons.push({ text: 'Open PRD', url: finding.feature.prd, type: 'default' });
+    }
+    sections.push({ content, buttons });
   }
 
-  return { title, paragraphs };
+  return { title, template, sections };
 }
 
 // ─── Unanswered Q&A check (Task 5) ─────────────────────────────────────────
@@ -879,8 +913,9 @@ export function formatUnansweredDigest(findings: UnansweredFinding[]): string {
 // ─── Main orchestrator ─────────────────────────────────────────────────────
 
 export async function runDailyDigests(): Promise<DigestRunResult> {
-  const ownerEmail = process.env.OWNER_EMAIL;
-  if (!ownerEmail) throw new Error('OWNER_EMAIL not configured');
+  // Destination for both the risk digest and the unanswered Q&A digest.
+  // Previously DM'd to OWNER_EMAIL; now posted to the PM group chat.
+  const targetChatId = PM_GROUP_CHAT_ID;
 
   // Step 1: Discover all PM-owned work items
   const allIds = await fetchAllPmOwnedIds(TIKTOK_PROJECT_KEY);
@@ -953,23 +988,26 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // TODO: resolve chatId via lark chat search or by adding it to fetchMeegoFeature.
   const unansweredFindings: UnansweredFinding[] = [];
 
-  // Step 7: Send risk digest (always) — card-style rich text post
+  // Step 7: Send risk digest (always) — interactive card with per-feature
+  // buttons, posted to the PM group chat.
   let riskSent = false;
   if (rioToken) {
-    const post = await buildRiskDigestPost(riskFindings);
-    // Log a flat-text preview for debugging — only the first inline element of each paragraph
-    const preview = [post.title, ...post.paragraphs.map(p => p.map(el => el.tag === 'text' ? el.text : el.text).join(''))].join('\n');
+    const card = await buildRiskDigestCard(riskFindings);
+    const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
     console.log('[digests] risk digest:\n' + preview);
-    const id = await sendPostDmByEmail(ownerEmail, post.title, post.paragraphs, rioToken);
+    const id = await sendInteractiveCardToChat(
+      targetChatId, card.title, card.template, card.sections, rioToken,
+    );
     riskSent = id !== null;
   }
 
-  // Step 8: Send unanswered digest (only if content)
+  // Step 8: Send unanswered digest (only if content) — plain text to the PM
+  // group chat, same destination as the risk digest.
   let unansweredSent = false;
   if (rioToken && unansweredFindings.length > 0) {
     const text = formatUnansweredDigest(unansweredFindings);
     console.log('[digests] unanswered digest:\n' + text);
-    const id = await sendDmByEmail(ownerEmail, text, rioToken);
+    const id = await sendTextMessage(targetChatId, text, rioToken);
     unansweredSent = id !== null;
   } else {
     console.log(`[digests] no unanswered questions — skipping Q&A digest`);

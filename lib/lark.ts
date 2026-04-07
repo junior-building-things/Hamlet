@@ -1326,7 +1326,7 @@ export async function getPackageQrUrl(chatId: string): Promise<PackageResult | n
 
 // ─── Send feature card to PM group chat ──────────────────────────────────────
 
-const PM_GROUP_CHAT_ID = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
+export const PM_GROUP_CHAT_ID = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
 
 /**
  * Send an interactive card message to the PM group chat announcing a new feature.
@@ -1532,6 +1532,50 @@ export type PostInline =
 export type PostParagraph = PostInline[];
 
 /**
+ * Build the content string for a Lark `post` message.
+ * There is NO outer "post" wrapper — the content is keyed directly by locale.
+ * Chinese-region Lark tenants (TikTok) want `zh_cn`.
+ */
+function buildPostContent(title: string, paragraphs: PostParagraph[]): string {
+  return JSON.stringify({
+    zh_cn: {
+      title,
+      content: paragraphs,
+    },
+  });
+}
+
+async function sendPostInternal(
+  receiveIdType: 'email' | 'chat_id',
+  receiveId: string,
+  title: string,
+  paragraphs: PostParagraph[],
+  token: string,
+  label: string,
+): Promise<string | null> {
+  const content = buildPostContent(title, paragraphs);
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        receive_id: receiveId,
+        msg_type: 'post',
+        content,
+      }),
+    },
+  );
+  const data = await parseJson(res, `send_post_${label}`) as { code: number; msg?: string; data?: { message_id?: string } };
+  if (data.code !== 0) {
+    console.warn(`[lark] send post (${label}) failed:`, data.code, data.msg);
+    console.warn(`[lark] send post (${label}) payload preview:`, content.slice(0, 1500));
+    return null;
+  }
+  return data.data?.message_id ?? null;
+}
+
+/**
  * Send a 1:1 DM to a user by enterprise email as a Lark `post` (rich text)
  * message. Supports inline hyperlinks via {tag:'a', text, href} elements,
  * which is required for rendering clickable PRD/Meego links in the daily
@@ -1540,33 +1584,110 @@ export type PostParagraph = PostInline[];
 export async function sendPostDmByEmail(
   email: string, title: string, paragraphs: PostParagraph[], token: string,
 ): Promise<string | null> {
-  // Post message content for `im.v1.messages.send` is keyed directly by locale —
-  // there is NO outer "post" wrapper. Chinese-region Lark tenants want `zh_cn`.
-  const content = {
-    zh_cn: {
-      title,
-      content: paragraphs,
+  return sendPostInternal('email', email, title, paragraphs, token, 'dm');
+}
+
+/**
+ * Send a Lark `post` (rich text) message to a group chat by chat_id.
+ * Same paragraph format as sendPostDmByEmail — supports inline clickable
+ * hyperlinks via {tag:'a', text, href}.
+ */
+export async function sendPostToChat(
+  chatId: string, title: string, paragraphs: PostParagraph[], token: string,
+): Promise<string | null> {
+  return sendPostInternal('chat_id', chatId, title, paragraphs, token, 'chat');
+}
+
+// ─── Interactive cards ─────────────────────────────────────────────────────
+
+/**
+ * Supported header colour templates for Lark interactive cards. Maps the risk
+ * tier colours used in the daily digest to Lark's named palette.
+ */
+export type CardHeaderTemplate =
+  | 'blue' | 'wathet' | 'turquoise' | 'green' | 'yellow' | 'orange'
+  | 'red' | 'carmine' | 'violet' | 'purple' | 'indigo' | 'grey';
+
+export interface CardButton {
+  text: string;
+  url: string;
+  type: 'primary' | 'default' | 'danger';
+}
+
+/**
+ * One section inside a multi-section interactive card. Each section renders
+ * as a `div` block (lark_md content) followed by an optional row of action
+ * buttons. Sections are separated by a horizontal rule in the card body.
+ */
+export interface CardSection {
+  content: string;           // lark_md content for the div block
+  buttons?: CardButton[];    // optional action buttons under this section
+}
+
+/**
+ * Send a Lark interactive card message to a group chat. Each section
+ * becomes `<div><action><hr>` in the card body, letting us pack multiple
+ * per-feature blocks (with their own link buttons) into a single message.
+ *
+ * `title` is shown in the coloured card header, `template` controls the
+ * header colour.
+ */
+export async function sendInteractiveCardToChat(
+  chatId: string,
+  title: string,
+  template: CardHeaderTemplate,
+  sections: CardSection[],
+  token: string,
+): Promise<string | null> {
+  const elements: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < sections.length; i++) {
+    const s = sections[i];
+    elements.push({
+      tag: 'div',
+      text: { tag: 'lark_md', content: s.content },
+    });
+    if (s.buttons && s.buttons.length > 0) {
+      elements.push({
+        tag: 'action',
+        actions: s.buttons.map(b => ({
+          tag: 'button',
+          text: { tag: 'plain_text', content: b.text },
+          url: b.url,
+          type: b.type,
+        })),
+      });
+    }
+    if (i < sections.length - 1) {
+      elements.push({ tag: 'hr' });
+    }
+  }
+
+  const card = {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: title },
+      template,
     },
+    elements,
   };
 
+  const content = JSON.stringify(card);
   const res = await fetch(
-    `${LARK_BASE_URL}/open-apis/im/v1/messages?receive_id_type=email`,
+    `${LARK_BASE_URL}/open-apis/im/v1/messages?receive_id_type=chat_id`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        receive_id: email,
-        msg_type: 'post',
-        content: JSON.stringify(content),
+        receive_id: chatId,
+        msg_type: 'interactive',
+        content,
       }),
     },
   );
-  const data = await parseJson(res, 'send_post_dm') as { code: number; msg?: string; data?: { message_id?: string } };
+  const data = await parseJson(res, 'send_card') as { code: number; msg?: string; data?: { message_id?: string } };
   if (data.code !== 0) {
-    console.warn('[lark] send post DM failed:', data.code, data.msg);
-    // Dump the content payload (truncated) so we can iterate on the structure
-    const contentStr = JSON.stringify(content);
-    console.warn('[lark] send post DM payload preview:', contentStr.slice(0, 1500));
+    console.warn('[lark] send interactive card failed:', data.code, data.msg);
+    console.warn('[lark] card payload preview:', content.slice(0, 1500));
     return null;
   }
   return data.data?.message_id ?? null;
