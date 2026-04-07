@@ -221,7 +221,7 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
   try {
     raw = await callMeegoMcp('get_workitem_brief', {
       url: meegoUrl,
-      fields: ['wiki', 'priority', 'field_due3fb', 'created_at'],
+      fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'created_at'],
     });
   } catch (e) {
     console.warn(`[digests] failed to fetch brief for ${name}:`, e);
@@ -229,6 +229,10 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
   }
 
   const activeNodes = parseActiveNodes(raw);
+  if (activeNodes.length === 0) {
+    // Log a preview so we can see what the response actually looks like
+    console.log(`[digests] no active nodes parsed for ${name}. Raw preview: ${raw.slice(0, 400)}`);
+  }
   const rawStatus = pickActiveNode(activeNodes.map(n => n.name));
   const prd = parseWorkItemField(raw, 'PRD');
   const lastUpdatedIso = parseUpdatedIso(raw);
