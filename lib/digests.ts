@@ -282,11 +282,16 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
     ? parseActiveNodesFromJson(parsedJson)
     : parseActiveNodes(raw);
 
+  // Targeted debug for one specific work item to understand the raw response shape
+  if (workItemId === '3347640118') {
+    console.log(`[digests] DEBUG ${workItemId} activeNodes:`, JSON.stringify(activeNodes));
+    console.log(`[digests] DEBUG ${workItemId} raw (first 3000 chars):`, raw.slice(0, 3000));
+  }
+
   if (activeNodes.length === 0) {
     // One-time dump of the JSON keys so we can see where active nodes actually live
     const sample = parsedJson ? Object.keys(parsedJson).join(',') : 'not JSON';
     console.log(`[digests] no active nodes parsed for ${name}. Top-level keys: ${sample}`);
-    console.log(`[digests] raw preview: ${raw.slice(0, 800)}`);
   }
   const rawStatus = pickActiveNode(activeNodes.map(n => n.name));
   const prd = parseWorkItemField(raw, 'PRD');
