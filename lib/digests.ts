@@ -37,19 +37,23 @@ export type RiskLevel = 'red' | 'yellow' | 'green';
 
 /**
  * Raw-from-Meego feature metadata used by the digest pipeline.
- * Statuses are in the original language returned by Meego (Chinese for TikTok).
+ * IDs are the source of truth (stable across renames); display names are cached
+ * for formatting the digest text.
  */
 export interface MeegoFeature {
   workItemId: string;
   name: string;
   meegoUrl: string;
-  rawStatus: string;                // e.g. 'iOS 开发' — raw Chinese node name, no translation
+  overallStatusKey: string;         // e.g. 'end', 'scheduled', 'in_experiment'
+  overallStatusName: string;        // e.g. '已完成', '开发中', '实验中'
+  currentNodeId: string;            // e.g. 'state_41', 'PM_acceptance' (picked node)
+  currentNodeName: string;          // e.g. 'iOS 开发', 'PM验收' (picked node display name)
   chatId?: string;
   iosVersion?: string;
   lastUpdatedIso?: string;          // YYYY-MM-DD
   prd?: string;
-  roles: Record<string, string[]>;  // role name → list of stakeholder display names
-  roleEmails: Record<string, string>; // display name → email (for resolving open_ids)
+  roles: Record<string, string[]>;
+  roleEmails: Record<string, string>;
   activeNodeOwnerEmails: string;
 }
 
@@ -80,48 +84,82 @@ export interface DigestRunResult {
   unansweredFindings: UnansweredFinding[];
 }
 
-// ─── Status sets (raw Chinese from Meego) ─────────────────────────────────
+// ─── Status filters (by Meego ID, not name) ──────────────────────────────
 
 /**
- * Raw Chinese node names that mean the feature is NOT actively in development.
- * Everything else is treated as in-dev. Source of truth: lib/meego.ts NODE_PRIORITY + NODE_TRANSLATIONS.
+ * Overall work_item_status.key values that mean the feature is NOT in dev.
+ * These come from the top-level work_item_attribute.work_item_status.key field.
+ * Using IDs (not Chinese names) so the filter keeps working if Meego renames statuses.
  */
-const NOT_IN_DEV_RAW = new Set<string>([
-  // Pre-dev
-  '产品需求准备',   // Requirements Prep
-  '产品线内初评',   // Initial Review
-  '依赖判断',      // Dependency Check
-  '合规评估',      // Compliance Review
-  // Post-dev
-  'PM验收',        // PM Acceptance
-  'PM走查',        // PM Walkthrough
-  '结束',          // Done / End
-  '已完成',        // Done (overall status name)
+const NOT_IN_DEV_OVERALL_KEYS = new Set<string>([
+  'end',       // 已完成 — Done
 ]);
 
-function isInDev(rawStatus: string): boolean {
-  if (!rawStatus) return false;
-  return !NOT_IN_DEV_RAW.has(rawStatus);
+/**
+ * Node IDs that mean the feature is outside the active dev window (either
+ * pre-dev preparation or post-dev acceptance). Compared against the `id`
+ * field of entries in `work_item_current_node`.
+ */
+const NOT_IN_DEV_NODE_IDS = new Set<string>([
+  // Post-dev acceptance stages
+  'PM_acceptance',  // PM验收 — PM Acceptance
+  'UAT_UIUX',       // UI&UX验收 — UI/UX Acceptance
+  // Pre-dev preparation stages (extend as we encounter more IDs)
+  // 'state_61',   // 依赖判断 — Dependency Check — keeping in dev for now
+]);
+
+/**
+ * Node IDs where QA has effectively started — used to scope the
+ * "not in QA yet" freeze-pressure risk checks.
+ */
+const QA_OR_LATER_NODE_IDS = new Set<string>([
+  'qa_test_preparation',  // QA测试准备
+  'state_34',             // 自动化测试 — Automated Testing
+  'UAT_UIUX',             // UI&UX验收
+  'launch_ab',            // AB实验
+  'PM_acceptance',        // PM验收
+]);
+
+function isInDev(overallKey: string, pickedNodeId: string): boolean {
+  if (NOT_IN_DEV_OVERALL_KEYS.has(overallKey)) return false;
+  if (pickedNodeId && NOT_IN_DEV_NODE_IDS.has(pickedNodeId)) return false;
+  return true;
 }
 
-/**
- * Raw Chinese node names that mean QA has effectively started.
- * Used to scope "not in QA yet" freeze-pressure risk checks.
- */
-const QA_OR_LATER_RAW = new Set<string>([
-  'QA测试',         // QA Testing
-  'QA功能测试',     // QA Functional Testing
-  'QA测试准备',     // QA Test Preparation
-  'UI&UX验收',      // UI/UX Acceptance
-  'AB实验',         // AB Testing
-  '结束',           // Done / End
-]);
+function isQaOrLater(pickedNodeId: string): boolean {
+  return QA_OR_LATER_NODE_IDS.has(pickedNodeId);
+}
 
 // ─── Node priority (for picking the most-advanced active node) ────────────
 
-// If a feature has multiple in-progress nodes, we pick the earliest in the
-// workflow as the "current" one. Matches lib/meego.ts NODE_PRIORITY.
-const NODE_PRIORITY = [
+/**
+ * Node ID priority — the earliest matching ID is considered the "current" stage
+ * when a feature has multiple active nodes. Add more IDs as we encounter them.
+ */
+const NODE_ID_PRIORITY = [
+  // Pre-dev
+  'state_61',              // 依赖判断 — Dependency Check
+  // Tech / design stages
+  'state_1',               // 内容设计&Starling提交
+  'privacy_info_register', // 隐私技术信息登记
+  'ios_review_risk_check', // iOS审核风险排查
+  // Dev stages
+  'state_41',              // iOS 开发
+  'state_42',              // Android 开发
+  'state_43',              // Server 开发
+  'state_34',              // 自动化测试
+  'qa_test_preparation',   // QA测试准备
+  // Post-dev
+  'UAT_UIUX',              // UI&UX验收
+  'launch_ab',             // AB实验
+  'PM_acceptance',         // PM验收
+];
+
+/**
+ * Fallback name priority for nodes whose IDs aren't in NODE_ID_PRIORITY yet.
+ * Matches lib/meego.ts NODE_PRIORITY.
+ */
+const NODE_NAME_PRIORITY = [
   '产品需求准备',
   '产品线内初评',
   '技术评估&排优',
@@ -141,12 +179,18 @@ const NODE_PRIORITY = [
   '结束',
 ];
 
-function pickActiveNode(names: string[]): string {
-  if (names.length === 0) return '';
-  return names.slice().sort((a, b) => {
-    const ia = NODE_PRIORITY.indexOf(a);
-    const ib = NODE_PRIORITY.indexOf(b);
-    return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+/** Pick the earliest active node from a list, preferring node IDs, falling back to names. */
+function pickActiveNode(nodes: ParsedActiveNode[]): ParsedActiveNode | null {
+  if (nodes.length === 0) return null;
+  return nodes.slice().sort((a, b) => {
+    const ia = NODE_ID_PRIORITY.indexOf(a.key);
+    const ib = NODE_ID_PRIORITY.indexOf(b.key);
+    if (ia !== -1 || ib !== -1) {
+      return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+    }
+    const na = NODE_NAME_PRIORITY.indexOf(a.name);
+    const nb = NODE_NAME_PRIORITY.indexOf(b.name);
+    return (na === -1 ? Infinity : na) - (nb === -1 ? Infinity : nb);
   })[0];
 }
 
@@ -251,26 +295,11 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
     return null;
   }
 
-  // Check overall status first — if the feature is done, use that directly.
-  // The `work_item_current_node` array may still contain leftover nodes after a
-  // feature completes (e.g. a finished feature with PM验收 / UI&UX验收 still listed).
   const overall = parseOverallStatus(json);
   const activeNodes = parseActiveNodesFromJson(json);
-  const currentNodeStatus = pickActiveNode(activeNodes.map(n => n.name));
-
-  // If the overall status is `end` (已完成) treat the feature as done regardless of
-  // any leftover current_node entries. Otherwise use the picked current node name.
-  const rawStatus = overall.key === 'end' ? overall.name : (currentNodeStatus || overall.name);
-
-  // Debug dump for the specific work item the user asked about
-  if (workItemId === '3347640118') {
-    console.log(`[digests] DEBUG ${workItemId} overall:`, JSON.stringify(overall));
-    console.log(`[digests] DEBUG ${workItemId} activeNodes:`, JSON.stringify(activeNodes));
-    console.log(`[digests] DEBUG ${workItemId} final rawStatus:`, rawStatus);
-  }
+  const pickedNode = pickActiveNode(activeNodes);
 
   // PRD and lastUpdated aren't in the typed JSON schema — try to parse from the raw string
-  // (the brief includes markdown tables for work item fields alongside the JSON in some cases)
   const prd = parseWorkItemField(raw, 'PRD');
   const updatedStr = parseWorkItemField(raw, '更新时间');
   let lastUpdatedIso = '';
@@ -280,13 +309,16 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
   }
 
   const { roles, emails: roleEmails } = parseRolesFromJson(json);
-  const activeNodeOwnerEmails = activeNodes.find(n => n.name === currentNodeStatus)?.owners ?? '';
+  const activeNodeOwnerEmails = pickedNode?.owners ?? '';
 
   return {
     workItemId,
     name,
     meegoUrl,
-    rawStatus,
+    overallStatusKey: overall.key,
+    overallStatusName: overall.name,
+    currentNodeId: pickedNode?.key ?? '',
+    currentNodeName: pickedNode?.name ?? '',
     iosVersion: undefined,
     lastUpdatedIso,
     prd: prd || undefined,
@@ -408,7 +440,7 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
   const reasons: string[] = [];
   const levels: RiskLevel[] = [];
 
-  const inQaOrLater = QA_OR_LATER_RAW.has(feature.rawStatus);
+  const inQaOrLater = isQaOrLater(feature.currentNodeId);
 
   // Freeze pressure — only when we know the target version
   if (feature.iosVersion) {
@@ -468,7 +500,8 @@ export function formatRiskDigest(findings: RiskFinding[]): string {
     lines.push(`🔴 High-risk (${red.length})`);
     for (const f of red) {
       const ver = f.feature.iosVersion ? `, v${f.feature.iosVersion}` : '';
-      lines.push(`• ${f.feature.name} (${f.feature.rawStatus}${ver})`);
+      const stage = f.feature.currentNodeName || f.feature.overallStatusName;
+      lines.push(`• ${f.feature.name} (${stage}${ver})`);
       for (const r of f.reasons) lines.push(`   · ${r}`);
     }
     lines.push('');
@@ -478,7 +511,8 @@ export function formatRiskDigest(findings: RiskFinding[]): string {
     lines.push(`🟡 Watch (${yellow.length})`);
     for (const f of yellow) {
       const ver = f.feature.iosVersion ? `, v${f.feature.iosVersion}` : '';
-      lines.push(`• ${f.feature.name} (${f.feature.rawStatus}${ver})`);
+      const stage = f.feature.currentNodeName || f.feature.overallStatusName;
+      lines.push(`• ${f.feature.name} (${stage}${ver})`);
       for (const r of f.reasons) lines.push(`   · ${r}`);
     }
     lines.push('');
@@ -488,7 +522,8 @@ export function formatRiskDigest(findings: RiskFinding[]): string {
     lines.push(`🟢 Healthy (${green.length})`);
     for (const f of green) {
       const ver = f.feature.iosVersion ? `, v${f.feature.iosVersion}` : '';
-      lines.push(`• ${f.feature.name} (${f.feature.rawStatus}${ver}) — on track`);
+      const stage = f.feature.currentNodeName || f.feature.overallStatusName;
+      lines.push(`• ${f.feature.name} (${stage}${ver}) — on track`);
     }
     lines.push('');
   }
@@ -580,7 +615,8 @@ export function formatUnansweredDigest(findings: UnansweredFinding[]): string {
   lines.push('');
 
   for (const finding of findings) {
-    lines.push(`${finding.feature.name} (${finding.feature.rawStatus})`);
+    const stage = finding.feature.currentNodeName || finding.feature.overallStatusName;
+    lines.push(`${finding.feature.name} (${stage})`);
     for (const q of finding.questions) {
       const time = q.timestamp > 0
         ? new Date(q.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -614,16 +650,21 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
 
-  // Log the actual raw status distribution
-  const statusCounts = new Map<string, number>();
+  // Log the actual status distribution by node ID (stable) with names for readability
+  const nodeIdCounts = new Map<string, number>();
+  const overallKeyCounts = new Map<string, number>();
   for (const f of features) {
-    statusCounts.set(f.rawStatus || '(none)', (statusCounts.get(f.rawStatus || '(none)') ?? 0) + 1);
+    const nodeLabel = f.currentNodeId || '(no current node)';
+    const overallLabel = `${f.overallStatusKey || '(none)'}(${f.overallStatusName})`;
+    nodeIdCounts.set(nodeLabel, (nodeIdCounts.get(nodeLabel) ?? 0) + 1);
+    overallKeyCounts.set(overallLabel, (overallKeyCounts.get(overallLabel) ?? 0) + 1);
   }
-  console.log(`[digests] raw status distribution: ${[...statusCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ')}`);
+  console.log(`[digests] current node ID distribution: ${[...nodeIdCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ')}`);
+  console.log(`[digests] overall status distribution: ${[...overallKeyCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ')}`);
 
-  // Step 3: Filter to in-dev features using the raw Chinese statuses
-  const inDev = features.filter(f => isInDev(f.rawStatus));
-  console.log(`[digests] ${inDev.length} features in dev (raw status)`);
+  // Step 3: Filter to in-dev features using the stable IDs (overall key + node id)
+  const inDev = features.filter(f => isInDev(f.overallStatusKey, f.currentNodeId));
+  console.log(`[digests] ${inDev.length} features in dev (after ID filter)`);
 
   // Step 4: Evaluate risk
   const riskFindings: RiskFinding[] = [];
