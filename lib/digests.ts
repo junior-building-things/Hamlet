@@ -92,6 +92,13 @@ export interface MeegoFeature {
   currentNodeName: string;          // pickedNode.name — for display
   chatId?: string;
   iosVersion?: string;
+  // Pipeline kind controls how the deadline is resolved + displayed:
+  //   'mobile' → uses iOS/Android version + merge calendar code freeze date
+  //   'server' → uses the Server开发 (state_43) node Schedule end date
+  pipelineKind?: 'mobile' | 'server';
+  // Expected end of server development for server-only features (ISO YYYY-MM-DD).
+  // Sourced from the Schedule field on the Server开发 (state_43) node.
+  serverEndDate?: string;
   lastUpdatedIso?: string;          // YYYY-MM-DD
   prd?: string;
   priority?: string;                // e.g. 'P0', 'P1'
@@ -131,21 +138,38 @@ export interface DigestRunResult {
 // ─── In-dev filter (by Meego node IDs) ───────────────────────────────────
 
 /**
- * A feature is considered "in development" ONLY if at least one of its
- * currently-active nodes is a mobile platform dev stage:
+ * A feature is considered "in development" if at least one of its currently-
+ * active nodes is a dev stage:
  *   - state_41 → iOS 开发 (iOS Dev)
  *   - state_42 → Android 开发 (Android Dev)
+ *   - state_43 → Server 开发 (Server Dev)
  *
- * Using IDs (not Chinese names) so the filter keeps working if Meego
- * renames statuses. Extend this set if more dev node IDs are discovered.
+ * Mobile dev (state_41 / state_42) takes priority for risk evaluation: a
+ * feature with both mobile AND server dev active is treated as a mobile
+ * feature and uses the merge-calendar code freeze date. Only features whose
+ * sole active dev stage is server dev fall back to the Server Schedule's
+ * expected end date.
+ *
+ * Using IDs (not Chinese names) so the filter keeps working if Meego renames
+ * statuses.
  */
-const DEV_NODE_IDS = new Set<string>([
+const MOBILE_DEV_NODE_IDS = new Set<string>([
   'state_41',  // iOS 开发
   'state_42',  // Android 开发
 ]);
+const SERVER_DEV_NODE_ID = 'state_43';
+
+const DEV_NODE_IDS = new Set<string>([...MOBILE_DEV_NODE_IDS, SERVER_DEV_NODE_ID]);
 
 function isInDev(allActiveNodeIds: string[]): boolean {
   return allActiveNodeIds.some(id => DEV_NODE_IDS.has(id));
+}
+
+/** Classify whether an in-dev feature should use the mobile or server pipeline. */
+function classifyPipelineKind(allActiveNodeIds: string[]): 'mobile' | 'server' | undefined {
+  if (allActiveNodeIds.some(id => MOBILE_DEV_NODE_IDS.has(id))) return 'mobile';
+  if (allActiveNodeIds.includes(SERVER_DEV_NODE_ID)) return 'server';
+  return undefined;
 }
 
 // ─── Node priority (for picking the most-advanced active node) ────────────
@@ -497,6 +521,142 @@ async function resolveIosVersion(meegoUrl: string): Promise<string> {
   return shortNames[0];
 }
 
+// ─── Server schedule end date resolution ─────────────────────────────────
+
+/**
+ * Known field keys for the Server开发 (state_43) "Schedule" form item, in
+ * preferred order. Add IDs here as they're discovered. The lookup also has a
+ * name-based fallback that logs the field key whenever it has to use it, so
+ * new IDs can be promoted to this list after a single deploy.
+ */
+const SERVER_SCHEDULE_FIELD_KEYS: string[] = [];
+
+/**
+ * Pull a YYYY-MM-DD end date out of a raw Schedule field value. Schedule
+ * fields in Meego come back in a few different shapes:
+ *   - `{"start_time": <ms|seconds|iso>, "end_time": <…>}`
+ *   - `{"begin_time": …, "end_time": …}`
+ *   - `[<start>, <end>]`
+ * We accept all of them defensively because the docs aren't precise about
+ * the exact value format per field type.
+ */
+function extractEndDateFromScheduleValue(rawValue: string): string {
+  if (!rawValue) return '';
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawValue);
+  } catch {
+    // Not JSON — try to find a YYYY-MM-DD inline as a last resort.
+    const matches = rawValue.match(/\d{4}-\d{2}-\d{2}/g);
+    return matches ? matches[matches.length - 1] : '';
+  }
+
+  function toIso(value: unknown): string {
+    if (typeof value === 'number' && value > 0) {
+      const ms = value > 1e12 ? value : value * 1000; // assume seconds < 1e12
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    }
+    if (typeof value === 'string') {
+      const m = value.match(/(\d{4}-\d{2}-\d{2})/);
+      if (m) return m[1];
+      const ts = Number(value);
+      if (!isNaN(ts) && ts > 0) return toIso(ts);
+    }
+    if (value && typeof value === 'object') {
+      const obj = value as Record<string, unknown>;
+      // Some Meego fields wrap the timestamp like {iso_time: '...', timestamp: 17xxxx}
+      if (typeof obj.iso_time === 'string') return toIso(obj.iso_time);
+      if (typeof obj.timestamp === 'number') return toIso(obj.timestamp);
+    }
+    return '';
+  }
+
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+    const candidates = [
+      obj.end_time, obj.finish_time, obj.expected_end_time, obj.due_time, obj.end,
+    ];
+    for (const c of candidates) {
+      const iso = toIso(c);
+      if (iso) return iso;
+    }
+  }
+
+  if (Array.isArray(parsed) && parsed.length >= 2) {
+    return toIso(parsed[1]);
+  }
+
+  return '';
+}
+
+/**
+ * Resolve the expected server-development end date for a feature whose only
+ * active dev stage is Server开发 (state_43). The Schedule field lives on the
+ * state_43 node form items; we look it up by known field key first, then by
+ * a name match (`schedule`/`排期`) and log the discovered field key so it can
+ * be promoted to the hard-coded list.
+ *
+ * Returns ISO YYYY-MM-DD or empty string when nothing usable is found.
+ */
+async function resolveServerEndDate(meegoUrl: string): Promise<string> {
+  let nodeRaw: string;
+  try {
+    nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+  } catch {
+    return '';
+  }
+
+  interface NodeFormItem { field_key?: string; field_name?: string; field_alias?: string; value?: string; value_label?: string }
+  interface NodeEntry { basic?: { node_key?: string; name?: string }; form_items?: NodeFormItem[] }
+  let nodeData: { list?: NodeEntry[] };
+  try {
+    nodeData = JSON.parse(nodeRaw) as { list?: NodeEntry[] };
+  } catch {
+    return '';
+  }
+
+  // Find the Server开发 (state_43) node entry.
+  const serverNode = (nodeData.list ?? []).find(n => n.basic?.node_key === SERVER_DEV_NODE_ID);
+  if (!serverNode) return '';
+  const items = serverNode.form_items ?? [];
+
+  // 1) Lookup by known schedule field key.
+  let scheduleItem: NodeFormItem | undefined;
+  for (const fi of items) {
+    if (fi.field_key && SERVER_SCHEDULE_FIELD_KEYS.includes(fi.field_key)) {
+      scheduleItem = fi;
+      break;
+    }
+  }
+
+  // 2) Fallback: match by field_name. Log the discovered key so we can
+  // promote it to SERVER_SCHEDULE_FIELD_KEYS in a follow-up commit.
+  if (!scheduleItem) {
+    for (const fi of items) {
+      const name = (fi.field_name ?? '').toLowerCase().trim();
+      const alias = (fi.field_alias ?? '').toLowerCase().trim();
+      if (name === 'schedule' || alias === 'schedule' || /排期/.test(fi.field_name ?? '')) {
+        scheduleItem = fi;
+        console.log(
+          `[digests] discovered Server Schedule field key=${fi.field_key} name=${fi.field_name} value=${(fi.value ?? '').slice(0, 200)}`,
+        );
+        break;
+      }
+    }
+  }
+
+  if (!scheduleItem) {
+    // Log all form item names so we can identify the right field offline if
+    // none of the heuristics matched.
+    const summary = items.map(i => `${i.field_key ?? '?'}=${i.field_name ?? '?'}`).join('; ');
+    console.log(`[digests] no Server Schedule field found on state_43; available form items: ${summary}`);
+    return '';
+  }
+
+  return extractEndDateFromScheduleValue(scheduleItem.value ?? '');
+}
+
 // ─── Feature discovery via list_todo + MQL (raw Chinese statuses) ─────────
 
 interface MeegoTodoItem {
@@ -603,19 +763,21 @@ function maxLevel(levels: RiskLevel[]): RiskLevel {
 
 // ─── Risk evaluation (Task 4) ──────────────────────────────────────────────
 
-// Role keys (stable IDs) required to exist for an in-dev feature.
-// These are the `key` values from work_item_attribute.role_members, e.g.:
-//   key="PM"         name="PM"
-//   key="Tech_Owner" name="Tech owner"
-//   key="iOS"        name="iOS"
-//   key="Android"    name="Android"
-//   key="Server"     name="Server"
-//   key="QA"         name="QA"
-const REQUIRED_ROLE_KEYS: Array<{ key: string; label: string }> = [
+// Role keys (stable IDs) required to exist for an in-dev feature, by pipeline
+// kind. Role keys are the `key` values from work_item_attribute.role_members
+// (e.g. `PM`, `Tech_Owner`, `iOS`, `Android`, `Server`, `QA`). Server-only
+// features intentionally drop iOS/Android since they don't apply.
+const REQUIRED_ROLE_KEYS_MOBILE: Array<{ key: string; label: string }> = [
   { key: 'PM',         label: 'PM' },
   { key: 'Tech_Owner', label: 'Tech Owner' },
   { key: 'iOS',        label: 'iOS' },
   { key: 'Android',    label: 'Android' },
+  { key: 'Server',     label: 'Server' },
+  { key: 'QA',         label: 'QA' },
+];
+const REQUIRED_ROLE_KEYS_SERVER: Array<{ key: string; label: string }> = [
+  { key: 'PM',         label: 'PM' },
+  { key: 'Tech_Owner', label: 'Tech Owner' },
   { key: 'Server',     label: 'Server' },
   { key: 'QA',         label: 'QA' },
 ];
@@ -624,10 +786,11 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
   const reasons: string[] = [];
   const levels: RiskLevel[] = [];
 
-  // Freeze pressure — because in-dev now means iOS or Android dev is actively
-  // in progress, any freeze approaching is a concern (the "not yet in QA" check
-  // is implicit: if dev is still active, QA can't have started).
-  if (feature.iosVersion) {
+  // Deadline pressure. Mobile features use the merge calendar code freeze
+  // date for their planned version; server-only features use the expected
+  // end date from the Server Schedule on the state_43 node. The "not yet in
+  // QA" check is implicit — if dev is still active, QA can't have started.
+  if (feature.pipelineKind === 'mobile' && feature.iosVersion) {
     const freezeDate = await getCodeFreezeDate(feature.iosVersion);
     if (freezeDate) {
       const days = businessDaysUntil(freezeDate);
@@ -636,6 +799,19 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
         levels.push('red');
       } else if (days <= 5) {
         reasons.push(`Code freeze in ${days} business days with dev still in progress (target: v${feature.iosVersion})`);
+        levels.push('yellow');
+      }
+    }
+  } else if (feature.pipelineKind === 'server' && feature.serverEndDate) {
+    const endDate = new Date(feature.serverEndDate);
+    if (!isNaN(endDate.getTime())) {
+      const days = businessDaysUntil(endDate);
+      const display = formatFreezeDate(endDate);
+      if (days <= 2) {
+        reasons.push(`Server scheduled to finish in ${days} business day${days === 1 ? '' : 's'} but dev still in progress (target: ${display})`);
+        levels.push('red');
+      } else if (days <= 5) {
+        reasons.push(`Server scheduled to finish in ${days} business days with dev still in progress (target: ${display})`);
         levels.push('yellow');
       }
     }
@@ -648,9 +824,13 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
     levels.push('red');
   }
 
-  // Missing owner check (by stable role key)
+  // Missing owner check (by stable role key) — required role list depends on
+  // pipeline kind so server-only features aren't dinged for missing iOS/Android.
+  const requiredRoles = feature.pipelineKind === 'server'
+    ? REQUIRED_ROLE_KEYS_SERVER
+    : REQUIRED_ROLE_KEYS_MOBILE;
   const missing: string[] = [];
-  for (const { key, label } of REQUIRED_ROLE_KEYS) {
+  for (const { key, label } of requiredRoles) {
     if (!feature.roles[key] || feature.roles[key].length === 0) missing.push(label);
   }
   if (missing.length > 0) {
@@ -748,17 +928,26 @@ async function buildFeatureSectionContent(finding: RiskFinding): Promise<string>
     lines.push(`**Tech Owner:** ${escapeMd(techOwners)}`);
   }
 
-  // Generic status bucket
-  lines.push(`**Status:** ${bucketStatus(f.currentNodeId, f.overallStatusKey)}`);
+  // Generic status bucket — server-only features get a more specific label.
+  const statusLabel = f.pipelineKind === 'server'
+    ? 'In Server Development'
+    : bucketStatus(f.currentNodeId, f.overallStatusKey);
+  lines.push(`**Status:** ${statusLabel}`);
 
-  // Version + freeze date
-  if (f.iosVersion) {
+  // Deadline display: mobile features show their planned version + code freeze
+  // date; server-only features show the Server Schedule end date.
+  if (f.pipelineKind === 'mobile' && f.iosVersion) {
     let versionText = f.iosVersion;
     try {
       const freeze = await getCodeFreezeDate(f.iosVersion);
       if (freeze) versionText = `${f.iosVersion} (${formatFreezeDate(freeze)})`;
     } catch { /* fall back to plain version */ }
     lines.push(`**Version:** ${escapeMd(versionText)}`);
+  } else if (f.pipelineKind === 'server' && f.serverEndDate) {
+    const endDate = new Date(f.serverEndDate);
+    if (!isNaN(endDate.getTime())) {
+      lines.push(`**Server end:** ${formatFreezeDate(endDate)}`);
+    }
   }
 
   // Risk: level with reasons in parens if any
@@ -950,20 +1139,37 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
   console.log(`[digests] active node ID counts: ${[...nodeIdCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ')}`);
 
-  // Step 3: Filter to in-dev features — ONLY if iOS or Android dev is actively running
+  // Step 3: Filter to in-dev features — iOS / Android / Server dev in progress.
+  // Mobile dev (state_41/42) takes priority; pure server-only features
+  // (state_43 with no mobile dev active) get the server-pipeline treatment.
   const inDev = features.filter(f => isInDev(f.allNodeIds));
-  console.log(`[digests] ${inDev.length} features with iOS/Android dev in progress`);
+  for (const f of inDev) f.pipelineKind = classifyPipelineKind(f.allNodeIds);
+  const mobileCount = inDev.filter(f => f.pipelineKind === 'mobile').length;
+  const serverCount = inDev.filter(f => f.pipelineKind === 'server').length;
+  console.log(`[digests] ${inDev.length} features in dev (mobile: ${mobileCount}, server-only: ${serverCount})`);
 
-  // Step 3b: Resolve iOS version for in-dev features (expensive, so only done after filtering)
+  // Step 3b: Resolve the deadline source per pipeline kind. Mobile features
+  // need their planned iOS/Android version (used to look up the merge
+  // calendar code freeze date); server-only features need the Server Schedule
+  // end date from the state_43 node. Both calls are expensive so only run
+  // after the in-dev filter.
   for (const f of inDev) {
     try {
-      f.iosVersion = await resolveIosVersion(f.meegoUrl);
+      if (f.pipelineKind === 'mobile') {
+        f.iosVersion = await resolveIosVersion(f.meegoUrl);
+      } else if (f.pipelineKind === 'server') {
+        f.serverEndDate = await resolveServerEndDate(f.meegoUrl);
+      }
       await new Promise(r => setTimeout(r, 300));
     } catch (e) {
-      console.warn(`[digests] iOS version lookup failed for ${f.name}:`, e);
+      console.warn(`[digests] deadline lookup failed for ${f.name}:`, e);
     }
   }
-  console.log(`[digests] resolved iOS version for ${inDev.filter(f => f.iosVersion).length}/${inDev.length} in-dev features`);
+  const resolvedMobile = inDev.filter(f => f.pipelineKind === 'mobile' && f.iosVersion).length;
+  const resolvedServer = inDev.filter(f => f.pipelineKind === 'server' && f.serverEndDate).length;
+  console.log(
+    `[digests] resolved iOS version ${resolvedMobile}/${mobileCount}, server end date ${resolvedServer}/${serverCount}`,
+  );
 
   // Step 4: Evaluate risk
   const riskFindings: RiskFinding[] = [];
