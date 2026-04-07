@@ -165,6 +165,50 @@ function parseActiveNodes(raw: string): ParsedActiveNode[] {
     });
 }
 
+/**
+ * Walk the get_workitem_brief JSON response looking for active nodes.
+ * The exact path isn't known yet — this function tries a few common locations.
+ */
+function parseActiveNodesFromJson(json: Record<string, unknown>): ParsedActiveNode[] {
+  const found: ParsedActiveNode[] = [];
+
+  const coerceNode = (n: unknown): ParsedActiveNode | null => {
+    if (!n || typeof n !== 'object') return null;
+    const obj = n as Record<string, unknown>;
+    const name = (obj.name ?? obj.node_name ?? obj.node_name_zh) as string | undefined;
+    const key = (obj.key ?? obj.node_key ?? obj.node_state_key ?? obj.id) as string | undefined;
+    if (!name) return null;
+    const ownersArr = (obj.owners ?? obj.assignees ?? []) as unknown[];
+    const owners = Array.isArray(ownersArr)
+      ? ownersArr.map(o => (typeof o === 'object' && o ? ((o as Record<string, unknown>).email as string ?? '') : '')).filter(Boolean).join(',')
+      : '';
+    return { key: key ?? '', name, owners };
+  };
+
+  const walk = (node: unknown, pathKey: string) => {
+    if (!node) return;
+    if (Array.isArray(node)) {
+      // If the parent key suggests this is a list of nodes, try to coerce each item
+      if (/node|stage|step|进行|active/i.test(pathKey)) {
+        for (const item of node) {
+          const coerced = coerceNode(item);
+          if (coerced) found.push(coerced);
+        }
+      }
+      for (const item of node) walk(item, pathKey);
+      return;
+    }
+    if (typeof node === 'object') {
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+        walk(v, k);
+      }
+    }
+  };
+
+  walk(json, 'root');
+  return found;
+}
+
 function parseWorkItemField(raw: string, fieldName: string): string {
   const regex = new RegExp(`\\|\\s*${fieldName}\\s*\\|\\s*([^|\\n]+?)\\s*\\|`);
   const match = raw.match(regex);
@@ -228,10 +272,21 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
     return null;
   }
 
-  const activeNodes = parseActiveNodes(raw);
+  // The MCP response is JSON — parse it and walk the tree for active nodes
+  let parsedJson: Record<string, unknown> | null = null;
+  try {
+    parsedJson = JSON.parse(raw) as Record<string, unknown>;
+  } catch { /* not JSON — fall through to legacy markdown parser */ }
+
+  const activeNodes: ParsedActiveNode[] = parsedJson
+    ? parseActiveNodesFromJson(parsedJson)
+    : parseActiveNodes(raw);
+
   if (activeNodes.length === 0) {
-    // Log a preview so we can see what the response actually looks like
-    console.log(`[digests] no active nodes parsed for ${name}. Raw preview: ${raw.slice(0, 400)}`);
+    // One-time dump of the JSON keys so we can see where active nodes actually live
+    const sample = parsedJson ? Object.keys(parsedJson).join(',') : 'not JSON';
+    console.log(`[digests] no active nodes parsed for ${name}. Top-level keys: ${sample}`);
+    console.log(`[digests] raw preview: ${raw.slice(0, 800)}`);
   }
   const rawStatus = pickActiveNode(activeNodes.map(n => n.name));
   const prd = parseWorkItemField(raw, 'PRD');
