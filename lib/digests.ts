@@ -765,25 +765,6 @@ function maxLevel(levels: RiskLevel[]): RiskLevel {
 
 // ─── Risk evaluation (Task 4) ──────────────────────────────────────────────
 
-// Role keys (stable IDs) required to exist for an in-dev feature, by pipeline
-// kind. Role keys are the `key` values from work_item_attribute.role_members
-// (e.g. `PM`, `Tech_Owner`, `iOS`, `Android`, `Server`, `QA`). Server-only
-// features intentionally drop iOS/Android since they don't apply.
-const REQUIRED_ROLE_KEYS_MOBILE: Array<{ key: string; label: string }> = [
-  { key: 'PM',         label: 'PM' },
-  { key: 'Tech_Owner', label: 'Tech Owner' },
-  { key: 'iOS',        label: 'iOS' },
-  { key: 'Android',    label: 'Android' },
-  { key: 'Server',     label: 'Server' },
-  { key: 'QA',         label: 'QA' },
-];
-const REQUIRED_ROLE_KEYS_SERVER: Array<{ key: string; label: string }> = [
-  { key: 'PM',         label: 'PM' },
-  { key: 'Tech_Owner', label: 'Tech Owner' },
-  { key: 'Server',     label: 'Server' },
-  { key: 'QA',         label: 'QA' },
-];
-
 export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFinding> {
   const reasons: string[] = [];
   const levels: RiskLevel[] = [];
@@ -831,20 +812,6 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
   if (daysStale !== null && daysStale >= 7) {
     reasons.push(`No Meego updates in ${daysStale} days`);
     levels.push('red');
-  }
-
-  // Missing owner check (by stable role key) — required role list depends on
-  // pipeline kind so server-only features aren't dinged for missing iOS/Android.
-  const requiredRoles = feature.pipelineKind === 'server'
-    ? REQUIRED_ROLE_KEYS_SERVER
-    : REQUIRED_ROLE_KEYS_MOBILE;
-  const missing: string[] = [];
-  for (const { key, label } of requiredRoles) {
-    if (!feature.roles[key] || feature.roles[key].length === 0) missing.push(label);
-  }
-  if (missing.length > 0) {
-    reasons.push(`Missing ${missing.join(', ')} owner${missing.length === 1 ? '' : 's'}`);
-    levels.push('yellow');
   }
 
   // Missing PRD
