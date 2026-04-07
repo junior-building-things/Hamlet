@@ -778,10 +778,10 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
     if (freezeDate) {
       const days = businessDaysUntil(freezeDate);
       if (days <= 2) {
-        reasons.push(`Code freeze in ${days} business day${days === 1 ? '' : 's'} but dev still in progress (target: v${feature.iosVersion})`);
+        reasons.push('QA not started, planned merge date within 2 days');
         levels.push('red');
       } else if (days <= 5) {
-        reasons.push(`Code freeze in ${days} business days with dev still in progress (target: v${feature.iosVersion})`);
+        reasons.push('QA not started, planned merge date within 5 days');
         levels.push('yellow');
       }
     }
@@ -790,12 +790,11 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
       const launchDate = new Date(feature.serverPlannedLaunchDate);
       if (!isNaN(launchDate.getTime())) {
         const days = businessDaysUntil(launchDate);
-        const display = formatFreezeDate(launchDate);
         if (days <= 2) {
-          reasons.push(`Server planned to launch in ${days} business day${days === 1 ? '' : 's'} but dev still in progress (target: ${display})`);
+          reasons.push('QA not started, planned launch date within 2 days');
           levels.push('red');
         } else if (days <= 5) {
-          reasons.push(`Server planned to launch in ${days} business days with dev still in progress (target: ${display})`);
+          reasons.push('QA not started, planned launch date within 5 days');
           levels.push('yellow');
         }
       }
