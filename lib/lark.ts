@@ -92,17 +92,53 @@ async function getWikiObjToken(accessToken: string, nodeToken = WIKI_NODE_TOKEN)
 interface TextRun     { content: string; text_element_style?: Record<string, unknown> }
 interface MentionDoc  { token?: string; url?: string; title?: string }
 interface TextElement { text_run?: TextRun; mention_doc?: MentionDoc }
+interface ElementsContainer { elements?: TextElement[] }
 interface LarkBlock {
   block_id:    string;
   block_type:  number;
   children?:   string[];
-  text?:       { elements: TextElement[] };
+  text?:       ElementsContainer;
+  heading1?:   ElementsContainer;
+  heading2?:   ElementsContainer;
+  heading3?:   ElementsContainer;
+  heading4?:   ElementsContainer;
+  heading5?:   ElementsContainer;
+  heading6?:   ElementsContainer;
+  heading7?:   ElementsContainer;
+  heading8?:   ElementsContainer;
+  heading9?:   ElementsContainer;
+  bullet?:     ElementsContainer;
+  ordered?:    ElementsContainer;
+  code?:       ElementsContainer;
+  quote?:      ElementsContainer;
+  todo?:       ElementsContainer;
+  callout?:    ElementsContainer;
   table_cell?: { row_index: number; col_index: number };
   table?:      unknown;
+  [key: string]: unknown;
 }
 
+// All block-type properties that may carry an `elements` array. Different
+// Lark docx block types store their text under different keys (heading2 under
+// `heading2.elements`, bullet items under `bullet.elements`, etc.) — not all
+// under `text.elements`. Missing these meant a doc full of headings and bullet
+// list items came back as "(empty document)".
+const TEXT_BEARING_KEYS = [
+  'text',
+  'heading1', 'heading2', 'heading3', 'heading4', 'heading5',
+  'heading6', 'heading7', 'heading8', 'heading9',
+  'bullet', 'ordered', 'code', 'quote', 'todo', 'callout',
+] as const;
+
 function blockText(b: LarkBlock): string {
-  return (b.text?.elements ?? []).map(e => e.text_run?.content ?? '').join('');
+  for (const key of TEXT_BEARING_KEYS) {
+    const container = b[key] as ElementsContainer | undefined;
+    const elements = container?.elements;
+    if (elements && elements.length > 0) {
+      return elements.map(e => e.text_run?.content ?? '').join('');
+    }
+  }
+  return '';
 }
 
 // ─── Shared doc block helpers ─────────────────────────────────────────────────
