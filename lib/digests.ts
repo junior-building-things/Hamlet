@@ -526,11 +526,13 @@ async function resolveIosVersion(meegoUrl: string): Promise<string> {
 
 /**
  * Known field keys for the "Server Planned Launch Date" form item across any
- * Meego node. Add IDs here as they're discovered. The lookup falls back to a
- * name-based search and logs the discovered key so new IDs can be promoted
- * to this list after a single deploy.
+ * Meego node. Discovered from a live probe — the field lives on the
+ * `qa_test_preparation` node alongside the iOS/Android planned-version fields,
+ * field_key `field_cde888`, field_name "Server 计划上线时间".
+ *
+ * The lookup still has a name-based fallback in case the key shifts.
  */
-const SERVER_PLANNED_LAUNCH_FIELD_KEYS: string[] = [];
+const SERVER_PLANNED_LAUNCH_FIELD_KEYS: string[] = ['field_cde888'];
 
 /**
  * Pull a YYYY-MM-DD date out of a raw Meego field value. Date fields come
@@ -617,9 +619,9 @@ async function resolveServerPlannedLaunchDate(meegoUrl: string): Promise<string>
     }
   }
 
-  // 2) Fallback: name match. Lots of variants supported because we're not
-  // yet sure exactly how the field is labelled.
-  const NAME_RE = /server\s*planned\s*launch\s*date|服务端\s*预计\s*上线\s*日期|服务端\s*计划\s*上线|server\s*launch\s*date/i;
+  // 2) Fallback: name match. The Meego field is labelled "Server 计划上线时间"
+  // (mixed English + Chinese). Match that plus several common variants.
+  const NAME_RE = /server\s*计划上线时间|server\s*planned\s*launch\s*date|服务端\s*预计\s*上线\s*日期|服务端\s*计划\s*上线|server\s*launch\s*date/i;
   for (const node of nodeData.list ?? []) {
     for (const fi of node.form_items ?? []) {
       const name = fi.field_name ?? '';
@@ -1171,23 +1173,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   console.log(
     `[digests] resolved iOS version ${resolvedMobile}/${mobileCount}, server launch date ${resolvedServer}/${serverCount}`,
   );
-
-  // Discovery aid (TEMPORARY): if there are no server-only features in this
-  // run, run resolveServerPlannedLaunchDate against the first mobile feature
-  // anyway so the field-name fallback can log the discovered key. Remove
-  // once SERVER_PLANNED_LAUNCH_FIELD_KEYS is populated.
-  if (serverCount === 0 && SERVER_PLANNED_LAUNCH_FIELD_KEYS.length === 0) {
-    const probe = inDev.find(f => f.pipelineKind === 'mobile');
-    if (probe) {
-      console.log(`[digests] discovery probe: resolving Server Planned Launch Date on mobile feature "${probe.name}"`);
-      try {
-        const probed = await resolveServerPlannedLaunchDate(probe.meegoUrl);
-        console.log(`[digests] discovery probe result: "${probed}"`);
-      } catch (e) {
-        console.warn('[digests] discovery probe failed:', e);
-      }
-    }
-  }
 
   // Step 4: Evaluate risk
   const riskFindings: RiskFinding[] = [];
