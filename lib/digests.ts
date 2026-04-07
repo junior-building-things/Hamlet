@@ -6,7 +6,6 @@ import {
   sendInteractiveCardToChat,
   ChatMessage,
   CardSection,
-  CardButton,
   CardHeaderTemplate,
   PM_GROUP_CHAT_ID,
 } from './lark';
@@ -720,14 +719,23 @@ function escapeMd(text: string): string {
 /**
  * Build the lark_md content block for one feature in the risk digest card.
  * Uses bold for the feature name and a bullet list for the details.
+ *
+ * The Meego and PRD links are rendered inline next to the feature name as
+ * `(Meego, PRD)` rather than as Lark card buttons, so the entire section is
+ * a single text block.
  */
 async function buildFeatureSectionContent(finding: RiskFinding): Promise<string> {
   const f = finding.feature;
   const { emoji, label } = levelDisplay(finding.level);
 
+  // Build the inline link list: always Meego, plus PRD if set.
+  const linkParts: string[] = [`[Meego](${f.meegoUrl})`];
+  if (f.prd) linkParts.push(`[PRD](${f.prd})`);
+  const linkSuffix = ` (${linkParts.join(', ')})`;
+
   const lines: string[] = [];
-  // Bold header with coloured dot + feature name
-  lines.push(`**${emoji} ${escapeMd(f.name)}**`);
+  // Bold header with coloured dot + feature name + inline links
+  lines.push(`**${emoji} ${escapeMd(f.name)}**${linkSuffix}`);
 
   // Priority (if known)
   if (f.priority) {
@@ -764,10 +772,11 @@ async function buildFeatureSectionContent(finding: RiskFinding): Promise<string>
 
 /**
  * Build the full risk digest as a Lark interactive card. Each feature is a
- * section with its own buttons (Open in Meego + Open PRD), separated by
- * horizontal rules. The card header is always red because this is a risk
- * assessment message — individual feature risk is conveyed by the emoji
- * dot in each section header.
+ * section separated by horizontal rules. The Meego and PRD links are
+ * rendered inline next to the feature name (not as card buttons), so the
+ * sections are pure text blocks.
+ *
+ * Header colour reflects the highest risk tier found in the digest.
  *
  * Cards are ordered red → yellow → green so the highest-risk items appear
  * first.
@@ -802,13 +811,7 @@ export async function buildRiskDigestCard(findings: RiskFinding[]): Promise<{
 
   for (const finding of sorted) {
     const content = await buildFeatureSectionContent(finding);
-    const buttons: CardButton[] = [
-      { text: 'Open in Meego', url: finding.feature.meegoUrl, type: 'primary' },
-    ];
-    if (finding.feature.prd) {
-      buttons.push({ text: 'Open PRD', url: finding.feature.prd, type: 'default' });
-    }
-    sections.push({ content, buttons });
+    sections.push({ content });
   }
 
   return { title, template, sections };
