@@ -1494,6 +1494,34 @@ export async function sendTextMessage(
 }
 
 /**
+ * Send a 1:1 DM to a user by enterprise email.
+ * Creates a P2P chat with the user if one doesn't exist yet.
+ * Requires the sending app to have `im:message:send_as_bot` and be discoverable to the recipient.
+ */
+export async function sendDmByEmail(
+  email: string, text: string, token: string,
+): Promise<string | null> {
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/im/v1/messages?receive_id_type=email`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        receive_id: email,
+        msg_type: 'text',
+        content: JSON.stringify({ text }),
+      }),
+    },
+  );
+  const data = await parseJson(res, 'send_dm') as { code: number; msg?: string; data?: { message_id?: string } };
+  if (data.code !== 0) {
+    console.warn('[lark] send DM failed:', data.code, data.msg);
+    return null;
+  }
+  return data.data?.message_id ?? null;
+}
+
+/**
  * Resolve emails to Lark open_ids for @mentions.
  */
 export async function resolveOpenIds(
