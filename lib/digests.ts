@@ -741,8 +741,9 @@ async function buildFeatureCard(finding: RiskFinding): Promise<PostParagraph[]> 
     : label;
   paragraphs.push(bullet('Risk', riskValue));
 
-  // Blank line as visual separator between cards
-  paragraphs.push([]);
+  // Visual separator between cards. Lark rejects empty paragraph arrays
+  // (`invalid message content`), so use a single non-empty text element.
+  paragraphs.push([{ tag: 'text', text: ' ' }]);
 
   return paragraphs;
 }

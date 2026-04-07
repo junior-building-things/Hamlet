@@ -1565,6 +1565,9 @@ export async function sendPostDmByEmail(
   const data = await parseJson(res, 'send_post_dm') as { code: number; msg?: string; data?: { message_id?: string } };
   if (data.code !== 0) {
     console.warn('[lark] send post DM failed:', data.code, data.msg);
+    // Dump the content payload (truncated) so we can iterate on the structure
+    const contentStr = JSON.stringify(content);
+    console.warn('[lark] send post DM payload preview:', contentStr.slice(0, 1500));
     return null;
   }
   return data.data?.message_id ?? null;
