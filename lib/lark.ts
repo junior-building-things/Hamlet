@@ -586,21 +586,20 @@ async function resolveDocId(url: string): Promise<string> {
 
 /**
  * Read a Lark document and return a plain-text representation with headings.
+ *
+ * Walks ALL blocks in the document (not just direct children of the page)
+ * so nested blocks inside tables, quotes, grids, etc. are included. This is
+ * required for docs where the useful content lives inside a table — e.g. the
+ * merge calendar, whose version → freeze date rows are all table cells.
  */
 export async function readDocContent(docUrl: string): Promise<string> {
   const docId = await resolveDocId(docUrl);
 
   const token  = await getAccessToken();
   const blocks = await getDocBlocks(docId, token);
-  const byId   = new Map(blocks.map(b => [b.block_id, b]));
-
-  const pageBlock = blocks.find(b => b.block_type === 1);
-  if (!pageBlock?.children) return '(empty document)';
 
   const lines: string[] = [];
-  for (const childId of pageBlock.children) {
-    const b = byId.get(childId);
-    if (!b) continue;
+  for (const b of blocks) {
     const text = blockText(b);
     if (!text.trim()) continue;
     if (HEADING_BLOCK_TYPES.has(b.block_type)) {
