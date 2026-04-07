@@ -908,6 +908,7 @@ Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing r
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
     const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
+    console.log(`[digests] Gemini chat risk for "${featureName}" (${messages.length} msgs in 24h) raw response: ${raw}`);
     // Strip optional ```json fences if Gemini ignored the instruction
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
     const parsed = JSON.parse(cleaned) as { level?: string; summary?: string };
