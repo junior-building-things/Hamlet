@@ -524,12 +524,12 @@ async function resolveIosVersion(meegoUrl: string): Promise<string> {
 // ─── Server schedule end date resolution ─────────────────────────────────
 
 /**
- * Known field keys for the Server开发 (state_43) "Schedule" form item, in
- * preferred order. Add IDs here as they're discovered. The lookup also has a
- * name-based fallback that logs the field key whenever it has to use it, so
- * new IDs can be promoted to this list after a single deploy.
+ * Known field keys for the Server开发 (state_43) "Schedule" / "排期" form item.
+ * Discovered from a live fetch — field_key is the literal string "schedule",
+ * field_name is "排期". The lookup still has a name-based fallback in case the
+ * key shifts, but this is the stable ID we want to use first.
  */
-const SERVER_SCHEDULE_FIELD_KEYS: string[] = [];
+const SERVER_SCHEDULE_FIELD_KEYS: string[] = ['schedule'];
 
 /**
  * Pull a YYYY-MM-DD end date out of a raw Schedule field value. Schedule
@@ -802,18 +802,25 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
         levels.push('yellow');
       }
     }
-  } else if (feature.pipelineKind === 'server' && feature.serverEndDate) {
-    const endDate = new Date(feature.serverEndDate);
-    if (!isNaN(endDate.getTime())) {
-      const days = businessDaysUntil(endDate);
-      const display = formatFreezeDate(endDate);
-      if (days <= 2) {
-        reasons.push(`Server scheduled to finish in ${days} business day${days === 1 ? '' : 's'} but dev still in progress (target: ${display})`);
-        levels.push('red');
-      } else if (days <= 5) {
-        reasons.push(`Server scheduled to finish in ${days} business days with dev still in progress (target: ${display})`);
-        levels.push('yellow');
+  } else if (feature.pipelineKind === 'server') {
+    if (feature.serverEndDate) {
+      const endDate = new Date(feature.serverEndDate);
+      if (!isNaN(endDate.getTime())) {
+        const days = businessDaysUntil(endDate);
+        const display = formatFreezeDate(endDate);
+        if (days <= 2) {
+          reasons.push(`Server scheduled to finish in ${days} business day${days === 1 ? '' : 's'} but dev still in progress (target: ${display})`);
+          levels.push('red');
+        } else if (days <= 5) {
+          reasons.push(`Server scheduled to finish in ${days} business days with dev still in progress (target: ${display})`);
+          levels.push('yellow');
+        }
       }
+    } else {
+      // No schedule entered on the Server开发 node — surface as a yellow
+      // risk so the PM nudges the server team to fill it in.
+      reasons.push('Server schedule not set on Server开发 node');
+      levels.push('yellow');
     }
   }
 
