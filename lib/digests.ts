@@ -1316,12 +1316,34 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     }
     const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/7074054514`; // thomas test
     const records = await fetchAllOp(probeUrl);
-    const targetFieldKeys = new Set(['field_cde888', 'field_08a9ca', 'field_c88970']);
-    const fieldHits = records.filter(r =>
-      (r.record_contents ?? []).some(c => c.object?.object_value && targetFieldKeys.has(c.object.object_value)),
+
+    // Group by module + sample one record per module
+    const byModule = new Map<string, OpRecord>();
+    const fieldKeyCounts = new Map<string, number>();
+    const propertyCounts = new Map<string, number>();
+    for (const r of records) {
+      const mod = r.op_record_module ?? '?';
+      if (!byModule.has(mod)) byModule.set(mod, r);
+      for (const c of r.record_contents ?? []) {
+        const fk = c.object?.object_value ?? '';
+        if (fk) fieldKeyCounts.set(fk, (fieldKeyCounts.get(fk) ?? 0) + 1);
+        const p = c.object_property ?? '';
+        if (p) propertyCounts.set(p, (propertyCounts.get(p) ?? 0) + 1);
+      }
+    }
+    console.log(`[digests] op_record thomas test: ${records.length} total records`);
+    console.log(`[digests] op_record thomas test modules: ${[...byModule.keys()].join(', ')}`);
+    console.log(`[digests] op_record thomas test field keys (count): ${[...fieldKeyCounts.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`);
+    console.log(`[digests] op_record thomas test object_properties: ${[...propertyCounts.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`);
+
+    // Look for any record whose new/old looks like a date
+    const dateLike = records.filter(r =>
+      (r.record_contents ?? []).some(c => {
+        const blob = JSON.stringify({ old: c.old, new: c.new });
+        return /2026-04-0[789]/.test(blob);
+      }),
     );
-    console.log(`[digests] op_record thomas test: ${records.length} total records, ${fieldHits.length} touching target fields`);
-    console.log(`[digests] op_record thomas test field hits: ${JSON.stringify(fieldHits).slice(0, 2500)}`);
+    console.log(`[digests] op_record thomas test date-like records (${dateLike.length}): ${JSON.stringify(dateLike).slice(0, 2500)}`);
   } catch (e) {
     console.warn('[digests] op_record probe failed:', e);
   }
