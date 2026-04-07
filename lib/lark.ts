@@ -1541,15 +1541,12 @@ export type PostParagraph = PostInline[];
 export async function sendPostDmByEmail(
   email: string, title: string, paragraphs: PostParagraph[], token: string,
 ): Promise<string | null> {
-  // Lark post messages are keyed by locale. Chinese-region tenants
-  // (which is what we use for TikTok) require `zh_cn` — `en_us` is rejected
-  // with "invalid message content".
+  // Post message content for `im.v1.messages.send` is keyed directly by locale —
+  // there is NO outer "post" wrapper. Chinese-region Lark tenants want `zh_cn`.
   const content = {
-    post: {
-      zh_cn: {
-        title,
-        content: paragraphs,
-      },
+    zh_cn: {
+      title,
+      content: paragraphs,
     },
   };
 
