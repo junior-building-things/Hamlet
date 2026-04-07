@@ -39,33 +39,49 @@ export interface DigestRunResult {
 
 // ─── Status sets ──────────────────────────────────────────────────────────
 
-// Features in these statuses are considered "in development" and included in the risk digest.
-// Names are the translated English versions from lib/meego.ts NODE_TRANSLATIONS.
-const IN_DEV_STATUSES = new Set<string>([
-  'Tech Assessment',
-  'Detailed Review',
-  'Requirements Review',
-  'Technical Design',
-  'iOS Development',
-  'Android Development',
-  'Server Launch',
-  'UI/UX Acceptance',
-  'AB Testing',
-  'QA',
-  // Also keep the original Chinese status strings in case translation misses any
-  'iOS 开发',
-  'Android 开发',
-  '技术方案设计',
-  'Server上线',
+// Features NOT in these statuses are considered "in development" — i.e. the digest
+// excludes pre-dev (requirements) and post-dev (acceptance / done) stages.
+// Allow-list approach based on lib/meego.ts NODE_TRANSLATIONS.
+const NON_DEV_STATUSES = new Set<string>([
+  // Pre-dev
+  'Requirements Prep',
+  'Initial Review',
+  'Dependency Check',
+  'Compliance Review',
+  '产品需求准备',
+  '产品线内初评',
+  '依赖判断',
+  '合规评估',
+  // Post-dev
+  'PM Acceptance',
+  'PM Walkthrough',
+  'Done',
+  'Launched',
+  'PM验收',
+  'PM走查',
+  '结束',
+  // Placeholder / unknown
+  'Unknown',
+  'Syncing…',
+  '',
 ]);
+
+function isInDev(status: string): boolean {
+  if (!status) return false;
+  return !NON_DEV_STATUSES.has(status);
+}
 
 // Statuses where QA has effectively started (used to scope "not in QA yet" risk checks)
 const QA_OR_LATER_STATUSES = new Set<string>([
   'QA',
+  'QA Testing',
   'AB Testing',
   'UI/UX Acceptance',
+  'AB实验',
+  'UI&UX验收',
   'Done',
   'Launched',
+  '结束',
 ]);
 
 // Role fields — used for the missing-owner risk check
@@ -368,8 +384,16 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   const allFeatures = await fetchUserStories(TIKTOK_PROJECT_KEY);
   console.log(`[digests] fetched ${allFeatures.length} features from Meego`);
 
+  // Log the unique statuses we see so we can tune the allow/deny list
+  const statusCounts = new Map<string, number>();
+  for (const f of allFeatures) {
+    statusCounts.set(f.status, (statusCounts.get(f.status) ?? 0) + 1);
+  }
+  const statusSummary = [...statusCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ');
+  console.log(`[digests] status distribution: ${statusSummary}`);
+
   // Only evaluate features in an "in dev" status
-  const inDevFeatures = allFeatures.filter(f => IN_DEV_STATUSES.has(f.status));
+  const inDevFeatures = allFeatures.filter(f => isInDev(f.status));
   console.log(`[digests] ${inDevFeatures.length} features in dev status`);
 
   // Enrich each feature with syncFeatureStatus() so we have owners, iosVersion, pocEmails, chatId
@@ -403,7 +427,8 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   console.log(`[digests] enriched ${enriched.length} features`);
 
   // Re-check the in-dev filter after sync (sync may update the status)
-  const finalInDev = enriched.filter(e => IN_DEV_STATUSES.has(e.feature.status));
+  const finalInDev = enriched.filter(e => isInDev(e.feature.status));
+  console.log(`[digests] ${finalInDev.length} features still in dev after sync`);
 
   // Task 4: risk digest — always sent
   const riskFindings: RiskFinding[] = [];
