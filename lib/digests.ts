@@ -96,6 +96,7 @@ const NOT_IN_DEV_RAW = new Set<string>([
   'PM验收',        // PM Acceptance
   'PM走查',        // PM Walkthrough
   '结束',          // Done / End
+  '已完成',        // Done (overall status name)
 ]);
 
 function isInDev(rawStatus: string): boolean {
@@ -165,95 +166,64 @@ function parseActiveNodes(raw: string): ParsedActiveNode[] {
     });
 }
 
-/**
- * Walk the get_workitem_brief JSON response looking for active nodes.
- * The exact path isn't known yet — this function tries a few common locations.
- */
-function parseActiveNodesFromJson(json: Record<string, unknown>): ParsedActiveNode[] {
-  const found: ParsedActiveNode[] = [];
-
-  const coerceNode = (n: unknown): ParsedActiveNode | null => {
-    if (!n || typeof n !== 'object') return null;
-    const obj = n as Record<string, unknown>;
-    const name = (obj.name ?? obj.node_name ?? obj.node_name_zh) as string | undefined;
-    const key = (obj.key ?? obj.node_key ?? obj.node_state_key ?? obj.id) as string | undefined;
-    if (!name) return null;
-    const ownersArr = (obj.owners ?? obj.assignees ?? []) as unknown[];
-    const owners = Array.isArray(ownersArr)
-      ? ownersArr.map(o => (typeof o === 'object' && o ? ((o as Record<string, unknown>).email as string ?? '') : '')).filter(Boolean).join(',')
-      : '';
-    return { key: key ?? '', name, owners };
+interface BriefJson {
+  work_item_attribute?: {
+    work_item_status?: { key?: string; name?: string };
+    work_item_id?: string;
+    work_item_name?: string;
+    role_members?: Array<{ key?: string; name?: string; members?: Array<{ key?: string; name?: string; email?: string }> }>;
   };
-
-  const walk = (node: unknown, pathKey: string) => {
-    if (!node) return;
-    if (Array.isArray(node)) {
-      // If the parent key suggests this is a list of nodes, try to coerce each item
-      if (/node|stage|step|进行|active/i.test(pathKey)) {
-        for (const item of node) {
-          const coerced = coerceNode(item);
-          if (coerced) found.push(coerced);
-        }
-      }
-      for (const item of node) walk(item, pathKey);
-      return;
-    }
-    if (typeof node === 'object') {
-      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
-        walk(v, k);
-      }
-    }
-  };
-
-  walk(json, 'root');
-  return found;
+  work_item_current_node?: Array<{
+    id?: string;
+    name?: string;
+    owners?: Array<{ key?: string; name?: string; email?: string }>;
+    actual_begin_time?: string;
+  }>;
+  work_item_fields?: Record<string, unknown>;
 }
 
+/** Extract active nodes from the parsed brief JSON. */
+function parseActiveNodesFromJson(json: BriefJson): ParsedActiveNode[] {
+  const current = json.work_item_current_node ?? [];
+  return current
+    .filter(n => n.name)
+    .map(n => ({
+      key: n.id ?? '',
+      name: n.name ?? '',
+      owners: (n.owners ?? []).map(o => o.email ?? '').filter(Boolean).join(','),
+    }));
+}
+
+/** Get the overall work item status key/name, e.g. {key: 'end', name: '已完成'}. */
+function parseOverallStatus(json: BriefJson): { key: string; name: string } {
+  const s = json.work_item_attribute?.work_item_status;
+  return { key: s?.key ?? '', name: s?.name ?? '' };
+}
+
+/** Extract roles and name→email map from the parsed brief JSON. */
+function parseRolesFromJson(json: BriefJson): { roles: Record<string, string[]>; emails: Record<string, string> } {
+  const roles: Record<string, string[]> = {};
+  const emails: Record<string, string> = {};
+  for (const roleEntry of json.work_item_attribute?.role_members ?? []) {
+    const roleName = roleEntry.name;
+    if (!roleName) continue;
+    const memberNames: string[] = [];
+    for (const m of roleEntry.members ?? []) {
+      if (m.name) {
+        memberNames.push(m.name);
+        if (m.email) emails[m.name] = m.email;
+      }
+    }
+    if (memberNames.length > 0) roles[roleName] = memberNames;
+  }
+  return { roles, emails };
+}
+
+/** Fallback markdown field parser (kept for PRD / updated_at which may not be in typed JSON). */
 function parseWorkItemField(raw: string, fieldName: string): string {
   const regex = new RegExp(`\\|\\s*${fieldName}\\s*\\|\\s*([^|\\n]+?)\\s*\\|`);
   const match = raw.match(regex);
   return match ? match[1].trim() : '';
-}
-
-/** Parse ISO-like timestamp / date / epoch from the 更新时间 field. */
-function parseUpdatedIso(raw: string): string {
-  const val = parseWorkItemField(raw, '更新时间') || parseWorkItemField(raw, 'updated_at');
-  if (!val) return '';
-  const ts = Number(val);
-  if (!isNaN(ts) && ts > 1_000_000_000_000) return new Date(ts).toISOString().split('T')[0];
-  const m = val.match(/(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : '';
-}
-
-/** Extract {name: email} pairs from a Meego role member value like "Name(email), Name2(email2)". */
-function parseRoleMembers(value: string): Array<{ name: string; email: string }> {
-  if (!value || value === '未填写') return [];
-  const pairs: Array<{ name: string; email: string }> = [];
-  const regex = /([^,(]+)\(([^)]+)\)/g;
-  let m;
-  while ((m = regex.exec(value)) !== null) {
-    const name = m[1].trim();
-    const email = m[2].trim();
-    if (name && email.includes('@')) pairs.push({ name, email });
-  }
-  return pairs;
-}
-
-/** Extract the roles block from the brief. Roles look like `"PM":"Thomas(...)","iOS":"..."`. */
-function parseRoles(raw: string): { roles: Record<string, string[]>; emails: Record<string, string> } {
-  const roles: Record<string, string[]> = {};
-  const emails: Record<string, string> = {};
-  const roleNames = ['PM', 'TPM', 'Tech owner', 'iOS', 'Android', 'Server', 'QA', 'DA', 'UI&UX', 'Content Designer'];
-  for (const role of roleNames) {
-    const escaped = role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`"${escaped}":"([^"]+)"`);
-    const match = raw.match(regex);
-    if (!match) continue;
-    const pairs = parseRoleMembers(match[1]);
-    roles[role] = pairs.map(p => p.name);
-    for (const { name, email } of pairs) emails[name] = email;
-  }
-  return { roles, emails };
 }
 
 /**
@@ -272,36 +242,46 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
     return null;
   }
 
-  // The MCP response is JSON — parse it and walk the tree for active nodes
-  let parsedJson: Record<string, unknown> | null = null;
+  // Parse the brief as typed JSON
+  let json: BriefJson;
   try {
-    parsedJson = JSON.parse(raw) as Record<string, unknown>;
-  } catch { /* not JSON — fall through to legacy markdown parser */ }
+    json = JSON.parse(raw) as BriefJson;
+  } catch {
+    console.warn(`[digests] brief not JSON for ${name}`);
+    return null;
+  }
 
-  const activeNodes: ParsedActiveNode[] = parsedJson
-    ? parseActiveNodesFromJson(parsedJson)
-    : parseActiveNodes(raw);
+  // Check overall status first — if the feature is done, use that directly.
+  // The `work_item_current_node` array may still contain leftover nodes after a
+  // feature completes (e.g. a finished feature with PM验收 / UI&UX验收 still listed).
+  const overall = parseOverallStatus(json);
+  const activeNodes = parseActiveNodesFromJson(json);
+  const currentNodeStatus = pickActiveNode(activeNodes.map(n => n.name));
 
-  // Targeted debug for one specific work item to understand the raw response shape
+  // If the overall status is `end` (已完成) treat the feature as done regardless of
+  // any leftover current_node entries. Otherwise use the picked current node name.
+  const rawStatus = overall.key === 'end' ? overall.name : (currentNodeStatus || overall.name);
+
+  // Debug dump for the specific work item the user asked about
   if (workItemId === '3347640118') {
+    console.log(`[digests] DEBUG ${workItemId} overall:`, JSON.stringify(overall));
     console.log(`[digests] DEBUG ${workItemId} activeNodes:`, JSON.stringify(activeNodes));
-    console.log(`[digests] DEBUG ${workItemId} raw (first 3000 chars):`, raw.slice(0, 3000));
+    console.log(`[digests] DEBUG ${workItemId} final rawStatus:`, rawStatus);
   }
 
-  if (activeNodes.length === 0) {
-    // One-time dump of the JSON keys so we can see where active nodes actually live
-    const sample = parsedJson ? Object.keys(parsedJson).join(',') : 'not JSON';
-    console.log(`[digests] no active nodes parsed for ${name}. Top-level keys: ${sample}`);
-  }
-  const rawStatus = pickActiveNode(activeNodes.map(n => n.name));
+  // PRD and lastUpdated aren't in the typed JSON schema — try to parse from the raw string
+  // (the brief includes markdown tables for work item fields alongside the JSON in some cases)
   const prd = parseWorkItemField(raw, 'PRD');
-  const lastUpdatedIso = parseUpdatedIso(raw);
-  const { roles, emails: roleEmails } = parseRoles(raw);
-  const activeNodeOwnerEmails = activeNodes.find(n => n.name === rawStatus)?.owners ?? '';
+  const updatedStr = parseWorkItemField(raw, '更新时间');
+  let lastUpdatedIso = '';
+  if (updatedStr) {
+    const m = updatedStr.match(/(\d{4}-\d{2}-\d{2})/);
+    if (m) lastUpdatedIso = m[1];
+  }
 
-  // iOS planned version is a node-level field (field_08a9ca) stored on qa_test_preparation.
-  // For v1 of the digest we don't resolve it — risk checks that need version will simply
-  // skip the freeze pressure check when iosVersion is unknown.
+  const { roles, emails: roleEmails } = parseRolesFromJson(json);
+  const activeNodeOwnerEmails = activeNodes.find(n => n.name === currentNodeStatus)?.owners ?? '';
+
   return {
     workItemId,
     name,
