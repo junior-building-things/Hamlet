@@ -39,36 +39,35 @@ export interface DigestRunResult {
 
 // ─── Status sets ──────────────────────────────────────────────────────────
 
-// Features NOT in these statuses are considered "in development" — i.e. the digest
-// excludes pre-dev (requirements) and post-dev (acceptance / done) stages.
-// Allow-list approach based on lib/meego.ts NODE_TRANSLATIONS.
-const NON_DEV_STATUSES = new Set<string>([
-  // Pre-dev
+// Features in these statuses are definitively NOT in development, so we can skip
+// syncing them (saves API calls). Everything else — including unknown / unsynced —
+// gets individually synced so we can filter on the *actual* Meego status.
+// Matches both translated (English) and raw (Chinese) status strings.
+const DEFINITELY_NOT_DEV = new Set<string>([
+  // Pre-dev (English)
   'Requirements Prep',
   'Initial Review',
   'Dependency Check',
   'Compliance Review',
+  // Pre-dev (Chinese raw)
   '产品需求准备',
   '产品线内初评',
   '依赖判断',
   '合规评估',
-  // Post-dev
+  // Post-dev (English)
   'PM Acceptance',
   'PM Walkthrough',
   'Done',
   'Launched',
+  // Post-dev (Chinese raw)
   'PM验收',
   'PM走查',
   '结束',
-  // Placeholder / unknown
-  'Unknown',
-  'Syncing…',
-  '',
 ]);
 
 function isInDev(status: string): boolean {
   if (!status) return false;
-  return !NON_DEV_STATUSES.has(status);
+  return !DEFINITELY_NOT_DEV.has(status);
 }
 
 // Statuses where QA has effectively started (used to scope "not in QA yet" risk checks)
@@ -384,24 +383,26 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   const allFeatures = await fetchUserStories(TIKTOK_PROJECT_KEY);
   console.log(`[digests] fetched ${allFeatures.length} features from Meego`);
 
-  // Log the unique statuses we see so we can tune the allow/deny list
-  const statusCounts = new Map<string, number>();
+  // Log the initial (pre-sync) status distribution so we can see how many come back
+  // as 'Syncing…' placeholders vs known statuses
+  const preSyncCounts = new Map<string, number>();
   for (const f of allFeatures) {
-    statusCounts.set(f.status, (statusCounts.get(f.status) ?? 0) + 1);
+    preSyncCounts.set(f.status, (preSyncCounts.get(f.status) ?? 0) + 1);
   }
-  const statusSummary = [...statusCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ');
-  console.log(`[digests] status distribution: ${statusSummary}`);
+  console.log(`[digests] pre-sync status distribution: ${[...preSyncCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ')}`);
 
-  // Only evaluate features in an "in dev" status
-  const inDevFeatures = allFeatures.filter(f => isInDev(f.status));
-  console.log(`[digests] ${inDevFeatures.length} features in dev status`);
+  // Skip only features we *know* are definitively not in dev (PM Acceptance, Done, etc.)
+  // Everything else gets individually synced so we can filter on the actual Meego status.
+  // "Syncing…" features (from MQL without active node info) are always synced here.
+  const candidates = allFeatures.filter(f => f.meegoUrl && isInDev(f.status));
+  console.log(`[digests] syncing ${candidates.length} candidates to resolve actual Meego status`);
 
-  // Enrich each feature with syncFeatureStatus() so we have owners, iosVersion, pocEmails, chatId
+  // Enrich each candidate with syncFeatureStatus() to get the real Meego status + owners + version
   const enriched: Array<{ feature: Feature; pocEmails: Record<string, string> }> = [];
-  for (const feature of inDevFeatures) {
-    if (!feature.meegoUrl) continue;
+  let syncedCount = 0;
+  for (const feature of candidates) {
     try {
-      const sync = await syncFeatureStatus(feature.meegoUrl, undefined, feature.chatId);
+      const sync = await syncFeatureStatus(feature.meegoUrl!, undefined, feature.chatId);
       const merged: Feature = {
         ...feature,
         status: sync.status || feature.status,
@@ -418,17 +419,25 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         prd: sync.prd || feature.prd,
       };
       enriched.push({ feature: merged, pocEmails: sync.pocEmails });
+      syncedCount++;
       // small delay to avoid hammering Meego MCP
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 200));
     } catch (e) {
       console.warn(`[digests] sync failed for ${feature.name}:`, e);
     }
   }
-  console.log(`[digests] enriched ${enriched.length} features`);
+  console.log(`[digests] synced ${syncedCount}/${candidates.length} candidates`);
 
-  // Re-check the in-dev filter after sync (sync may update the status)
+  // Log the post-sync status distribution — this is the "actual Meego status" we filter on
+  const postSyncCounts = new Map<string, number>();
+  for (const { feature } of enriched) {
+    postSyncCounts.set(feature.status, (postSyncCounts.get(feature.status) ?? 0) + 1);
+  }
+  console.log(`[digests] post-sync status distribution: ${[...postSyncCounts.entries()].map(([s, n]) => `${s}:${n}`).join(', ')}`);
+
+  // Apply the in-dev filter on the real synced status
   const finalInDev = enriched.filter(e => isInDev(e.feature.status));
-  console.log(`[digests] ${finalInDev.length} features still in dev after sync`);
+  console.log(`[digests] ${finalInDev.length} features in dev after sync`);
 
   // Task 4: risk digest — always sent
   const riskFindings: RiskFinding[] = [];
