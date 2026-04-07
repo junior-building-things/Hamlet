@@ -1281,18 +1281,15 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Previously DM'd to OWNER_EMAIL; now posted to the PM group chat.
   const targetChatId = PM_GROUP_CHAT_ID;
 
-  // Discovery probe (TEMPORARY): list every Meego MCP tool name so we can
-  // identify the activity-log tool. Remove once it's hardcoded.
+  // Discovery probe (TEMPORARY): call get_workitem_op_record on the test
+  // feature so we can see the response shape (timestamps, field name format,
+  // before/after values). Remove once we've implemented the parser.
   try {
-    const tools = await listMeegoMcpTools();
-    const candidates = tools.filter(t =>
-      /history|activity|changelog|operate.?log|audit|edit/i.test(t.name) ||
-      (t.description && /history|activity|changelog|edit|operate/i.test(t.description)),
-    );
-    console.log(`[digests] Meego MCP tool count: ${tools.length}; candidates for activity log: ${JSON.stringify(candidates)}`);
-    console.log(`[digests] all Meego MCP tool names: ${tools.map(t => t.name).join(', ')}`);
+    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/7074054514`;
+    const sample = await callMeegoMcp('get_workitem_op_record', { url: probeUrl });
+    console.log(`[digests] op_record probe (thomas test) length=${sample.length}, sample: ${sample.slice(0, 1500)}`);
   } catch (e) {
-    console.warn('[digests] tools/list probe failed:', e);
+    console.warn('[digests] op_record probe failed:', e);
   }
 
   // Step 1: Discover all PM-owned work items
