@@ -1146,6 +1146,76 @@ export async function batchFetchAvatars(
   return result;
 }
 
+// ─── List every chat the bot is a member of ──────────────────────────────────
+
+export interface JuniorChatInfo {
+  chatId: string;
+  name: string;
+  description: string;
+}
+
+/**
+ * List every group chat the calling bot is a member of, including the chat
+ * description (which is where Meego work item IDs live for feature group
+ * chats). Two-stage fetch:
+ *   1. /im/v1/chats — paginated, returns chat_id + name only
+ *   2. /im/v1/chats/{chat_id} — per-chat detail call to read the description
+ *
+ * Hard cap of 500 chats so a runaway membership doesn't explode runtime.
+ * If the bot is in more than 500 chats this will silently truncate — fine
+ * for the digest pipeline since we only care about feature groups.
+ */
+export async function listJuniorChats(token: string): Promise<JuniorChatInfo[]> {
+  const summaries: Array<{ chatId: string; name: string }> = [];
+  let pageToken = '';
+  for (let page = 0; page < 10; page++) {
+    const url = new URL(`${LARK_BASE_URL}/open-apis/im/v1/chats`);
+    url.searchParams.set('page_size', '100');
+    if (pageToken) url.searchParams.set('page_token', pageToken);
+    const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+    const data = await parseJson(res, 'list_chats') as {
+      code: number;
+      msg?: string;
+      data?: { items?: Array<{ chat_id: string; name: string }>; has_more?: boolean; page_token?: string };
+    };
+    if (data.code !== 0) {
+      console.warn('[lark] list_chats failed:', data.code, data.msg);
+      break;
+    }
+    for (const c of data.data?.items ?? []) {
+      summaries.push({ chatId: c.chat_id, name: c.name });
+    }
+    if (!data.data?.has_more || !data.data?.page_token) break;
+    pageToken = data.data.page_token;
+    if (summaries.length >= 500) break;
+  }
+
+  // Stage 2: per-chat detail call to fetch description.
+  // Done sequentially to respect Lark's per-app rate limit (100 req/s default
+  // is comfortable here, but we don't need to push it).
+  const out: JuniorChatInfo[] = [];
+  for (const s of summaries) {
+    try {
+      const infoRes = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/chats/${s.chatId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const infoData = await infoRes.json() as {
+        code: number;
+        data?: { name?: string; description?: string };
+      };
+      if (infoData.code !== 0) continue;
+      out.push({
+        chatId: s.chatId,
+        name: infoData.data?.name ?? s.name,
+        description: infoData.data?.description ?? '',
+      });
+    } catch {
+      // Skip this chat — one failed detail call shouldn't blank the whole list.
+    }
+  }
+  return out;
+}
+
 // ─── Add bot to Meego feature group chat ──────────────────────────────────────
 
 /**

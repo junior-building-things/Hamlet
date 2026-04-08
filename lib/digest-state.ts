@@ -64,6 +64,23 @@ export interface DiscoveredIdEntry {
   name: string;
 }
 
+/**
+ * One entry in the cached list of Lark group chats Junior is a member of,
+ * paired with the Meego work item id parsed from the chat description (if
+ * any). Refreshed by `discoverJuniorFeatureChats` on a TTL.
+ */
+export interface JuniorChatCacheEntry {
+  chatId: string;
+  chatName: string;
+  /** Meego work item id (digits only) parsed from the chat description, or empty string if none. */
+  meegoId: string;
+}
+
+export interface JuniorChatsCache {
+  fetchedAtIso: string;
+  chats: JuniorChatCacheEntry[];
+}
+
 export interface DigestStateFile {
   updatedAt: string;
   /** ISO timestamps of recent digest runs, oldest first. Used as activity-log cutoff. */
@@ -80,6 +97,20 @@ export interface DigestStateFile {
     savedAtIso: string;
     ids: DiscoveredIdEntry[];
   };
+  /**
+   * Cache of the Lark group chats Junior is a member of, refreshed on a
+   * 24h TTL. Used both to expand the discovery set (chats with a Meego ID
+   * become candidate features for the risk digest) and to enumerate scan
+   * targets for the daily Unanswered Q&A pipeline.
+   */
+  juniorChatsCache?: JuniorChatsCache;
+  /**
+   * Manual fallback watchlist of Meego workItemIds to always include in the
+   * digest, even when list_todo / MQL / Junior's chat list don't return them.
+   * Edited via `gcloud storage cp` against the state JSON file. Replaces
+   * the previous hardcoded `WATCHLIST_FEATURE_IDS` constant.
+   */
+  watchlist?: string[];
 }
 
 /**
@@ -119,10 +150,25 @@ function migrateLegacy(raw: unknown): DigestStateFile {
       };
     }
   }
+
+  // Carry forward optional new fields if present, otherwise leave undefined.
+  const discoveredIdsCache = (obj.discoveredIdsCache && typeof obj.discoveredIdsCache === 'object')
+    ? (obj.discoveredIdsCache as DigestStateFile['discoveredIdsCache'])
+    : undefined;
+  const juniorChatsCache = (obj.juniorChatsCache && typeof obj.juniorChatsCache === 'object')
+    ? (obj.juniorChatsCache as DigestStateFile['juniorChatsCache'])
+    : undefined;
+  const watchlist = Array.isArray(obj.watchlist)
+    ? (obj.watchlist as unknown[]).filter((x): x is string => typeof x === 'string')
+    : undefined;
+
   return {
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
     recentRunTimes: Array.isArray(obj.recentRunTimes) ? (obj.recentRunTimes as string[]) : [],
     features,
+    discoveredIdsCache,
+    juniorChatsCache,
+    watchlist,
   };
 }
 
@@ -216,4 +262,25 @@ export function previousRunCutoffMs(state: DigestStateFile): number {
   const latest = times[times.length - 1];
   const ts = Date.parse(latest);
   return isNaN(ts) ? Date.now() : ts;
+}
+
+/** TTL for the Junior chats cache (24h). */
+const JUNIOR_CHATS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Returns true if the Junior chats cache exists and is younger than the TTL.
+ * Used by the discovery flow to decide whether to refetch the chat list from
+ * Lark or reuse the cached one.
+ */
+export function isJuniorChatsCacheFresh(state: DigestStateFile): boolean {
+  const cache = state.juniorChatsCache;
+  if (!cache || !Array.isArray(cache.chats)) return false;
+  const fetchedAt = Date.parse(cache.fetchedAtIso);
+  if (isNaN(fetchedAt)) return false;
+  return Date.now() - fetchedAt < JUNIOR_CHATS_CACHE_TTL_MS;
+}
+
+/** Read the watchlist (manual fallback feature ids), defaulting to empty. */
+export function getWatchlist(state: DigestStateFile): string[] {
+  return state.watchlist ?? [];
 }

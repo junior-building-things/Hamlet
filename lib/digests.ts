@@ -3,9 +3,9 @@ import { Feature } from './types';
 import {
   readChatMessages,
   resolveOpenIds,
-  sendTextMessage,
   sendInteractiveCardToChat,
   joinFeatureChat,
+  listJuniorChats,
   getLarkBotToken,
   ChatMessage,
   CardSection,
@@ -21,7 +21,11 @@ import {
   dropExitedFeatures,
   recordRunTime,
   previousRunCutoffMs,
+  isJuniorChatsCacheFresh,
+  getWatchlist,
   PersistedDelayChange,
+  DigestStateFile,
+  JuniorChatCacheEntry,
 } from './digest-state';
 
 // Direct Meego MCP client — duplicated here so the digest pipeline can talk to
@@ -30,21 +34,6 @@ import {
 // `syncFeatureStatus` produces.
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
-
-/**
- * Feature IDs to ALWAYS include in the digest, even when list_todo + MQL
- * don't return them. Used to cover multi-PM features where Meego's
- * `__PM = current_login_user()` predicate doesn't match because the user is
- * a co-PM (not the primary), and to track features the user is following
- * but not formally assigned to.
- *
- * Add a Meego workItemId here to start watching a feature. The discovery
- * step will pull the brief and run it through the same in-dev / risk
- * evaluation as everything else.
- */
-const WATCHLIST_FEATURE_IDS: string[] = [
-  '6839672017', // [SA ]AI theatre ID 录入合并 — Thomas is a co-PM
-];
 
 async function callMeegoMcpOnce(toolName: string, args: Record<string, unknown>): Promise<string> {
   const token = process.env.MEEGO_USER_TOKEN;
@@ -946,7 +935,69 @@ function parseMcpJson<T>(raw: string, label: string): T {
   }
 }
 
-async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: string; name: string; rawStatusFromList?: string }>> {
+/**
+ * Refresh (or reuse) the cached list of Lark group chats Junior is in,
+ * paired with the Meego work item id parsed from each chat description.
+ *
+ * Cached in the digest state file with a 24h TTL — chat membership doesn't
+ * churn fast and the underlying Lark calls are expensive (1 list call +
+ * one chat-detail call per chat for the description).
+ *
+ * Mutates `state` in place when it refreshes the cache; the caller will
+ * write state back to GCS at the end of the run.
+ *
+ * Returns only chats that have a parseable Meego id in the description.
+ * Chats without a Meego id (ops groups, random chats, etc.) are dropped
+ * since they aren't candidate features for the digest.
+ */
+async function discoverJuniorFeatureChats(
+  state: DigestStateFile, botToken: string,
+): Promise<JuniorChatCacheEntry[]> {
+  // Cache hit — return the existing list. Still filter to entries with a
+  // meegoId in case stale entries snuck in.
+  if (isJuniorChatsCacheFresh(state)) {
+    const cached = state.juniorChatsCache?.chats ?? [];
+    const withId = cached.filter(c => c.meegoId);
+    console.log(`[digests] junior chats cache HIT — ${cached.length} chats, ${withId.length} feature chats`);
+    return withId;
+  }
+
+  // Refresh from Lark.
+  let allChats: Array<{ chatId: string; name: string; description: string }> = [];
+  try {
+    allChats = await listJuniorChats(botToken);
+  } catch (e) {
+    console.warn('[digests] listJuniorChats failed, reusing stale cache if any:', e);
+    return (state.juniorChatsCache?.chats ?? []).filter(c => c.meegoId);
+  }
+
+  // Parse the meegoId out of each description. Meego work item ids are
+  // 10-12 digit numbers; the chat description usually contains the full
+  // /detail/<id> URL or just the id.
+  const entries: JuniorChatCacheEntry[] = allChats.map(c => {
+    const m = c.description.match(/\/detail\/(\d{8,})/) ?? c.description.match(/\b(\d{10,})\b/);
+    return {
+      chatId: c.chatId,
+      chatName: c.name,
+      meegoId: m?.[1] ?? '',
+    };
+  });
+
+  state.juniorChatsCache = {
+    fetchedAtIso: new Date().toISOString(),
+    chats: entries,
+  };
+
+  const withId = entries.filter(c => c.meegoId);
+  console.log(`[digests] junior chats cache REFRESHED — ${entries.length} total chats, ${withId.length} have a Meego id`);
+  return withId;
+}
+
+async function fetchAllPmOwnedIds(
+  projectKey: string,
+  juniorChats: JuniorChatCacheEntry[],
+  watchlist: string[],
+): Promise<Array<{ id: string; name: string; rawStatusFromList?: string }>> {
   // Step 1: list_todo gives us features with an active node we're assigned to
   const todos = new Map<string, { id: string; name: string; rawStatusFromList?: string }>();
   let page = 1;
@@ -1024,13 +1075,28 @@ async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: strin
   }
   console.log(`[digests] PM-owned discovery: list_todo=${todos.size - mqlAdded}, MQL added=${mqlAdded}, total=${todos.size}`);
 
-  // Step 3: Merge in the watchlist — features the user wants to always
-  // include even if list_todo + MQL miss them. This covers multi-PM
-  // features where Meego's `__PM = current_login_user()` predicate doesn't
-  // match because the user isn't the primary PM, plus any features the
-  // user is following but not formally assigned to.
+  // Step 3: Merge in feature IDs from chats Junior is a member of. This is
+  // the primary mechanism for catching co-PM features (where MQL drops the
+  // feature because `__PM = current_login_user()` evaluates to false on a
+  // multi-element list). Each entry already has the workItemId parsed from
+  // the chat description.
+  let juniorAdded = 0;
+  for (const c of juniorChats) {
+    if (!c.meegoId) continue;
+    if (!todos.has(c.meegoId)) {
+      todos.set(c.meegoId, { id: c.meegoId, name: c.chatName });
+      juniorAdded++;
+    }
+  }
+  if (juniorAdded > 0) {
+    console.log(`[digests] added ${juniorAdded} feature(s) from Junior chats, new total=${todos.size}`);
+  }
+
+  // Step 4: Merge in the manual watchlist — fallback for features whose
+  // chat doesn't exist yet (or that Junior was never added to). Lives in
+  // the GCS state file under `watchlist`, edit via `gcloud storage cp`.
   let watchlistAdded = 0;
-  for (const id of WATCHLIST_FEATURE_IDS) {
+  for (const id of watchlist) {
     if (!todos.has(id)) {
       todos.set(id, { id, name: '' }); // name resolved by fetchMeegoFeature
       watchlistAdded++;
@@ -1461,51 +1527,80 @@ export async function buildRiskDigestCard(findings: RiskFinding[]): Promise<{
 
 // ─── Unanswered Q&A check (Task 5) ─────────────────────────────────────────
 
-// Stakeholder role KEYS (stable IDs) — anyone with an @-mention in these
-// roles whose question goes unanswered is surfaced in the digest.
-const STAKEHOLDER_ROLE_KEYS = ['PM', 'UI_UX', 'UI&UX', 'Tech_Owner', 'iOS', 'Android', 'Server', 'QA'];
+/**
+ * Q&A scan window — last 24 h of messages, matching the chat-risk window.
+ */
+const UNANSWERED_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-export async function collectUnansweredForFeature(
-  feature: MeegoFeature, sinceMs: number, token: string,
-): Promise<UnansweredFinding | null> {
-  if (!feature.chatId) return null;
+/** Hard cap on questions per feature in the card so a busy chat doesn't blow up the message. */
+const MAX_QUESTIONS_PER_FEATURE = 5;
 
-  const stakeholderEmails = new Set<string>();
-  for (const roleKey of STAKEHOLDER_ROLE_KEYS) {
-    const names = feature.roles[roleKey] ?? [];
-    for (const name of names) {
-      const email = feature.roleEmails[name];
-      if (email) stakeholderEmails.add(email);
-    }
+/**
+ * Determine whether a question message has been answered. A question is
+ * answered if any later message exists in the same thread:
+ *   - direct reply to it (`Y.parent_id === X.message_id`)
+ *   - in a thread X started (`Y.root_id === X.message_id`)
+ *   - any later message in the same thread X belongs to (when X is itself
+ *     a thread reply): `Y.root_id === X.root_id AND Y.create_time > X.create_time`
+ *
+ * The "later in same thread" check matters because Thomas can be @-mentioned
+ * mid-thread and a follow-up reply from someone else still counts as an
+ * answer even though it's not a direct reply to Thomas's message.
+ */
+function isQuestionAnswered(question: ChatMessage, all: ChatMessage[]): boolean {
+  const qId = question.message_id;
+  const qRoot = question.root_id ?? '';
+  const qTime = Number(question.create_time ?? 0);
+  for (const m of all) {
+    if (m.message_id === qId) continue;
+    if (m.parent_id === qId) return true;
+    if (m.root_id === qId) return true;
+    if (qRoot && m.root_id === qRoot && Number(m.create_time ?? 0) > qTime) return true;
   }
-  if (stakeholderEmails.size === 0) return null;
+  return false;
+}
 
-  const emailToOpenId = await resolveOpenIds([...stakeholderEmails], token);
-  const stakeholderOpenIds = new Set(Object.values(emailToOpenId));
-  if (stakeholderOpenIds.size === 0) return null;
+/**
+ * Scan one chat for top-level / thread messages that @-mention the owner
+ * (Thomas) and have no reply within the 24h window. Returns one
+ * `UnansweredFinding` per feature, or null when there's nothing to flag.
+ *
+ * Question definition (per user):
+ *   - Sent by ANYONE (no stakeholder filter)
+ *   - At ANY thread depth (top-level or thread reply)
+ *   - The message's `mentions` list includes the owner's open_id
+ *   - The message has no later reply in the same thread
+ */
+export async function collectUnansweredForFeature(
+  feature: MeegoFeature,
+  chatId: string,
+  sinceMs: number,
+  ownerOpenId: string,
+  token: string,
+): Promise<UnansweredFinding | null> {
+  if (!chatId || !ownerOpenId) return null;
 
   let messages: ChatMessage[] = [];
   try {
-    messages = await readChatMessages(feature.chatId, sinceMs, token);
+    messages = await readChatMessages(chatId, sinceMs, token);
   } catch (e) {
     console.warn(`[digests] failed to read messages for ${feature.name}:`, e);
     return null;
   }
   if (messages.length === 0) return null;
 
-  const stakeholderMsgs = messages.filter(m => {
-    const senderOpenId = m.sender?.sender_id?.open_id;
-    if (!senderOpenId || !stakeholderOpenIds.has(senderOpenId)) return false;
+  // Filter to messages where Thomas is in the @mentions list. Any sender,
+  // any thread depth.
+  const mentionMsgs = messages.filter(m => {
     if (!m.mentions || m.mentions.length === 0) return false;
-    if (m.parent_id) return false;
-    return true;
+    return m.mentions.some(mention => mention.id?.open_id === ownerOpenId);
   });
-  if (stakeholderMsgs.length === 0) return null;
+  if (mentionMsgs.length === 0) return null;
 
+  // Drop the ones that have a reply.
   const unanswered: UnansweredQuestion[] = [];
-  for (const msg of stakeholderMsgs) {
-    const hasReply = messages.some(m => m.root_id === msg.message_id || m.parent_id === msg.message_id);
-    if (hasReply) continue;
+  for (const msg of mentionMsgs) {
+    if (isQuestionAnswered(msg, messages)) continue;
 
     let text = '';
     try {
@@ -1514,6 +1609,7 @@ export async function collectUnansweredForFeature(
     } catch {
       text = msg.body?.content ?? '';
     }
+    // Strip the mention key tokens from the body for a cleaner preview.
     for (const mention of msg.mentions ?? []) {
       text = text.replace(mention.key, '').trim();
     }
@@ -1528,9 +1624,71 @@ export async function collectUnansweredForFeature(
   }
 
   if (unanswered.length === 0) return null;
-  return { feature, questions: unanswered.slice(0, 5) };
+  // Newest first so the most recent question is on top.
+  unanswered.sort((a, b) => b.timestamp - a.timestamp);
+  return { feature, questions: unanswered.slice(0, MAX_QUESTIONS_PER_FEATURE) };
 }
 
+/**
+ * Build the Unanswered Q&A digest as a Lark interactive card. Mirrors the
+ * style of the risk digest: title in the header, one section per feature
+ * separated by horizontal rules, inline (Meego, PRD) links next to the
+ * feature name. Header colour is neutral (wathet light blue) since these
+ * aren't risks per se.
+ */
+export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
+  title: string;
+  template: CardHeaderTemplate;
+  sections: CardSection[];
+} {
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
+  });
+  const totalQs = findings.reduce((sum, f) => sum + f.questions.length, 0);
+  const title = `💬 Daily Unanswered Questions — ${today}`;
+  const template: CardHeaderTemplate = 'wathet';
+
+  const sections: CardSection[] = [];
+
+  if (findings.length === 0) {
+    sections.push({ content: 'No unanswered questions in the last 24 hours.' });
+    return { title, template, sections };
+  }
+
+  // Lead with a small summary section.
+  sections.push({
+    content: `**${totalQs} unanswered question${totalQs === 1 ? '' : 's'} across ${findings.length} feature${findings.length === 1 ? '' : 's'}**`,
+  });
+
+  for (const finding of findings) {
+    const f = finding.feature;
+    const linkParts: string[] = [`[Meego](${f.meegoUrl})`];
+    if (f.prd) linkParts.push(`[PRD](${f.prd})`);
+    const linkSuffix = ` (${linkParts.join(', ')})`;
+
+    const lines: string[] = [];
+    lines.push(`**${escapeMd(f.name)}**${linkSuffix}`);
+    for (const q of finding.questions) {
+      const time = q.timestamp > 0
+        ? new Date(q.timestamp).toLocaleString('en-US', {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore',
+          })
+        : '';
+      const preview = (q.text || '(no text)').replace(/\s+/g, ' ').trim();
+      // Sanitize the preview for lark_md (escape * and _).
+      const safePreview = escapeMd(preview);
+      lines.push(`  • ${time}: "${safePreview}"`);
+    }
+    sections.push({ content: lines.join('\n') });
+  }
+
+  return { title, template, sections };
+}
+
+/**
+ * Plain-text formatter kept for the legacy DigestRunResult log preview.
+ * The actual message is sent as the interactive card built above.
+ */
 export function formatUnansweredDigest(findings: UnansweredFinding[]): string {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const totalQs = findings.reduce((sum, f) => sum + f.questions.length, 0);
@@ -1541,15 +1699,13 @@ export function formatUnansweredDigest(findings: UnansweredFinding[]): string {
   lines.push('');
 
   for (const finding of findings) {
-    const stage = finding.feature.currentNodeName || finding.feature.overallStatusName;
-    lines.push(`${finding.feature.name} (${stage})`);
+    lines.push(finding.feature.name);
     for (const q of finding.questions) {
       const time = q.timestamp > 0
         ? new Date(q.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
         : '';
-      const mentioned = q.mentionNames.length > 0 ? ` → ${q.mentionNames.join(', ')}` : '';
       const preview = q.text || '(no text)';
-      lines.push(`  • ${time}${mentioned}: "${preview}"`);
+      lines.push(`  • ${time}: "${preview}"`);
     }
     lines.push('');
   }
@@ -1565,17 +1721,39 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   const targetChatId = PM_GROUP_CHAT_ID;
 
   // Step 0: Load persistent state early — we need the discoveredIdsCache as
-  // a fallback if Meego MCP discovery fails this run.
+  // a fallback if Meego MCP discovery fails this run, plus the cached Junior
+  // chat list and the watchlist.
   const state = await loadDigestState();
   console.log(
-    `[digests] loaded digest state: ${Object.keys(state.features).length} prior feature entries, ${state.recentRunTimes.length} run timestamps, cache=${state.discoveredIdsCache?.ids.length ?? 0}`,
+    `[digests] loaded digest state: ${Object.keys(state.features).length} prior feature entries, ${state.recentRunTimes.length} run timestamps, cache=${state.discoveredIdsCache?.ids.length ?? 0}, watchlist=${(state.watchlist ?? []).length}`,
   );
 
+  // Fetch the main Lark bot token early — needed both for the Junior chat
+  // list refresh (Step 0b) and for chat lookups + chat reads later in the
+  // pipeline.
+  let botToken = '';
+  try {
+    botToken = await getLarkBotToken();
+  } catch (e) {
+    console.warn('[digests] failed to get Lark bot token:', e);
+  }
 
-  // Step 1: Discover all PM-owned work items. If both list_todo and MQL come
-  // back empty (Meego MCP backend hiccup), fall back to the cached discovery
-  // from the last successful run so the digest still produces output.
-  let allIds = await fetchAllPmOwnedIds(TIKTOK_PROJECT_KEY);
+  // Step 0b: Refresh (or reuse) Junior's chat list. This drives both the
+  // discovery augmentation in Step 1 and the Q&A scan in Step 6.
+  let juniorChats: JuniorChatCacheEntry[] = [];
+  if (botToken) {
+    juniorChats = await discoverJuniorFeatureChats(state, botToken);
+  }
+
+  // Step 1: Discover all PM-owned work items. Sources unioned + deduped:
+  //   1. list_todo — features with an active task assignment
+  //   2. search_by_mql — features where you're the sole PM
+  //   3. Junior's chat list — primary mechanism for co-PM features
+  //   4. State watchlist — manual fallback for features without a Junior chat
+  // If everything comes back empty (Meego MCP backend hiccup), fall back to
+  // the cached discovery from the last successful run so the digest still
+  // produces output.
+  let allIds = await fetchAllPmOwnedIds(TIKTOK_PROJECT_KEY, juniorChats, getWatchlist(state));
   if (allIds.length === 0 && state.discoveredIdsCache && state.discoveredIdsCache.ids.length > 0) {
     console.warn(
       `[digests] discovery returned 0 features — falling back to cached ${state.discoveredIdsCache.ids.length} ids from ${state.discoveredIdsCache.savedAtIso}`,
@@ -1646,24 +1824,13 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     `[digests] resolved iOS version ${resolvedMobile}/${mobileCount}, server launch date ${resolvedServer}/${serverCount}`,
   );
 
-  // Step 3c: Fetch tokens early.
-  //   - Rio token: needed for the final digest card send (Step 7).
-  //   - Main Lark bot token: needed for chat lookups (Step 3d) and chat-risk
-  //     message reads (Step 4). The main Lark bot is already a member of the
-  //     feature group chats (Hamlet's existing flow adds it via
-  //     joinFeatureChat). Rio isn't in those chats by default, so Rio's
-  //     token can't search or read them even with the right scopes.
+  // Step 3c: Fetch the Rio token (needed for the final digest card send in
+  // Step 7). The main Lark bot token was already fetched at Step 0a above.
   let rioToken = '';
   try {
     rioToken = await getAgentToken('rio');
   } catch (e) {
     console.warn('[digests] failed to get Rio token:', e);
-  }
-  let botToken = '';
-  try {
-    botToken = await getLarkBotToken();
-  } catch (e) {
-    console.warn('[digests] failed to get Lark bot token:', e);
   }
 
   // Step 3d: Resolve each in-dev feature's Lark chat ID via the main Lark
@@ -1818,11 +1985,56 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   const severityOrder: Record<RiskLevel, number> = { red: 0, yellow: 1, green: 2 };
   riskFindings.sort((a, b) => severityOrder[a.level] - severityOrder[b.level]);
 
-  // Step 6: Collect unanswered questions
-  // NOTE: chatId is now resolved in Step 3d, so this could be enabled — but
-  // for the current run we still skip until the unanswered Q&A flow is
-  // wired up to use it.
+  // Step 6: Unanswered Q&A scan — over every chat Junior is in (cached at
+  // Step 0b), filtered to features whose Meego status is NOT 'end'
+  // (completed/launched). Question definition: any message at any thread
+  // depth that @-mentions Thomas, with no later reply in the same thread.
+  // Sender can be anyone in the chat — no role filter.
+  const ownerEmail = process.env.OWNER_EMAIL;
+  let ownerOpenId = '';
+  if (ownerEmail && botToken) {
+    try {
+      const map = await resolveOpenIds([ownerEmail], botToken);
+      ownerOpenId = map[ownerEmail] ?? '';
+    } catch (e) {
+      console.warn('[digests] failed to resolve owner open_id:', e);
+    }
+  }
+  console.log(`[digests] owner open_id: ${ownerOpenId ? 'resolved' : 'NOT resolved — Q&A scan will be skipped'}`);
+
+  // Lookup: workItemId → MeegoFeature for the briefs already fetched in Step 2.
+  const featureById = new Map<string, MeegoFeature>(features.map(f => [f.workItemId, f]));
+
+  const sinceMs = Date.now() - UNANSWERED_WINDOW_MS;
   const unansweredFindings: UnansweredFinding[] = [];
+  if (ownerOpenId && botToken) {
+    let scanned = 0;
+    let skippedNoBrief = 0;
+    let skippedEnded = 0;
+    for (const chat of juniorChats) {
+      const feature = featureById.get(chat.meegoId);
+      if (!feature) {
+        skippedNoBrief++;
+        continue;
+      }
+      if (feature.overallStatusKey === 'end') {
+        skippedEnded++;
+        continue;
+      }
+      scanned++;
+      try {
+        const finding = await collectUnansweredForFeature(
+          feature, chat.chatId, sinceMs, ownerOpenId, botToken,
+        );
+        if (finding) unansweredFindings.push(finding);
+      } catch (e) {
+        console.warn(`[digests] Q&A scan failed for ${feature.name}:`, e);
+      }
+    }
+    console.log(
+      `[digests] Q&A scan: ${scanned} chats scanned (${skippedEnded} ended, ${skippedNoBrief} no brief), ${unansweredFindings.length} with unanswered questions`,
+    );
+  }
 
   // Step 7: Send risk digest (always) — interactive card with per-feature
   // buttons, posted to the PM group chat.
@@ -1837,16 +2049,19 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     riskSent = id !== null;
   }
 
-  // Step 8: Send unanswered digest (only if content) — plain text to the PM
-  // group chat, same destination as the risk digest.
+  // Step 8: Send unanswered Q&A digest (only if there are findings) —
+  // interactive card to the same PM group chat.
   let unansweredSent = false;
   if (rioToken && unansweredFindings.length > 0) {
-    const text = formatUnansweredDigest(unansweredFindings);
-    console.log('[digests] unanswered digest:\n' + text);
-    const id = await sendTextMessage(targetChatId, text, rioToken);
+    const card = buildUnansweredDigestCard(unansweredFindings);
+    const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
+    console.log('[digests] unanswered digest:\n' + preview);
+    const id = await sendInteractiveCardToChat(
+      targetChatId, card.title, card.template, card.sections, rioToken,
+    );
     unansweredSent = id !== null;
   } else {
-    console.log(`[digests] no unanswered questions — skipping Q&A digest`);
+    console.log('[digests] no unanswered questions — skipping Q&A digest');
   }
 
   return {
