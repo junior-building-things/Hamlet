@@ -458,9 +458,12 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
   const { roles, roleDisplayNames, emails: roleEmails } = parseRolesFromJson(json);
   const activeNodeOwnerEmails = pickedNode?.owners ?? '';
 
-  // Fall back to the brief's work_item_name when the caller didn't supply one
-  // (e.g. for watchlist entries discovered without going through list_todo).
-  const resolvedName = name || json.work_item_attribute?.work_item_name || `(workitem ${workItemId})`;
+  // Prefer the brief's authoritative work_item_name over whatever the
+  // discovery step gave us. The Junior-chat discovery path uses the chat
+  // display name (like "(45.2) [SA ]AI theatre ID 录入合并 - [需求同步群]")
+  // which has a version prefix and group-type suffix wrapped around the
+  // real feature name; the brief returns the clean feature name.
+  const resolvedName = json.work_item_attribute?.work_item_name || name || `(workitem ${workItemId})`;
 
   return {
     workItemId,
