@@ -31,6 +31,21 @@ import {
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
+/**
+ * Feature IDs to ALWAYS include in the digest, even when list_todo + MQL
+ * don't return them. Used to cover multi-PM features where Meego's
+ * `__PM = current_login_user()` predicate doesn't match because the user is
+ * a co-PM (not the primary), and to track features the user is following
+ * but not formally assigned to.
+ *
+ * Add a Meego workItemId here to start watching a feature. The discovery
+ * step will pull the brief and run it through the same in-dev / risk
+ * evaluation as everything else.
+ */
+const WATCHLIST_FEATURE_IDS: string[] = [
+  '6839672017', // [SA ]AI theatre ID 录入合并 — Thomas is a co-PM
+];
+
 async function callMeegoMcpOnce(toolName: string, args: Record<string, unknown>): Promise<string> {
   const token = process.env.MEEGO_USER_TOKEN;
   if (!token) throw new Error('MEEGO_USER_TOKEN not configured');
@@ -965,7 +980,7 @@ async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: strin
     list?: Array<{ count?: number }>;
     data?: Record<string, Array<{ moql_field_list?: Array<{ key: string; value: { long_value?: number; varchar_value?: string; string_value?: string } }> }>>;
   }
-  const MQL = "SELECT `work_item_id`, `name` FROM `TikTok`.`需求` WHERE `__PM` CONTAINS current_login_user()";
+  const MQL = "SELECT `work_item_id`, `name` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()";
   let mqlAdded = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -1005,12 +1020,20 @@ async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: strin
   }
   console.log(`[digests] PM-owned discovery: list_todo=${todos.size - mqlAdded}, MQL added=${mqlAdded}, total=${todos.size}`);
 
-  // Probe (TEMPORARY): is SA AI theatre (6839672017) in the discovered set?
-  const targetId = '6839672017';
-  if (todos.has(targetId)) {
-    console.log(`[digests] discovery probe: SA AI theatre (${targetId}) IS in discovered set as "${todos.get(targetId)?.name}"`);
-  } else {
-    console.log(`[digests] discovery probe: SA AI theatre (${targetId}) is NOT in discovered set`);
+  // Step 3: Merge in the watchlist — features the user wants to always
+  // include even if list_todo + MQL miss them. This covers multi-PM
+  // features where Meego's `__PM = current_login_user()` predicate doesn't
+  // match because the user isn't the primary PM, plus any features the
+  // user is following but not formally assigned to.
+  let watchlistAdded = 0;
+  for (const id of WATCHLIST_FEATURE_IDS) {
+    if (!todos.has(id)) {
+      todos.set(id, { id, name: '' }); // name resolved by fetchMeegoFeature
+      watchlistAdded++;
+    }
+  }
+  if (watchlistAdded > 0) {
+    console.log(`[digests] added ${watchlistAdded} feature(s) from watchlist, new total=${todos.size}`);
   }
 
   return [...todos.values()];
@@ -1565,15 +1588,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
 
   // Step 2: Fetch each feature's raw Meego state
   const features: MeegoFeature[] = [];
-  const targetProbeId = '6839672017'; // SA AI theatre — TEMPORARY probe
   for (const { id, name } of allIds) {
     const f = await fetchMeegoFeature(id, name, TIKTOK_PROJECT_KEY);
     if (f) features.push(f);
-    if (id === targetProbeId) {
-      console.log(
-        `[digests] SA AI theatre fetch: feature=${f ? 'present' : 'null'}, allNodeIds=${JSON.stringify(f?.allNodeIds ?? [])}, isInDev=${f ? isInDev(f.allNodeIds) : 'n/a'}`,
-      );
-    }
     await new Promise(r => setTimeout(r, 200));
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
