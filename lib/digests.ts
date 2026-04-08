@@ -1487,6 +1487,25 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Previously DM'd to OWNER_EMAIL; now posted to the PM group chat.
   const targetChatId = PM_GROUP_CHAT_ID;
 
+  // Discovery probe (TEMPORARY): fetch the brief for [SA ]AI theatre 录入合并
+  // and log every currently-active node so we can see why the in-dev filter
+  // is dropping it. Remove once the active nodes are confirmed.
+  try {
+    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839672017`;
+    const briefRaw = await callMeegoMcp('get_workitem_brief', {
+      url: probeUrl,
+      fields: ['priority'],
+    });
+    const briefJson = JSON.parse(briefRaw) as BriefJson;
+    const overall = parseOverallStatus(briefJson);
+    const nodes = parseActiveNodesFromJson(briefJson);
+    console.log(
+      `[digests] probe SA AI theatre: overallStatus={key:${overall.key},name:${overall.name}}, active nodes (${nodes.length}): ${JSON.stringify(nodes.map(n => ({ id: n.key, name: n.name })))}`,
+    );
+  } catch (e) {
+    console.warn('[digests] SA AI theatre probe failed:', e);
+  }
+
   // Step 1: Discover all PM-owned work items
   const allIds = await fetchAllPmOwnedIds(TIKTOK_PROJECT_KEY);
   console.log(`[digests] discovered ${allIds.length} PM-owned stories`);
