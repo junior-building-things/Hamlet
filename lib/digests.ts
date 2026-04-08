@@ -1002,6 +1002,14 @@ async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: strin
   }
   console.log(`[digests] PM-owned discovery: list_todo=${todos.size - mqlAdded}, MQL added=${mqlAdded}, total=${todos.size}`);
 
+  // Probe (TEMPORARY): is SA AI theatre (6839672017) in the discovered set?
+  const targetId = '6839672017';
+  if (todos.has(targetId)) {
+    console.log(`[digests] discovery probe: SA AI theatre (${targetId}) IS in discovered set as "${todos.get(targetId)?.name}"`);
+  } else {
+    console.log(`[digests] discovery probe: SA AI theatre (${targetId}) is NOT in discovered set`);
+  }
+
   return [...todos.values()];
 }
 
@@ -1532,9 +1540,15 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
 
   // Step 2: Fetch each feature's raw Meego state
   const features: MeegoFeature[] = [];
+  const targetProbeId = '6839672017'; // SA AI theatre — TEMPORARY probe
   for (const { id, name } of allIds) {
     const f = await fetchMeegoFeature(id, name, TIKTOK_PROJECT_KEY);
     if (f) features.push(f);
+    if (id === targetProbeId) {
+      console.log(
+        `[digests] SA AI theatre fetch: feature=${f ? 'present' : 'null'}, allNodeIds=${JSON.stringify(f?.allNodeIds ?? [])}, isInDev=${f ? isInDev(f.allNodeIds) : 'n/a'}`,
+      );
+    }
     await new Promise(r => setTimeout(r, 200));
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
