@@ -469,9 +469,13 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
   const { roles, roleDisplayNames, emails: roleEmails } = parseRolesFromJson(json);
   const activeNodeOwnerEmails = pickedNode?.owners ?? '';
 
+  // Fall back to the brief's work_item_name when the caller didn't supply one
+  // (e.g. for watchlist entries discovered without going through list_todo).
+  const resolvedName = name || json.work_item_attribute?.work_item_name || `(workitem ${workItemId})`;
+
   return {
     workItemId,
-    name,
+    name: resolvedName,
     meegoUrl,
     overallStatusKey: overall.key,
     overallStatusName: overall.name,
