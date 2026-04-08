@@ -15,11 +15,13 @@ import {
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
 import {
-  loadChatRiskState,
-  saveChatRiskState,
+  loadDigestState,
+  saveDigestState,
   pruneStaleRisks,
   dropExitedFeatures,
-  PersistedChatRisk,
+  recordRunTime,
+  previousRunCutoffMs,
+  PersistedDelayChange,
 } from './digest-state';
 
 // Direct Meego MCP client — duplicated here so the digest pipeline can talk to
@@ -82,30 +84,6 @@ async function callMeegoMcp(toolName: string, args: Record<string, unknown>): Pr
   throw new Error('Meego MCP rate limited after 4 retries');
 }
 
-/**
- * One-shot discovery helper: list every Meego MCP tool name + description.
- * Runs the standard MCP `tools/list` JSON-RPC method (no arguments). Used by
- * the digest endpoint to identify the activity-log tool name on first run;
- * delete this function once the tool name is hardcoded.
- */
-export async function listMeegoMcpTools(): Promise<Array<{ name: string; description?: string }>> {
-  const token = process.env.MEEGO_USER_TOKEN;
-  if (!token) throw new Error('MEEGO_USER_TOKEN not configured');
-  const res = await fetch(MEEGO_MCP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Mcp-Token': token },
-    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'tools/list' }),
-  });
-  if (!res.ok) throw new Error(`Meego MCP tools/list HTTP error: ${res.status}`);
-  const data = await res.json() as {
-    error?: { message: string };
-    result?: { tools?: Array<{ name?: string; description?: string }> };
-  };
-  if (data.error) throw new Error(`Meego MCP tools/list error: ${data.error.message}`);
-  return (data.result?.tools ?? [])
-    .filter((t): t is { name: string; description?: string } => typeof t.name === 'string')
-    .map(t => ({ name: t.name, description: t.description }));
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -148,6 +126,13 @@ export interface RiskFinding {
   level: RiskLevel;
   reasons: string[];
   feature: MeegoFeature;
+  /**
+   * If set, the card renders this finding with a "Delayed" label (using the
+   * red high-tier colour) and shows ONLY the delay detail in parens. This
+   * overrides the normal level + reasons display. Set when the activity log
+   * shows a version or planned-launch-date edit since the previous run.
+   */
+  delay?: { detail: string };
 }
 
 export interface UnansweredQuestion {
@@ -694,6 +679,221 @@ async function resolveServerPlannedLaunchDate(meegoUrl: string): Promise<string>
   return '';
 }
 
+// ─── Activity-log change detection (Delayed risk) ─────────────────────────
+
+/**
+ * Field key constants for the iOS / Android version + Server Planned Launch
+ * Date fields. The op_record activity feed reports modifications to these
+ * fields under their stable Meego key, so we look them up by ID.
+ */
+const FIELD_KEY_IOS_VERSION = 'field_08a9ca';
+const FIELD_KEY_ANDROID_VERSION = 'field_c88970';
+const FIELD_KEY_SERVER_LAUNCH_DATE = 'field_cde888';
+
+/** Op record (subset of fields we care about). */
+interface OpRecord {
+  operation_type?: string;
+  operation_time?: number; // unix ms
+  op_record_module?: string;
+  operator?: string;
+  record_contents?: Array<{
+    object?: { object_type?: string; object_value?: string };
+    object_property?: string | null;
+    old?: unknown;
+    new?: unknown;
+  }>;
+}
+interface OpRecordPage { has_more?: boolean; start_from?: string; total?: number; op_records?: OpRecord[] }
+
+/**
+ * Fetch op records for a feature, walking pagination only as far back as
+ * `sinceMs`. Records come back newest-first, so we early-exit as soon as
+ * we see one older than the cutoff (avoiding the full-history walk).
+ *
+ * Capped at 5 pages to bound latency in case the cursor logic ever loops.
+ */
+async function fetchRecentOpRecords(meegoUrl: string, sinceMs: number): Promise<OpRecord[]> {
+  const all: OpRecord[] = [];
+  let startFrom: string | undefined;
+  for (let page = 0; page < 5; page++) {
+    const args: Record<string, unknown> = { url: meegoUrl };
+    if (startFrom) args.start_from = startFrom;
+    let raw: string;
+    try {
+      raw = await callMeegoMcp('get_workitem_op_record', args);
+    } catch {
+      break;
+    }
+    let parsed: OpRecordPage;
+    try {
+      parsed = JSON.parse(raw) as OpRecordPage;
+    } catch {
+      break;
+    }
+    const records = parsed.op_records ?? [];
+    let reachedCutoff = false;
+    for (const r of records) {
+      if (r.operation_time !== undefined && r.operation_time < sinceMs) {
+        reachedCutoff = true;
+        break;
+      }
+      all.push(r);
+    }
+    if (reachedCutoff || !parsed.has_more || !parsed.start_from) break;
+    startFrom = parsed.start_from;
+  }
+  return all;
+}
+
+/** A single Delayed-relevant change extracted from the op records. */
+export interface FieldChange {
+  kind: 'version' | 'launch_date';
+  /** Display string, e.g. "version 44.4 → 44.5" or "planned launch 16 Apr → 17 Apr". */
+  detail: string;
+  operationTimeMs: number;
+}
+
+/**
+ * Format a single date value (ISO string or unix ms or `[ts]`) as `D MMM`
+ * in Singapore time so the digest reads consistently with the rest of the
+ * card. Returns the raw value if no date can be parsed.
+ */
+function formatChangeDate(value: unknown): string {
+  function tryFormat(v: unknown): string {
+    if (typeof v === 'number' && v > 0) {
+      const ms = v > 1e12 ? v : v * 1000;
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' });
+      }
+    }
+    if (typeof v === 'string') {
+      const m = v.match(/(\d{4}-\d{2}-\d{2})/);
+      if (m) {
+        const d = new Date(m[1] + 'T00:00:00+08:00');
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' });
+        }
+      }
+      const ts = Number(v);
+      if (!isNaN(ts) && ts > 0) return tryFormat(ts);
+    }
+    return '';
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const out = tryFormat(v);
+      if (out) return out;
+    }
+    return '';
+  }
+  return tryFormat(value);
+}
+
+/**
+ * Extract the underlying primitive from an op_record old/new array. Op
+ * records always wrap values in arrays — even single-value fields. Returns
+ * the first element or the raw input if it isn't an array.
+ */
+function unwrapValue(v: unknown): unknown {
+  if (Array.isArray(v)) return v[0];
+  return v;
+}
+
+/**
+ * Resolve a Meego version work item id to its short numeric form (e.g.
+ * "44.9"). Used to render version-change op records like
+ * "version 44.4 → 44.5". Falls back to the raw id if resolution fails.
+ */
+async function resolveVersionShortName(versionId: string | number): Promise<string> {
+  try {
+    const raw = await callMeegoMcp('get_workitem_brief', {
+      url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/version/detail/${versionId}`,
+    });
+    let name = '';
+    try {
+      const parsed = JSON.parse(raw) as BriefJson;
+      name = parsed.work_item_attribute?.work_item_name ?? '';
+    } catch {
+      const m = raw.match(/工作项名称\s*\|\s*([^|\n]+)/);
+      if (m) name = m[1].trim();
+    }
+    const m = name.match(/(\d+\.\d+)(?:\.\d+)?$/);
+    return m ? m[1] : (name || String(versionId));
+  } catch {
+    return String(versionId);
+  }
+}
+
+/**
+ * Walk a feature's recent op records and pull out any changes to the iOS
+ * version, Android version, or Server Planned Launch Date fields that
+ * happened after `sinceMs`. Returns one FieldChange per matching record.
+ *
+ * Multiple changes for the same field are collapsed: only the most recent
+ * one is returned, and the "from" side is taken from the OLDEST record so
+ * the displayed transition spans the full delay window.
+ */
+export async function detectDelayedFieldChanges(
+  meegoUrl: string,
+  sinceMs: number,
+): Promise<FieldChange[]> {
+  const records = await fetchRecentOpRecords(meegoUrl, sinceMs);
+  if (records.length === 0) return [];
+
+  // Collect changes per field, sorted oldest first.
+  interface RawChange { kind: FieldChange['kind']; old: unknown; new: unknown; ts: number; fieldKey: string }
+  const byKind = new Map<string, RawChange[]>();
+  for (const r of records) {
+    if (r.op_record_module !== 'field_mod') continue;
+    if (r.operation_type !== 'modify') continue;
+    const ts = r.operation_time ?? 0;
+    if (ts < sinceMs) continue;
+    for (const c of r.record_contents ?? []) {
+      const fk = c.object?.object_value;
+      if (!fk) continue;
+      let kind: FieldChange['kind'] | null = null;
+      if (fk === FIELD_KEY_IOS_VERSION || fk === FIELD_KEY_ANDROID_VERSION) kind = 'version';
+      else if (fk === FIELD_KEY_SERVER_LAUNCH_DATE) kind = 'launch_date';
+      if (!kind) continue;
+      const list = byKind.get(kind) ?? [];
+      list.push({ kind, old: c.old, new: c.new, ts, fieldKey: fk });
+      byKind.set(kind, list);
+    }
+  }
+
+  if (byKind.size === 0) return [];
+
+  // Collapse each field's changes into a single from→to transition. Use
+  // the oldest record's `old` and the newest record's `new`, so a 44.4 →
+  // 44.5 → 44.6 sequence in one window reads as "44.4 → 44.6".
+  const out: FieldChange[] = [];
+  for (const [kind, list] of byKind.entries()) {
+    list.sort((a, b) => a.ts - b.ts);
+    const first = list[0];
+    const last = list[list.length - 1];
+    if (kind === 'version') {
+      const fromIds = Array.isArray(first.old) ? first.old : [first.old];
+      const toIds   = Array.isArray(last.new)  ? last.new  : [last.new];
+      const fromName = fromIds[0] !== undefined && fromIds[0] !== null ? await resolveVersionShortName(fromIds[0] as string | number) : '';
+      const toName   = toIds[0]   !== undefined && toIds[0]   !== null ? await resolveVersionShortName(toIds[0]   as string | number) : '';
+      if (fromName && toName && fromName !== toName) {
+        out.push({ kind: 'version', detail: `version ${fromName} → ${toName}`, operationTimeMs: last.ts });
+      }
+    } else if (kind === 'launch_date') {
+      const fromStr = formatChangeDate(unwrapValue(first.old));
+      const toStr   = formatChangeDate(unwrapValue(last.new));
+      if (fromStr && toStr && fromStr !== toStr) {
+        out.push({ kind: 'launch_date', detail: `planned launch ${fromStr} → ${toStr}`, operationTimeMs: last.ts });
+      } else if (toStr && !fromStr) {
+        // First time the field was set in the window — also worth surfacing.
+        out.push({ kind: 'launch_date', detail: `planned launch set to ${toStr}`, operationTimeMs: last.ts });
+      }
+    }
+  }
+  return out;
+}
+
 // ─── Feature discovery via list_todo + MQL (raw Chinese statuses) ─────────
 
 interface MeegoTodoItem {
@@ -1120,11 +1320,17 @@ async function buildFeatureSectionContent(finding: RiskFinding): Promise<string>
     }
   }
 
-  // Risk: level with reasons in parens if any
-  const riskValue = finding.reasons.length > 0
-    ? `${label} (${finding.reasons.map(escapeMd).join(', ')})`
-    : label;
-  lines.push(`**Risk:** ${riskValue}`);
+  // Risk: when a Delayed badge is active, override the level label and
+  // show ONLY the delay detail in parens (no other reasons). Otherwise,
+  // render the normal level + reasons summary.
+  if (finding.delay) {
+    lines.push(`**Risk:** Delayed (${escapeMd(finding.delay.detail)})`);
+  } else {
+    const riskValue = finding.reasons.length > 0
+      ? `${label} (${finding.reasons.map(escapeMd).join(', ')})`
+      : label;
+    lines.push(`**Risk:** ${riskValue}`);
+  }
 
   return lines.join('\n');
 }
@@ -1281,73 +1487,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Previously DM'd to OWNER_EMAIL; now posted to the PM group chat.
   const targetChatId = PM_GROUP_CHAT_ID;
 
-  // Discovery probe (TEMPORARY): walk every page of get_workitem_op_record
-  // for the test feature and dump records that touch field_cde888 (Server
-  // Planned Launch Date) or field_08a9ca (iOS version), plus any node_mod
-  // entries on qa_test_preparation. Helps us see what the launch-date edit
-  // actually looks like end-to-end so we can write a parser.
-  try {
-    interface OpRecord {
-      operation_type?: string;
-      operation_time?: number;
-      op_record_module?: string;
-      operator?: string;
-      record_contents?: Array<{
-        object?: { object_type?: string; object_value?: string };
-        object_property?: string | null;
-        old?: unknown;
-        new?: unknown;
-      }>;
-    }
-    interface OpRecordPage { has_more?: boolean; start_from?: string; total?: number; op_records?: OpRecord[] }
-    async function fetchAllOp(url: string): Promise<OpRecord[]> {
-      const all: OpRecord[] = [];
-      let startFrom: string | undefined;
-      for (let page = 0; page < 10; page++) {
-        const args: Record<string, unknown> = { url };
-        if (startFrom) args.start_from = startFrom;
-        const raw = await callMeegoMcp('get_workitem_op_record', args);
-        const parsed = JSON.parse(raw) as OpRecordPage;
-        all.push(...(parsed.op_records ?? []));
-        if (!parsed.has_more || !parsed.start_from) break;
-        startFrom = parsed.start_from;
-      }
-      return all;
-    }
-    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/7074054514`; // thomas test
-    const records = await fetchAllOp(probeUrl);
-
-    // Group by module + sample one record per module
-    const byModule = new Map<string, OpRecord>();
-    const fieldKeyCounts = new Map<string, number>();
-    const propertyCounts = new Map<string, number>();
-    for (const r of records) {
-      const mod = r.op_record_module ?? '?';
-      if (!byModule.has(mod)) byModule.set(mod, r);
-      for (const c of r.record_contents ?? []) {
-        const fk = c.object?.object_value ?? '';
-        if (fk) fieldKeyCounts.set(fk, (fieldKeyCounts.get(fk) ?? 0) + 1);
-        const p = c.object_property ?? '';
-        if (p) propertyCounts.set(p, (propertyCounts.get(p) ?? 0) + 1);
-      }
-    }
-    console.log(`[digests] op_record thomas test: ${records.length} total records`);
-    console.log(`[digests] op_record thomas test modules: ${[...byModule.keys()].join(', ')}`);
-    console.log(`[digests] op_record thomas test field keys (count): ${[...fieldKeyCounts.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`);
-    console.log(`[digests] op_record thomas test object_properties: ${[...propertyCounts.entries()].map(([k, n]) => `${k}:${n}`).join(', ')}`);
-
-    // Look for any record whose new/old looks like a date
-    const dateLike = records.filter(r =>
-      (r.record_contents ?? []).some(c => {
-        const blob = JSON.stringify({ old: c.old, new: c.new });
-        return /2026-04-0[789]/.test(blob);
-      }),
-    );
-    console.log(`[digests] op_record thomas test date-like records (${dateLike.length}): ${JSON.stringify(dateLike).slice(0, 2500)}`);
-  } catch (e) {
-    console.warn('[digests] op_record probe failed:', e);
-  }
-
   // Step 1: Discover all PM-owned work items
   const allIds = await fetchAllPmOwnedIds(TIKTOK_PROJECT_KEY);
   console.log(`[digests] discovered ${allIds.length} PM-owned stories`);
@@ -1443,47 +1582,63 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     console.log(`[digests] resolved Lark chat for ${resolvedChats}/${inDev.length} in-dev features`);
   }
 
-  // Step 4: Evaluate risk — Meego signals first, then a qualitative pass
-  // over the last 24h of chat messages via Gemini 2.5 Flash Lite. The chat
-  // risk is folded into the same RiskFinding so it appears alongside the
-  // deadline / staleness / PRD reasons in the card.
+  // Step 4: Evaluate risk — Meego signals first, then two persistence-aware
+  // passes:
+  //   a) qualitative chat risk via Gemini 2.5 Flash Lite (last 24h of chat
+  //      messages, with prior state passed in so quiet days don't drop the
+  //      risk back to low)
+  //   b) Delayed-state detection via the Meego activity log (any edit to
+  //      the iOS/Android version or Server Planned Launch Date field since
+  //      the previous digest run shows the feature as "Delayed" for the
+  //      next 2 runs after detection).
   //
-  // Persisted state: a prior chat risk for a feature (from the last digest
-  // run) is loaded from GCS and passed to Gemini so it can carry forward,
-  // escalate, replace, or clear the existing risk based on the latest
-  // 24h of messages. After the loop runs, the updated state is written
-  // back to GCS.
-  const riskState = await loadChatRiskState();
-  console.log(`[digests] loaded chat-risk state with ${Object.keys(riskState.features).length} prior entries`);
+  // Both kinds of state are stored in the same GCS digest-state file.
+  const state = await loadDigestState();
+  console.log(
+    `[digests] loaded digest state: ${Object.keys(state.features).length} prior feature entries, ${state.recentRunTimes.length} run timestamps`,
+  );
 
+  // Cutoff for "since the previous run" activity-log scans.
+  const opLogCutoffMs = previousRunCutoffMs(state);
+
+  const nowIso = new Date().toISOString();
   const riskFindings: RiskFinding[] = [];
   for (const feature of inDev) {
     try {
       const finding = await evaluateFeatureRisk(feature);
+      const prior = state.features[feature.workItemId];
 
+      // ── (a) Qualitative chat risk ──────────────────────────────────────
       if (feature.chatId && botToken) {
-        const prior = riskState.features[feature.workItemId];
+        const priorChat = prior?.chatRisk;
         const chatRisk = await evaluateChatRisk(
           feature.chatId,
           feature.name,
           botToken,
-          prior ? { level: prior.level, summary: prior.summary, raisedAtIso: prior.raisedAtIso } : undefined,
+          priorChat
+            ? { level: priorChat.level, summary: priorChat.summary, raisedAtIso: priorChat.raisedAtIso }
+            : undefined,
         );
 
-        // Update state: store / carry / clear based on the latest finding.
+        // Persist or clear chat risk on the entry (delay state lives
+        // alongside, so we update fields rather than blowing the entry away)
+        const entry = state.features[feature.workItemId] ?? { name: feature.name, lastSeenIso: nowIso };
+        entry.name = feature.name;
+        entry.lastSeenIso = nowIso;
         if (chatRisk.level === 'none') {
-          // Cleared — drop any prior entry.
-          delete riskState.features[feature.workItemId];
+          delete entry.chatRisk;
         } else {
-          const nowIso = new Date().toISOString();
-          const next: PersistedChatRisk = {
-            name: feature.name,
+          entry.chatRisk = {
             level: chatRisk.level,
             summary: chatRisk.summary,
-            raisedAtIso: prior?.raisedAtIso ?? nowIso,
-            lastSeenIso: nowIso,
+            raisedAtIso: priorChat?.raisedAtIso ?? nowIso,
           };
-          riskState.features[feature.workItemId] = next;
+        }
+        // Only keep the entry around if SOMETHING is set on it.
+        if (entry.chatRisk || entry.delayChange) {
+          state.features[feature.workItemId] = entry;
+        } else {
+          delete state.features[feature.workItemId];
         }
 
         if (chatRisk.level !== 'none') {
@@ -1492,21 +1647,77 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         }
       }
 
+      // ── (b) Delayed-state detection from activity log ──────────────────
+      // Scan the op record for any version/launch-date edit AFTER the
+      // previous run. If a fresh change is found, set runsLeftToShow=2.
+      // Otherwise carry forward + decrement an existing delay entry.
+      let activeDelay: PersistedDelayChange | undefined;
+      try {
+        const changes = await detectDelayedFieldChanges(feature.meegoUrl, opLogCutoffMs);
+        const priorDelay = prior?.delayChange;
+
+        if (changes.length > 0) {
+          // New change — pick the most recent one (sorted ascending by ts).
+          const latest = changes.sort((a, b) => a.operationTimeMs - b.operationTimeMs).at(-1)!;
+          activeDelay = {
+            detail: latest.detail,
+            detectedAtIso: nowIso,
+            // Show on this run + 1 more = 2 total runs of "Delayed".
+            runsLeftToShow: 2,
+          };
+          console.log(`[digests] delay detected for "${feature.name}": ${latest.detail}`);
+        } else if (priorDelay && priorDelay.runsLeftToShow > 1) {
+          // No new change, but a prior delay still has runs left — carry it.
+          activeDelay = {
+            detail: priorDelay.detail,
+            detectedAtIso: priorDelay.detectedAtIso,
+            runsLeftToShow: priorDelay.runsLeftToShow - 1,
+          };
+          console.log(`[digests] delay carried forward for "${feature.name}" (${activeDelay.runsLeftToShow} runs left): ${activeDelay.detail}`);
+        }
+        // else: priorDelay was undefined, or runsLeftToShow=1 → drop entirely.
+      } catch (e) {
+        console.warn(`[digests] activity-log scan failed for ${feature.name}:`, e);
+      }
+
+      // Persist or clear the delay entry alongside chat risk.
+      const entry2 = state.features[feature.workItemId] ?? { name: feature.name, lastSeenIso: nowIso };
+      entry2.name = feature.name;
+      entry2.lastSeenIso = nowIso;
+      if (activeDelay) {
+        entry2.delayChange = activeDelay;
+      } else {
+        delete entry2.delayChange;
+      }
+      if (entry2.chatRisk || entry2.delayChange) {
+        state.features[feature.workItemId] = entry2;
+      } else {
+        delete state.features[feature.workItemId];
+      }
+
+      // Override the finding's display if Delayed is active. The level
+      // bumps to red so card sorting still places it at the top.
+      if (activeDelay && activeDelay.runsLeftToShow > 0) {
+        finding.delay = { detail: activeDelay.detail };
+        finding.level = 'red';
+      }
+
       riskFindings.push(finding);
     } catch (e) {
       console.warn(`[digests] risk eval failed for ${feature.name}:`, e);
     }
   }
 
-  // Step 4b: Save the updated chat-risk state. Drop entries for features
-  // that are no longer in the in-dev set, plus a hard 14-day max age cap.
+  // Step 4b: Record this run's timestamp, drop exited features, prune stale
+  // entries, and save state.
+  recordRunTime(state, nowIso);
   const inDevIds = new Set(inDev.map(f => f.workItemId));
-  const exited = dropExitedFeatures(riskState, inDevIds);
-  if (exited.length > 0) console.log(`[digests] dropped ${exited.length} exited features from chat-risk state: ${exited.join(', ')}`);
-  const stale = pruneStaleRisks(riskState);
-  if (stale.length > 0) console.log(`[digests] pruned ${stale.length} stale entries from chat-risk state: ${stale.join(', ')}`);
-  await saveChatRiskState(riskState);
-  console.log(`[digests] saved chat-risk state with ${Object.keys(riskState.features).length} active entries`);
+  const exited = dropExitedFeatures(state, inDevIds);
+  if (exited.length > 0) console.log(`[digests] dropped ${exited.length} exited features from state: ${exited.join(', ')}`);
+  const stale = pruneStaleRisks(state);
+  if (stale.length > 0) console.log(`[digests] pruned ${stale.length} stale entries from state: ${stale.join(', ')}`);
+  await saveDigestState(state);
+  console.log(`[digests] saved digest state with ${Object.keys(state.features).length} active feature entries`);
   const severityOrder: Record<RiskLevel, number> = { red: 0, yellow: 1, green: 2 };
   riskFindings.sort((a, b) => severityOrder[a.level] - severityOrder[b.level]);
 
