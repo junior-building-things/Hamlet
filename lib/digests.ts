@@ -52,13 +52,23 @@ async function callMeegoMcpOnce(toolName: string, args: Record<string, unknown>)
 
   // The response may contain multiple content items. Pick the first one that
   // looks like the real payload (JSON, markdown, or any substantive text) —
-  // not a rate-limit stub or a log_id footer.
+  // not a rate-limit stub, a log_id footer, or a Go-style error string.
+  // Meego MCP wraps backend errors in a successful response envelope where
+  // the text content is something like "json: unsupported value/type, ..."
+  // or "id=1, code=...". Treat those as errors so the JSON parser in the
+  // caller doesn't crash on garbage.
   const items = data.result?.content ?? [];
   for (const item of items) {
     const text = (item.text ?? '').trim();
     if (!text) continue;
     if (/^rate limit/i.test(text)) continue;
     if (/^log_?id:/i.test(text)) continue;
+    if (/^json:\s*(unsupported|cannot|invalid)/i.test(text)) {
+      throw new Error(`Meego MCP backend error (${toolName}): ${text.slice(0, 200)}`);
+    }
+    if (/^id=\d+,\s*code=/i.test(text)) {
+      throw new Error(`Meego MCP RPC error (${toolName}): ${text.slice(0, 200)}`);
+    }
     return text;
   }
 
@@ -902,6 +912,21 @@ interface MeegoTodoItem {
   node_info?: { node_name?: string; node_state_key?: string };
 }
 
+/**
+ * Parse a Meego MCP response that's expected to be JSON. Logs the raw text
+ * (truncated) on parse failure so we can see what the backend actually
+ * returned, then re-throws so the caller can decide how to recover.
+ */
+function parseMcpJson<T>(raw: string, label: string): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch (e) {
+    const preview = raw.length > 300 ? `${raw.slice(0, 300)}…` : raw;
+    console.warn(`[digests] ${label} JSON parse failed: ${e instanceof Error ? e.message : String(e)} — raw: ${preview}`);
+    throw e;
+  }
+}
+
 async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: string; name: string; rawStatusFromList?: string }>> {
   // Step 1: list_todo gives us features with an active node we're assigned to
   const todos = new Map<string, { id: string; name: string; rawStatusFromList?: string }>();
@@ -909,7 +934,7 @@ async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: strin
   try {
     while (true) {
       const raw = await callMeegoMcp('list_todo', { action: 'todo', page_num: page });
-      const data = JSON.parse(raw) as { total?: number; list?: MeegoTodoItem[] };
+      const data = parseMcpJson<{ total?: number; list?: MeegoTodoItem[] }>(raw, 'list_todo');
       for (const item of data.list ?? []) {
         if (item.project_key !== projectKey) continue;
         if (item.work_item_info.work_item_type_key !== 'story') continue;
@@ -929,39 +954,53 @@ async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: strin
     console.warn('[digests] list_todo failed:', e);
   }
 
-  // Step 2: MQL gives us ALL stories where I'm PM (including ones not in todo)
-  try {
-    const MQL = "SELECT `work_item_id`, `name` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()";
-    let sessionId: string | undefined;
-    let mqlPage = 1;
-    while (true) {
-      const args: Record<string, unknown> = sessionId
-        ? { project_key: 'TikTok', session_id: sessionId, group_pagination_list: [{ group_id: '1', page_num: mqlPage }] }
-        : { project_key: 'TikTok', mql: MQL };
-      const raw = await callMeegoMcp('search_by_mql', args);
-      const data = JSON.parse(raw) as {
-        session_id?: string;
-        list?: Array<{ count?: number }>;
-        data?: Record<string, Array<{ moql_field_list?: Array<{ key: string; value: { long_value?: number; varchar_value?: string; string_value?: string } }> }>>;
-      };
-      if (!sessionId) sessionId = data.session_id;
-      const total = data.list?.[0]?.count ?? 0;
-      const items = data.data?.['1'] ?? [];
-      for (const item of items) {
-        let id = '';
-        let name = '';
-        for (const f of item.moql_field_list ?? []) {
-          if (f.key === 'work_item_id') id = String(f.value.long_value ?? '');
-          else if (f.key === 'name') name = f.value.varchar_value ?? f.value.string_value ?? '';
-        }
-        if (id && !todos.has(id)) todos.set(id, { id, name });
-      }
-      if (todos.size >= total || items.length === 0) break;
-      mqlPage++;
-    }
-  } catch (e) {
-    console.warn('[digests] MQL fetch failed:', e);
+  // Step 2: MQL gives us ALL stories where I'm PM (including ones not in todo).
+  // Retry the WHOLE MQL pagination from scratch on transient failure (e.g.
+  // session_id-based pagination errors): the second attempt usually succeeds.
+  interface MqlResponse {
+    session_id?: string;
+    list?: Array<{ count?: number }>;
+    data?: Record<string, Array<{ moql_field_list?: Array<{ key: string; value: { long_value?: number; varchar_value?: string; string_value?: string } }> }>>;
   }
+  const MQL = "SELECT `work_item_id`, `name` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()";
+  let mqlAdded = 0;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      let sessionId: string | undefined;
+      let mqlPage = 1;
+      while (true) {
+        const args: Record<string, unknown> = sessionId
+          ? { project_key: 'TikTok', session_id: sessionId, group_pagination_list: [{ group_id: '1', page_num: mqlPage }] }
+          : { project_key: 'TikTok', mql: MQL };
+        const raw = await callMeegoMcp('search_by_mql', args);
+        const data = parseMcpJson<MqlResponse>(raw, `search_by_mql page=${mqlPage}`);
+        if (!sessionId) sessionId = data.session_id;
+        const total = data.list?.[0]?.count ?? 0;
+        const items = data.data?.['1'] ?? [];
+        for (const item of items) {
+          let id = '';
+          let name = '';
+          for (const f of item.moql_field_list ?? []) {
+            if (f.key === 'work_item_id') id = String(f.value.long_value ?? '');
+            else if (f.key === 'name') name = f.value.varchar_value ?? f.value.string_value ?? '';
+          }
+          if (id && !todos.has(id)) {
+            todos.set(id, { id, name });
+            mqlAdded++;
+          }
+        }
+        if (todos.size >= total || items.length === 0) break;
+        mqlPage++;
+      }
+      break; // success — exit retry loop
+    } catch (e) {
+      console.warn(`[digests] MQL fetch attempt ${attempt + 1} failed:`, e);
+      if (attempt === 1) break;
+      // Brief pause before retry to give the backend a moment to recover.
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+  console.log(`[digests] PM-owned discovery: list_todo=${todos.size - mqlAdded}, MQL added=${mqlAdded}, total=${todos.size}`);
 
   return [...todos.values()];
 }
@@ -1486,25 +1525,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Destination for both the risk digest and the unanswered Q&A digest.
   // Previously DM'd to OWNER_EMAIL; now posted to the PM group chat.
   const targetChatId = PM_GROUP_CHAT_ID;
-
-  // Discovery probe (TEMPORARY): fetch the brief for [SA ]AI theatre 录入合并
-  // and log every currently-active node so we can see why the in-dev filter
-  // is dropping it. Remove once the active nodes are confirmed.
-  try {
-    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839672017`;
-    const briefRaw = await callMeegoMcp('get_workitem_brief', {
-      url: probeUrl,
-      fields: ['priority'],
-    });
-    const briefJson = JSON.parse(briefRaw) as BriefJson;
-    const overall = parseOverallStatus(briefJson);
-    const nodes = parseActiveNodesFromJson(briefJson);
-    console.log(
-      `[digests] probe SA AI theatre: overallStatus={key:${overall.key},name:${overall.name}}, active nodes (${nodes.length}): ${JSON.stringify(nodes.map(n => ({ id: n.key, name: n.name })))}`,
-    );
-  } catch (e) {
-    console.warn('[digests] SA AI theatre probe failed:', e);
-  }
 
   // Step 1: Discover all PM-owned work items
   const allIds = await fetchAllPmOwnedIds(TIKTOK_PROJECT_KEY);
