@@ -1541,6 +1541,18 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     `[digests] loaded digest state: ${Object.keys(state.features).length} prior feature entries, ${state.recentRunTimes.length} run timestamps, cache=${state.discoveredIdsCache?.ids.length ?? 0}`,
   );
 
+  // Probe (TEMPORARY): fetch role members for SA AI theatre to see who PM is
+  try {
+    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839672017`;
+    const briefRaw = await callMeegoMcp('get_workitem_brief', { url: probeUrl });
+    const briefJson = JSON.parse(briefRaw) as BriefJson;
+    const roleMembers = briefJson.work_item_attribute?.role_members ?? [];
+    const summary = roleMembers.map(r => `${r.key ?? '?'}=${(r.members ?? []).map(m => m.email ?? m.name ?? '?').join(',')}`).join(' | ');
+    console.log(`[digests] SA AI theatre role members: ${summary}`);
+  } catch (e) {
+    console.warn('[digests] SA AI theatre role probe failed:', e);
+  }
+
   // Step 1: Discover all PM-owned work items. If both list_todo and MQL come
   // back empty (Meego MCP backend hiccup), fall back to the cached discovery
   // from the last successful run so the digest still produces output.
