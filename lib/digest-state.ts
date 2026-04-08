@@ -59,12 +59,27 @@ export interface PersistedFeatureRisk {
   lastSeenIso: string;
 }
 
+export interface DiscoveredIdEntry {
+  id: string;
+  name: string;
+}
+
 export interface DigestStateFile {
   updatedAt: string;
   /** ISO timestamps of recent digest runs, oldest first. Used as activity-log cutoff. */
   recentRunTimes: string[];
   /** Keyed by Meego workItemId. */
   features: Record<string, PersistedFeatureRisk>;
+  /**
+   * Cache of the most recent successful discovery (PM-owned features). Used
+   * as a fallback when Meego MCP's list_todo + MQL endpoints are both
+   * failing — a transient backend outage shouldn't blank the digest entirely.
+   * Refreshed on every successful discovery.
+   */
+  discoveredIdsCache?: {
+    savedAtIso: string;
+    ids: DiscoveredIdEntry[];
+  };
 }
 
 /**

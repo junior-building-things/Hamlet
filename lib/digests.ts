@@ -1534,8 +1534,29 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Previously DM'd to OWNER_EMAIL; now posted to the PM group chat.
   const targetChatId = PM_GROUP_CHAT_ID;
 
-  // Step 1: Discover all PM-owned work items
-  const allIds = await fetchAllPmOwnedIds(TIKTOK_PROJECT_KEY);
+  // Step 0: Load persistent state early — we need the discoveredIdsCache as
+  // a fallback if Meego MCP discovery fails this run.
+  const state = await loadDigestState();
+  console.log(
+    `[digests] loaded digest state: ${Object.keys(state.features).length} prior feature entries, ${state.recentRunTimes.length} run timestamps, cache=${state.discoveredIdsCache?.ids.length ?? 0}`,
+  );
+
+  // Step 1: Discover all PM-owned work items. If both list_todo and MQL come
+  // back empty (Meego MCP backend hiccup), fall back to the cached discovery
+  // from the last successful run so the digest still produces output.
+  let allIds = await fetchAllPmOwnedIds(TIKTOK_PROJECT_KEY);
+  if (allIds.length === 0 && state.discoveredIdsCache && state.discoveredIdsCache.ids.length > 0) {
+    console.warn(
+      `[digests] discovery returned 0 features — falling back to cached ${state.discoveredIdsCache.ids.length} ids from ${state.discoveredIdsCache.savedAtIso}`,
+    );
+    allIds = state.discoveredIdsCache.ids.map(({ id, name }) => ({ id, name }));
+  } else if (allIds.length > 0) {
+    // Refresh the cache on every successful discovery.
+    state.discoveredIdsCache = {
+      savedAtIso: new Date().toISOString(),
+      ids: allIds.map(({ id, name }) => ({ id, name })),
+    };
+  }
   console.log(`[digests] discovered ${allIds.length} PM-owned stories`);
 
   // Step 2: Fetch each feature's raw Meego state
@@ -1646,10 +1667,8 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   //      next 2 runs after detection).
   //
   // Both kinds of state are stored in the same GCS digest-state file.
-  const state = await loadDigestState();
-  console.log(
-    `[digests] loaded digest state: ${Object.keys(state.features).length} prior feature entries, ${state.recentRunTimes.length} run timestamps`,
-  );
+  // (state was already loaded at Step 0 above so we can use the
+  // discoveredIdsCache as a discovery fallback.)
 
   // Cutoff for "since the previous run" activity-log scans.
   const opLogCutoffMs = previousRunCutoffMs(state);
