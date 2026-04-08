@@ -954,7 +954,10 @@ async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: strin
     console.warn('[digests] list_todo failed:', e);
   }
 
-  // Step 2: MQL gives us ALL stories where I'm PM (including ones not in todo).
+  // Step 2: MQL gives us ALL stories where the user is in the PM role —
+  // including features that have MULTIPLE PMs (where `__PM = current_login_user()`
+  // would return false because the field is a list, not a single user).
+  // Use `current_login_user() IN __PM` so multi-PM features are matched.
   // Retry the WHOLE MQL pagination from scratch on transient failure (e.g.
   // session_id-based pagination errors): the second attempt usually succeeds.
   interface MqlResponse {
@@ -962,7 +965,7 @@ async function fetchAllPmOwnedIds(projectKey: string): Promise<Array<{ id: strin
     list?: Array<{ count?: number }>;
     data?: Record<string, Array<{ moql_field_list?: Array<{ key: string; value: { long_value?: number; varchar_value?: string; string_value?: string } }> }>>;
   }
-  const MQL = "SELECT `work_item_id`, `name` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()";
+  const MQL = "SELECT `work_item_id`, `name` FROM `TikTok`.`需求` WHERE current_login_user() IN `__PM`";
   let mqlAdded = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -1541,17 +1544,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     `[digests] loaded digest state: ${Object.keys(state.features).length} prior feature entries, ${state.recentRunTimes.length} run timestamps, cache=${state.discoveredIdsCache?.ids.length ?? 0}`,
   );
 
-  // Probe (TEMPORARY): fetch role members for SA AI theatre to see who PM is
-  try {
-    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839672017`;
-    const briefRaw = await callMeegoMcp('get_workitem_brief', { url: probeUrl });
-    const briefJson = JSON.parse(briefRaw) as BriefJson;
-    const roleMembers = briefJson.work_item_attribute?.role_members ?? [];
-    const summary = roleMembers.map(r => `${r.key ?? '?'}=${(r.members ?? []).map(m => m.email ?? m.name ?? '?').join(',')}`).join(' | ');
-    console.log(`[digests] SA AI theatre role members: ${summary}`);
-  } catch (e) {
-    console.warn('[digests] SA AI theatre role probe failed:', e);
-  }
 
   // Step 1: Discover all PM-owned work items. If both list_todo and MQL come
   // back empty (Meego MCP backend hiccup), fall back to the cached discovery
