@@ -1780,6 +1780,34 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
 
+  // ── Task 3 discovery probe (TEMPORARY) ────────────────────────────────────
+  // Log every work_item_fields entry for a sample feature so we can identify
+  // the field keys for "Figma Link", "AB Experiment Report", "TikTok
+  // Experiment Link". Also try searchAbReport with the bot token to verify
+  // Junior has the Drive search scope. Remove once field keys are hardcoded.
+  try {
+    const probe = features.find(f => f.overallStatusKey !== 'end' && f.prd);
+    if (probe) {
+      // Fetch brief WITHOUT a field filter so we get ALL fields.
+      const rawBrief = await callMeegoMcp('get_workitem_brief', { url: probe.meegoUrl });
+      const briefJson = JSON.parse(rawBrief) as BriefJson;
+      const fields = (briefJson.work_item_fields ?? []).map(
+        (f: BriefField) => `${f.key ?? '?'}=${f.name ?? '?'}`,
+      );
+      console.log(`[digests] Task 3 field probe on "${probe.name}": ${fields.join('; ')}`);
+
+      // Drive search scope test: try searchAbReport with bot token.
+      const { searchAbReport } = await import('./lark');
+      const abResult = await searchAbReport(probe.name, undefined, probe.prd);
+      console.log(`[digests] Task 3 Drive search test on "${probe.name}": abReport=${abResult.abReportUrl ? 'found' : 'empty'}, libra=${abResult.libraUrl ? 'found' : 'empty'}`);
+    } else {
+      console.log('[digests] Task 3 probe skipped — no suitable feature');
+    }
+  } catch (e) {
+    console.warn('[digests] Task 3 discovery probe failed:', e);
+  }
+  // ── end probe ─────────────────────────────────────────────────────────────
+
   // Log distribution of active node IDs across all features (how many times
   // each ID appears as one of a feature's active nodes). This is what the
   // filter actually operates on.
