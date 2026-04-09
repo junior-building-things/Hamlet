@@ -471,7 +471,10 @@ export async function searchAbReport(
       code: number; msg?: string;
       data?: { docs_entities?: Array<{ docs_token: string; docs_type: string; title: string }> };
     };
-    if (searchData.code !== 0) continue;
+    if (searchData.code !== 0) {
+      console.warn(`[lark] Drive search failed for query="${query}": code=${searchData.code} msg=${searchData.msg}`);
+      continue;
+    }
     for (const doc of searchData.data?.docs_entities ?? []) {
       if (seen.has(doc.docs_token)) continue;
       seen.add(doc.docs_token);
