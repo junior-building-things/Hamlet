@@ -1810,8 +1810,8 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           for (const h of hits) {
             console.log(`[digests] Task 3 HIT (${tool}): key=${h.field_key} name=${h.field_name} alias=${h.field_alias} type=${h.field_type_key}`);
           }
-          if (hits.length === 0 && confs.length > 0) {
-            // Log ALL fields from this tool so we can scan manually.
+          if (confs.length > 0) {
+            // Always log ALL fields so we can find the target names manually.
             const all = confs.map(c => `${c.field_key}=${c.field_name}(${c.field_alias ?? ''})`).join('; ');
             console.log(`[digests] Task 3 ${tool} all: ${all}`);
           }
