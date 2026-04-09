@@ -7,6 +7,8 @@ import {
   joinFeatureChat,
   listJuniorChats,
   getLarkBotToken,
+  searchAbReport,
+  extractFigmaUrlFromPrd,
   ChatMessage,
   CardSection,
   CardHeaderTemplate,
@@ -34,6 +36,14 @@ import {
 // `syncFeatureStatus` produces.
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
+
+// ─── Task 3: link field keys ──────────────────────────────────────────────
+// Discovered via the field meta probe. These are work-item level fields.
+const FIELD_KEY_FIGMA = 'field_3';                      // 设计链接
+const FIELD_KEY_AB_REPORT = 'effect_analyze_report_t';  // TikTok-T 实验报告
+
+/** Cooldown before re-searching a feature whose links came back empty. */
+const LINK_RETRY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 async function callMeegoMcpOnce(toolName: string, args: Record<string, unknown>): Promise<string> {
   const token = process.env.MEEGO_USER_TOKEN;
@@ -1716,6 +1726,105 @@ export function formatUnansweredDigest(findings: UnansweredFinding[]): string {
   return lines.join('\n').trim();
 }
 
+// ─── Task 3: Auto-fetch project links ───────────────────────────────────────
+
+/**
+ * For one feature, try to discover its Figma and AB report links using the
+ * same extraction functions that Hamlet's UI uses. Respects a per-feature
+ * cache in the digest state so we don't re-fetch on every run.
+ *
+ * DRY_RUN: currently only logs what would be written to Meego. Actual
+ * update_field calls are behind a flag (`enableWrites`) that defaults to
+ * false until we've verified the dry-run output looks correct. Flip it to
+ * true for Deploy 3.
+ */
+const ENABLE_LINK_WRITES = false; // Deploy 3: flip to true
+
+async function fetchAndCacheLinks(
+  feature: MeegoFeature,
+  state: DigestStateFile,
+): Promise<{ figmaUrl: string; abReportUrl: string; written: number }> {
+  const cached = state.featureLinks?.[feature.workItemId];
+  const nowIso = new Date().toISOString();
+
+  // Skip if fully populated in cache.
+  if (cached?.allPopulated) {
+    return { figmaUrl: cached.figmaUrl, abReportUrl: cached.abReportUrl, written: 0 };
+  }
+
+  // Skip if we tried recently and got empty results (cooldown).
+  if (cached && !cached.allPopulated) {
+    const elapsed = Date.now() - Date.parse(cached.lastFetchedIso);
+    if (elapsed < LINK_RETRY_COOLDOWN_MS) {
+      return { figmaUrl: cached.figmaUrl, abReportUrl: cached.abReportUrl, written: 0 };
+    }
+  }
+
+  // If PRD changed since last fetch, re-fetch Figma (it's extracted from PRD).
+  const prdChanged = cached && cached.prdAtFetch !== (feature.prd ?? '');
+  let figmaUrl = (cached?.figmaUrl && !prdChanged) ? cached.figmaUrl : '';
+  let abReportUrl = cached?.abReportUrl ?? '';
+
+  // Fetch Figma from PRD doc.
+  if (!figmaUrl && feature.prd) {
+    try {
+      figmaUrl = await extractFigmaUrlFromPrd(feature.prd);
+    } catch (e) {
+      console.warn(`[digests] Figma extraction failed for ${feature.name}:`, e);
+    }
+  }
+
+  // Fetch AB report via Lark Drive search.
+  if (!abReportUrl && feature.name) {
+    try {
+      const result = await searchAbReport(feature.name, undefined, feature.prd);
+      abReportUrl = result.abReportUrl;
+    } catch (e) {
+      console.warn(`[digests] AB report search failed for ${feature.name}:`, e);
+    }
+    // Brief pause to stay under Lark rate limits.
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  const allPopulated = !!(figmaUrl && abReportUrl);
+
+  // Update cache.
+  if (!state.featureLinks) state.featureLinks = {};
+  state.featureLinks[feature.workItemId] = {
+    figmaUrl,
+    abReportUrl,
+    lastFetchedIso: nowIso,
+    allPopulated,
+    prdAtFetch: feature.prd ?? '',
+  };
+
+  // Write back to Meego (or log in dry-run mode).
+  let written = 0;
+  const writes: Array<{ field_key: string; field_value: string; label: string }> = [];
+  if (figmaUrl) writes.push({ field_key: FIELD_KEY_FIGMA, field_value: figmaUrl, label: 'Figma' });
+  if (abReportUrl) writes.push({ field_key: FIELD_KEY_AB_REPORT, field_value: abReportUrl, label: 'AB report' });
+
+  if (writes.length > 0) {
+    if (ENABLE_LINK_WRITES) {
+      try {
+        await callMeegoMcp('update_field', {
+          project_key: TIKTOK_PROJECT_KEY,
+          work_item_id: Number(feature.workItemId),
+          fields: writes.map(w => ({ field_key: w.field_key, field_value: w.field_value })),
+        });
+        written = writes.length;
+        console.log(`[digests] links written to Meego for "${feature.name}": ${writes.map(w => `${w.label}=${w.field_value.slice(0, 60)}`).join(', ')}`);
+      } catch (e) {
+        console.warn(`[digests] update_field failed for ${feature.name}:`, e);
+      }
+    } else {
+      console.log(`[digests] links DRY-RUN for "${feature.name}": ${writes.map(w => `${w.label}=${w.field_value.slice(0, 80)}`).join(', ')}`);
+    }
+  }
+
+  return { figmaUrl, abReportUrl, written };
+}
+
 // ─── Main orchestrator ─────────────────────────────────────────────────────
 
 export async function runDailyDigests(): Promise<DigestRunResult> {
@@ -1779,58 +1888,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     await new Promise(r => setTimeout(r, 200));
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
-
-  // ── Task 3 discovery probe (TEMPORARY) ────────────────────────────────────
-  // Use get_workitem_field_meta (schema-level tool) to list every field key +
-  // display name for the story work item type. Then search for "Figma",
-  // "Experiment", "AB" in the names to identify the target field keys.
-  // Also try searchAbReport once to verify Junior has Drive search scope.
-  try {
-    const probe = features.find(f => f.overallStatusKey !== 'end' && f.prd);
-    if (probe) {
-      // 1) Try BOTH field discovery tools. get_workitem_field_meta returned
-      // only 42 required fields last time — the target fields (Figma Link,
-      // AB Experiment Report, TikTok Experiment Link) might be in a broader
-      // config that list_workitem_field_config exposes.
-      interface FieldConf { field_name?: string; field_key?: string; field_alias?: string; field_type_key?: string }
-      const TARGET_RE = /figma|experiment|AB|libra|link/i;
-
-      for (const tool of ['list_workitem_field_config', 'get_workitem_field_meta'] as const) {
-        try {
-          const raw = await callMeegoMcp(tool, { url: probe.meegoUrl });
-          let confs: FieldConf[] = [];
-          try {
-            const json = JSON.parse(raw);
-            confs = json.FieldConfList ?? json.fields ?? json.list ?? (Array.isArray(json) ? json : []);
-          } catch { /* not JSON */ }
-          const hits = confs.filter(c =>
-            TARGET_RE.test(c.field_name ?? '') || TARGET_RE.test(c.field_alias ?? ''),
-          );
-          console.log(`[digests] Task 3 ${tool}: ${confs.length} fields, ${hits.length} hits`);
-          for (const h of hits) {
-            console.log(`[digests] Task 3 HIT (${tool}): key=${h.field_key} name=${h.field_name} alias=${h.field_alias} type=${h.field_type_key}`);
-          }
-          if (confs.length > 0) {
-            // Always log ALL fields so we can find the target names manually.
-            const all = confs.map(c => `${c.field_key}=${c.field_name}(${c.field_alias ?? ''})`).join('; ');
-            console.log(`[digests] Task 3 ${tool} all: ${all}`);
-          }
-        } catch (toolErr) {
-          console.warn(`[digests] Task 3 ${tool} failed:`, toolErr);
-        }
-      }
-
-      // 2) Drive search scope test.
-      const { searchAbReport } = await import('./lark');
-      const abResult = await searchAbReport(probe.name, undefined, probe.prd);
-      console.log(`[digests] Task 3 Drive search test on "${probe.name}": abReport=${abResult.abReportUrl ? 'found' : 'empty'}, libra=${abResult.libraUrl ? 'found' : 'empty'}`);
-    } else {
-      console.log('[digests] Task 3 probe skipped — no suitable feature');
-    }
-  } catch (e) {
-    console.warn('[digests] Task 3 discovery probe failed:', e);
-  }
-  // ── end probe ─────────────────────────────────────────────────────────────
 
   // Log distribution of active node IDs across all features (how many times
   // each ID appears as one of a feature's active nodes). This is what the
@@ -2035,8 +2092,30 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   if (exited.length > 0) console.log(`[digests] dropped ${exited.length} exited features from state: ${exited.join(', ')}`);
   const stale = pruneStaleRisks(state);
   if (stale.length > 0) console.log(`[digests] pruned ${stale.length} stale entries from state: ${stale.join(', ')}`);
+  // Step 5: Auto-fetch project links (Task 3). Iterates over ALL non-ended
+  // features (not just in-dev) and tries to discover Figma + AB report URLs
+  // using the same extraction functions Hamlet's UI uses. Results are cached
+  // in the state file so subsequent runs skip already-populated features.
+  // Currently in DRY-RUN mode (ENABLE_LINK_WRITES = false) — logs what would
+  // be written to Meego without calling update_field.
+  let linksFetched = 0;
+  let linksFound = 0;
+  let linksWritten = 0;
+  const nonEnded = features.filter(f => f.overallStatusKey !== 'end');
+  for (const feature of nonEnded) {
+    try {
+      const result = await fetchAndCacheLinks(feature, state);
+      linksFetched++;
+      if (result.figmaUrl || result.abReportUrl) linksFound++;
+      linksWritten += result.written;
+    } catch (e) {
+      console.warn(`[digests] link fetch failed for ${feature.name}:`, e);
+    }
+  }
+  console.log(`[digests] Task 3 link fetch: ${linksFetched}/${nonEnded.length} processed, ${linksFound} with links, ${linksWritten} written to Meego`);
+
   await saveDigestState(state);
-  console.log(`[digests] saved digest state with ${Object.keys(state.features).length} active feature entries`);
+  console.log(`[digests] saved digest state with ${Object.keys(state.features).length} active feature entries, ${Object.keys(state.featureLinks ?? {}).length} link cache entries`);
   const severityOrder: Record<RiskLevel, number> = { red: 0, yellow: 1, green: 2 };
   riskFindings.sort((a, b) => severityOrder[a.level] - severityOrder[b.level]);
 

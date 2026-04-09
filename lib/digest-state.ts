@@ -111,6 +111,29 @@ export interface DigestStateFile {
    * the previous hardcoded `WATCHLIST_FEATURE_IDS` constant.
    */
   watchlist?: string[];
+  /**
+   * Task 3: cached per-feature link fetch results. Keys are Meego workItemIds.
+   * When both figmaUrl and abReportUrl are non-empty (allPopulated), the
+   * feature is skipped on subsequent runs. Empty-string values mean "tried
+   * but not found"; these are re-attempted after LINK_RETRY_COOLDOWN_DAYS.
+   */
+  featureLinks?: Record<string, CachedFeatureLinks>;
+}
+
+/**
+ * Cached link-fetch result per feature. Empty-string values mean the link
+ * was searched for but not found. A cooldown prevents re-searching too
+ * frequently.
+ */
+export interface CachedFeatureLinks {
+  figmaUrl: string;
+  abReportUrl: string;
+  /** ISO timestamp of the last fetch attempt. Used for retry cooldown. */
+  lastFetchedIso: string;
+  /** True when ALL links are non-empty — skip this feature on future runs. */
+  allPopulated: boolean;
+  /** The PRD URL at the time of fetch — if it changes, re-fetch Figma. */
+  prdAtFetch?: string;
 }
 
 /**
