@@ -1793,18 +1793,25 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       // The response shape is TBD — log first 3000 chars to see it.
       console.log(`[digests] Task 3 field meta probe length=${metaRaw.length}, sample: ${metaRaw.slice(0, 3000)}`);
 
-      // Also try to parse as JSON and grep for target names.
+      // Parse the FieldConfList and search for target fields by name/alias.
       try {
-        const metaJson = JSON.parse(metaRaw);
-        // The response might be an array of field descriptors or an object
-        // with a `fields` array. Search recursively for field_key + name.
-        const flat = JSON.stringify(metaJson);
-        const matches = [
-          ...flat.matchAll(/"field_key"\s*:\s*"([^"]+)"[^}]*?"name"\s*:\s*"([^"]+)"/gi),
-          ...flat.matchAll(/"name"\s*:\s*"([^"]+)"[^}]*?"field_key"\s*:\s*"([^"]+)"/gi),
-        ];
-        const interesting = matches.filter(m => /figma|experiment|AB|libra/i.test(m[0]));
-        console.log(`[digests] Task 3 field meta matches: ${interesting.map(m => m[0].slice(0, 120)).join(' | ')}`);
+        interface FieldConf { field_name?: string; field_key?: string; field_alias?: string; field_type_key?: string }
+        const metaJson = JSON.parse(metaRaw) as { FieldConfList?: FieldConf[] };
+        const confs = metaJson.FieldConfList ?? [];
+        // Log every field that mentions figma, experiment, AB, libra, or link.
+        const TARGET_RE = /figma|experiment|AB report|libra|tiktok experiment/i;
+        const hits = confs.filter(c =>
+          TARGET_RE.test(c.field_name ?? '') || TARGET_RE.test(c.field_alias ?? ''),
+        );
+        console.log(`[digests] Task 3 field meta: ${confs.length} total fields, ${hits.length} target hits`);
+        for (const h of hits) {
+          console.log(`[digests] Task 3 HIT: key=${h.field_key} name=${h.field_name} alias=${h.field_alias} type=${h.field_type_key}`);
+        }
+        // If no hits, log all field names so we can find the right ones manually.
+        if (hits.length === 0) {
+          const all = confs.map(c => `${c.field_key}=${c.field_name}(${c.field_alias ?? ''})`).join('; ');
+          console.log(`[digests] Task 3 all field keys: ${all}`);
+        }
       } catch { /* not JSON, logged raw above */ }
 
       // 2) Drive search scope test.
