@@ -1781,22 +1781,33 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   console.log(`[digests] fetched raw state for ${features.length} features`);
 
   // ── Task 3 discovery probe (TEMPORARY) ────────────────────────────────────
-  // Log every work_item_fields entry for a sample feature so we can identify
-  // the field keys for "Figma Link", "AB Experiment Report", "TikTok
-  // Experiment Link". Also try searchAbReport with the bot token to verify
-  // Junior has the Drive search scope. Remove once field keys are hardcoded.
+  // Use get_workitem_field_meta (schema-level tool) to list every field key +
+  // display name for the story work item type. Then search for "Figma",
+  // "Experiment", "AB" in the names to identify the target field keys.
+  // Also try searchAbReport once to verify Junior has Drive search scope.
   try {
     const probe = features.find(f => f.overallStatusKey !== 'end' && f.prd);
     if (probe) {
-      // Fetch brief WITHOUT a field filter so we get ALL fields.
-      const rawBrief = await callMeegoMcp('get_workitem_brief', { url: probe.meegoUrl });
-      const briefJson = JSON.parse(rawBrief) as BriefJson;
-      const fields = (briefJson.work_item_fields ?? []).map(
-        (f: BriefField) => `${f.key ?? '?'}=${f.name ?? '?'}`,
-      );
-      console.log(`[digests] Task 3 field probe on "${probe.name}": ${fields.join('; ')}`);
+      // 1) Field schema discovery via get_workitem_field_meta.
+      const metaRaw = await callMeegoMcp('get_workitem_field_meta', { url: probe.meegoUrl });
+      // The response shape is TBD — log first 3000 chars to see it.
+      console.log(`[digests] Task 3 field meta probe length=${metaRaw.length}, sample: ${metaRaw.slice(0, 3000)}`);
 
-      // Drive search scope test: try searchAbReport with bot token.
+      // Also try to parse as JSON and grep for target names.
+      try {
+        const metaJson = JSON.parse(metaRaw);
+        // The response might be an array of field descriptors or an object
+        // with a `fields` array. Search recursively for field_key + name.
+        const flat = JSON.stringify(metaJson);
+        const matches = [
+          ...flat.matchAll(/"field_key"\s*:\s*"([^"]+)"[^}]*?"name"\s*:\s*"([^"]+)"/gi),
+          ...flat.matchAll(/"name"\s*:\s*"([^"]+)"[^}]*?"field_key"\s*:\s*"([^"]+)"/gi),
+        ];
+        const interesting = matches.filter(m => /figma|experiment|AB|libra/i.test(m[0]));
+        console.log(`[digests] Task 3 field meta matches: ${interesting.map(m => m[0].slice(0, 120)).join(' | ')}`);
+      } catch { /* not JSON, logged raw above */ }
+
+      // 2) Drive search scope test.
       const { searchAbReport } = await import('./lark');
       const abResult = await searchAbReport(probe.name, undefined, probe.prd);
       console.log(`[digests] Task 3 Drive search test on "${probe.name}": abReport=${abResult.abReportUrl ? 'found' : 'empty'}, libra=${abResult.libraUrl ? 'found' : 'empty'}`);
