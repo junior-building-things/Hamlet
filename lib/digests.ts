@@ -1889,6 +1889,22 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
 
+  // ── Task 3 diagnostic: trace searchAbReport for feature 6839802029 ──────
+  try {
+    const probeFeature = features.find(f => f.workItemId === '6839802029');
+    if (probeFeature) {
+      console.log(`[digests] AB probe: feature="${probeFeature.name}" prd=${probeFeature.prd ?? '(none)'}`);
+      const { searchAbReport: sar } = await import('./lark');
+      const result = await sar(probeFeature.name, undefined, probeFeature.prd);
+      console.log(`[digests] AB probe result: abReport=${result.abReportUrl || '(empty)'} libra=${result.libraUrl || '(empty)'}`);
+    } else {
+      console.log('[digests] AB probe: feature 6839802029 not in discovery set');
+    }
+  } catch (e) {
+    console.warn('[digests] AB probe failed:', e);
+  }
+  // ── end diagnostic ────────────────────────────────────────────────────────
+
   // Log distribution of active node IDs across all features (how many times
   // each ID appears as one of a feature's active nodes). This is what the
   // filter actually operates on.

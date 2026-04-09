@@ -475,7 +475,9 @@ export async function searchAbReport(
       console.warn(`[lark] Drive search failed for query="${query}": code=${searchData.code} msg=${searchData.msg}`);
       continue;
     }
-    for (const doc of searchData.data?.docs_entities ?? []) {
+    const rawResults = searchData.data?.docs_entities ?? [];
+    console.log(`[lark] Drive search query="${query}": ${rawResults.length} raw results${rawResults.length > 0 ? ` — titles: ${rawResults.map(d => d.title).join(', ')}` : ''}`);
+    for (const doc of rawResults) {
       if (seen.has(doc.docs_token)) continue;
       seen.add(doc.docs_token);
       const t = doc.title.toLowerCase();
