@@ -1788,31 +1788,37 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   try {
     const probe = features.find(f => f.overallStatusKey !== 'end' && f.prd);
     if (probe) {
-      // 1) Field schema discovery via get_workitem_field_meta.
-      const metaRaw = await callMeegoMcp('get_workitem_field_meta', { url: probe.meegoUrl });
-      // The response shape is TBD — log first 3000 chars to see it.
-      console.log(`[digests] Task 3 field meta probe length=${metaRaw.length}, sample: ${metaRaw.slice(0, 3000)}`);
+      // 1) Try BOTH field discovery tools. get_workitem_field_meta returned
+      // only 42 required fields last time — the target fields (Figma Link,
+      // AB Experiment Report, TikTok Experiment Link) might be in a broader
+      // config that list_workitem_field_config exposes.
+      interface FieldConf { field_name?: string; field_key?: string; field_alias?: string; field_type_key?: string }
+      const TARGET_RE = /figma|experiment|AB|libra|link/i;
 
-      // Parse the FieldConfList and search for target fields by name/alias.
-      try {
-        interface FieldConf { field_name?: string; field_key?: string; field_alias?: string; field_type_key?: string }
-        const metaJson = JSON.parse(metaRaw) as { FieldConfList?: FieldConf[] };
-        const confs = metaJson.FieldConfList ?? [];
-        // Log every field that mentions figma, experiment, AB, libra, or link.
-        const TARGET_RE = /figma|experiment|AB report|libra|tiktok experiment/i;
-        const hits = confs.filter(c =>
-          TARGET_RE.test(c.field_name ?? '') || TARGET_RE.test(c.field_alias ?? ''),
-        );
-        console.log(`[digests] Task 3 field meta: ${confs.length} total fields, ${hits.length} target hits`);
-        for (const h of hits) {
-          console.log(`[digests] Task 3 HIT: key=${h.field_key} name=${h.field_name} alias=${h.field_alias} type=${h.field_type_key}`);
+      for (const tool of ['list_workitem_field_config', 'get_workitem_field_meta'] as const) {
+        try {
+          const raw = await callMeegoMcp(tool, { url: probe.meegoUrl });
+          let confs: FieldConf[] = [];
+          try {
+            const json = JSON.parse(raw);
+            confs = json.FieldConfList ?? json.fields ?? json.list ?? (Array.isArray(json) ? json : []);
+          } catch { /* not JSON */ }
+          const hits = confs.filter(c =>
+            TARGET_RE.test(c.field_name ?? '') || TARGET_RE.test(c.field_alias ?? ''),
+          );
+          console.log(`[digests] Task 3 ${tool}: ${confs.length} fields, ${hits.length} hits`);
+          for (const h of hits) {
+            console.log(`[digests] Task 3 HIT (${tool}): key=${h.field_key} name=${h.field_name} alias=${h.field_alias} type=${h.field_type_key}`);
+          }
+          if (hits.length === 0 && confs.length > 0) {
+            // Log ALL fields from this tool so we can scan manually.
+            const all = confs.map(c => `${c.field_key}=${c.field_name}(${c.field_alias ?? ''})`).join('; ');
+            console.log(`[digests] Task 3 ${tool} all: ${all}`);
+          }
+        } catch (toolErr) {
+          console.warn(`[digests] Task 3 ${tool} failed:`, toolErr);
         }
-        // If no hits, log all field names so we can find the right ones manually.
-        if (hits.length === 0) {
-          const all = confs.map(c => `${c.field_key}=${c.field_name}(${c.field_alias ?? ''})`).join('; ');
-          console.log(`[digests] Task 3 all field keys: ${all}`);
-        }
-      } catch { /* not JSON, logged raw above */ }
+      }
 
       // 2) Drive search scope test.
       const { searchAbReport } = await import('./lark');
