@@ -97,7 +97,7 @@ async function callMeegoMcpOnce(toolName: string, args: Record<string, unknown>)
  * per token; we stay under it in normal flow but occasionally bursts trip
  * the limit and the response comes back as the literal string "rate limit, qps: 5".
  */
-async function callMeegoMcp(toolName: string, args: Record<string, unknown>): Promise<string> {
+export async function callMeegoMcp(toolName: string, args: Record<string, unknown>): Promise<string> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const text = await callMeegoMcpOnce(toolName, args);
     if (!/^rate limit/i.test(text.trim())) return text;

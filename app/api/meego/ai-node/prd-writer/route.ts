@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { copyPrdTemplate } from '@/lib/lark';
-import { callMeegoMcp } from '@/lib/meego';
+import { callMeegoMcp } from '@/lib/digests';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
