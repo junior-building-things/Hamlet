@@ -138,9 +138,11 @@ export interface DigestStateFile {
 export interface CachedFeatureLinks {
   figmaUrl: string;
   abReportUrl: string;
+  /** Computed short version number (e.g. "44.9"). Lowest launched version, else lowest planned. */
+  versionNumber?: string;
   /** ISO timestamp of the last fetch attempt. Used for retry cooldown. */
   lastFetchedIso: string;
-  /** True when ALL links are non-empty — skip this feature on future runs. */
+  /** True when ALL fields are non-empty — skip this feature on future runs. */
   allPopulated: boolean;
   /** The PRD URL at the time of fetch — if it changes, re-fetch Figma. */
   prdAtFetch?: string;

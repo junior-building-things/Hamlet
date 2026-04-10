@@ -42,9 +42,37 @@ const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 // Discovered via the field meta probe. These are work-item level fields.
 const FIELD_KEY_FIGMA = 'ui_design_zeplin_link';          // UI&UX设计文档
 const FIELD_KEY_AB_REPORT = 'effect_analyze_report_t';  // TikTok-T 实验报告
+const FIELD_KEY_VERSION_NUMBER = 'estimated_version';   // 版本号 (TT Exp.Version)
+
+// Version source fields — launched takes priority over planned.
+const VERSION_LAUNCHED_FIELDS = ['ios_actual_online_version', 'android_actual_online_version'];
+const VERSION_PLANNED_FIELDS  = ['field_08a9ca', 'field_c88970'];
 
 /** Cooldown before re-searching a feature whose links came back empty. */
 const LINK_RETRY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/**
+ * Extract the shortest numeric version (e.g. "44.9") from version field
+ * values. Version fields come as arrays of `{id, name}` objects where
+ * `name` is like "TikTok-M-iOS-44.9.0". Returns all short versions found,
+ * sorted ascending.
+ */
+function extractShortVersions(fieldValue: unknown): string[] {
+  if (!fieldValue) return [];
+  const items: Array<{ name?: string }> = Array.isArray(fieldValue) ? fieldValue : [fieldValue];
+  const versions: string[] = [];
+  for (const item of items) {
+    const name = typeof item === 'string' ? item : (item?.name ?? '');
+    const m = name.match(/(\d+\.\d+)(?:\.\d+)?/);
+    if (m) versions.push(m[1]);
+  }
+  versions.sort((a, b) => {
+    const [aMaj, aMin] = a.split('.').map(Number);
+    const [bMaj, bMin] = b.split('.').map(Number);
+    return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
+  });
+  return versions;
+}
 
 async function callMeegoMcpOnce(toolName: string, args: Record<string, unknown>): Promise<string> {
   const token = process.env.MEEGO_USER_TOKEN;
@@ -1777,23 +1805,57 @@ async function fetchAndCacheLinks(
     await new Promise(r => setTimeout(r, 500));
   }
 
-  const allPopulated = !!(figmaUrl && abReportUrl);
+  // Compute version number: lowest launched version, else lowest planned.
+  // Fetch the 4 version fields from the brief.
+  let versionNumber = cached?.versionNumber ?? '';
+  if (!versionNumber) {
+    try {
+      const vBriefRaw = await callMeegoMcp('get_workitem_brief', {
+        url: feature.meegoUrl,
+        fields: [...VERSION_LAUNCHED_FIELDS, ...VERSION_PLANNED_FIELDS],
+      });
+      const vBrief = JSON.parse(vBriefRaw) as BriefJson;
+      const vFields = vBrief.work_item_fields ?? [];
+
+      // Collect launched versions first.
+      const launched: string[] = [];
+      for (const key of VERSION_LAUNCHED_FIELDS) {
+        const val = vFields.find(f => f.key === key)?.value;
+        launched.push(...extractShortVersions(val));
+      }
+      // If no launched versions, collect planned versions.
+      const planned: string[] = [];
+      if (launched.length === 0) {
+        for (const key of VERSION_PLANNED_FIELDS) {
+          const val = vFields.find(f => f.key === key)?.value;
+          planned.push(...extractShortVersions(val));
+        }
+      }
+      versionNumber = launched[0] ?? planned[0] ?? '';
+    } catch (e) {
+      console.warn(`[digests] version resolution failed for ${feature.name}:`, e);
+    }
+  }
+
+  const allPopulated = !!(figmaUrl && abReportUrl && versionNumber);
 
   // Update cache.
   if (!state.featureLinks) state.featureLinks = {};
   state.featureLinks[feature.workItemId] = {
     figmaUrl,
     abReportUrl,
+    versionNumber,
     lastFetchedIso: nowIso,
     allPopulated,
     prdAtFetch: feature.prd ?? '',
   };
 
-  // Write back to Meego (or log in dry-run mode).
+  // Write back to Meego.
   let written = 0;
   const writes: Array<{ field_key: string; field_value: string; label: string }> = [];
   if (figmaUrl) writes.push({ field_key: FIELD_KEY_FIGMA, field_value: figmaUrl, label: 'Figma' });
   if (abReportUrl) writes.push({ field_key: FIELD_KEY_AB_REPORT, field_value: abReportUrl, label: 'AB report' });
+  if (versionNumber) writes.push({ field_key: FIELD_KEY_VERSION_NUMBER, field_value: versionNumber, label: 'Version' });
 
   if (writes.length > 0) {
     if (ENABLE_LINK_WRITES) {
@@ -1804,12 +1866,12 @@ async function fetchAndCacheLinks(
           fields: writes.map(w => ({ field_key: w.field_key, field_value: w.field_value })),
         });
         written = writes.length;
-        console.log(`[digests] links written to Meego for "${feature.name}": ${writes.map(w => `${w.label}=${w.field_value.slice(0, 60)}`).join(', ')}`);
+        console.log(`[digests] fields written to Meego for "${feature.name}": ${writes.map(w => `${w.label}=${w.field_value.slice(0, 60)}`).join(', ')}`);
       } catch (e) {
         console.warn(`[digests] update_field failed for ${feature.name}:`, e);
       }
     } else {
-      console.log(`[digests] links DRY-RUN for "${feature.name}": ${writes.map(w => `${w.label}=${w.field_value.slice(0, 80)}`).join(', ')}`);
+      console.log(`[digests] fields DRY-RUN for "${feature.name}": ${writes.map(w => `${w.label}=${w.field_value.slice(0, 80)}`).join(', ')}`);
     }
   }
 
@@ -1840,36 +1902,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   } catch (e) {
     console.warn('[digests] failed to get Lark bot token:', e);
   }
-
-  // ── Version number field probe (TEMPORARY) ─────────────────────────────────
-  try {
-    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6740389019`;
-    // Try work-item level with guessed keys
-    const briefRaw = await callMeegoMcp('get_workitem_brief', {
-      url: probeUrl,
-      fields: ['version_number', 'field_version', 'ios_actual_online_version', 'android_actual_online_version', 'field_08a9ca', 'field_c88970', 'estimated_version'],
-    });
-    const briefJson = JSON.parse(briefRaw) as BriefJson;
-    const vFields = (briefJson.work_item_fields ?? []).map(
-      (f: BriefField) => `${f.key}=${f.name}: ${JSON.stringify(f.value).slice(0, 80)}`,
-    );
-    console.log(`[digests] version probe brief fields: ${vFields.join('; ') || '(none)'}`);
-    // Also scan ALL node form items for 版本号
-    const nodeRaw = await callMeegoMcp('get_node_detail', { url: probeUrl });
-    interface NF { field_key?: string; field_name?: string; value?: string }
-    interface NE { basic?: { node_key?: string }; form_items?: NF[] }
-    const nodeData = JSON.parse(nodeRaw) as { list?: NE[] };
-    for (const n of nodeData.list ?? []) {
-      for (const fi of n.form_items ?? []) {
-        if (/版本号|version.?number/i.test(fi.field_name ?? '') || /版本号|version.?number/i.test(fi.field_key ?? '')) {
-          console.log(`[digests] version probe HIT: node=${n.basic?.node_key} key=${fi.field_key} name=${fi.field_name} value=${(fi.value ?? '').slice(0, 100)}`);
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('[digests] version probe failed:', e);
-  }
-  // ── end probe ─────────────────────────────────────────────────────────────
 
   // Step 0b: Refresh (or reuse) Junior's chat list. This drives both the
   // discovery augmentation in Step 1 and the Q&A scan in Step 6.
