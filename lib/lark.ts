@@ -1025,18 +1025,22 @@ async function fillWhatWeAreBuilding(
 export async function copyPrdTemplate(
   featureName: string,
   featureDescription?: string,
-  options?: { useHalfDayPrd?: boolean; meegoUrl?: string; complianceUrl?: string; folderToken?: string },
+  options?: { useHalfDayPrd?: boolean; meegoUrl?: string; complianceUrl?: string; folderToken?: string; copyToken?: string },
 ): Promise<string> {
-  const token = await getAccessToken();
+  const botToken = await getAccessToken();
+  // Use copyToken (user's token) for the copy so the file is owned by the
+  // user and lands in their "My Document Library". Fall back to bot token
+  // if no user token is provided.
+  const copyAsToken = options?.copyToken || botToken;
   const templateToken = options?.useHalfDayPrd ? HALF_DAY_WIKI_NODE_TOKEN : WIKI_NODE_TOKEN;
   const [folderToken, objToken] = await Promise.all([
-    options?.folderToken ? Promise.resolve(options.folderToken) : getRootFolderToken(token),
-    getWikiObjToken(token, templateToken),
+    options?.folderToken ? Promise.resolve(options.folderToken) : getRootFolderToken(copyAsToken),
+    getWikiObjToken(botToken, templateToken),
   ]);
 
   const res  = await fetch(`${LARK_BASE_URL}/open-apis/drive/v1/files/${objToken}/copy`, {
     method:  'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${copyAsToken}`, 'Content-Type': 'application/json' },
     body:    JSON.stringify({ name: `[PRD] ${featureName}`, type: 'docx', folder_token: folderToken }),
   });
   const data = await parseJson(res, 'drive_copy') as {

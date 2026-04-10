@@ -136,32 +136,23 @@ async function handlePrdCreation(workItemId: string): Promise<{ prdUrl?: string;
   const useHalfDay = tagStr.includes(HALF_DAY_LABEL);
   console.log(`[prd-writer] "${featureName}": tags="${tagStr}", template=${useHalfDay ? 'half-day' : 'regular'}`);
 
-  // Step 4: Resolve the user's root folder so the PRD lands in "My Document
-  // Library" instead of the bot's "Shared With Me". Uses the PM's refresh
-  // token from GCS state (same one the digest pipeline uses for Drive search).
-  let userFolderToken: string | undefined;
+  // Step 4: Get the user's access token so the copy is owned by the PM
+  // (lands in "My Document Library" instead of bot's "Shared With Me").
+  let userAccessToken: string | undefined;
   try {
     const state = await loadDigestState();
     const refreshToken = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
     if (refreshToken) {
       const result = await refreshUserToken(refreshToken);
       if (result) {
-        // Persist the rotated token.
+        userAccessToken = result.accessToken;
         state.larkUserRefreshToken = result.refreshToken;
         await saveDigestState(state);
-        // Get the user's root folder.
-        const folderRes = await fetch(`${LARK_BASE_URL}/open-apis/drive/explorer/v2/root_folder/meta`, {
-          headers: { Authorization: `Bearer ${result.accessToken}` },
-        });
-        const folderData = await folderRes.json() as { code: number; data?: { token: string } };
-        if (folderData.code === 0 && folderData.data?.token) {
-          userFolderToken = folderData.data.token;
-          console.log('[prd-writer] resolved user root folder');
-        }
+        console.log('[prd-writer] user token refreshed for Drive copy');
       }
     }
   } catch (e) {
-    console.warn('[prd-writer] failed to resolve user folder, will use bot root:', e);
+    console.warn('[prd-writer] failed to get user token, copy will be owned by bot:', e);
   }
 
   // Step 5: Copy the PRD template.
@@ -171,7 +162,7 @@ async function handlePrdCreation(workItemId: string): Promise<{ prdUrl?: string;
     prdUrl = await copyPrdTemplate(featureName, description || undefined, {
       useHalfDayPrd: useHalfDay,
       meegoUrl,
-      folderToken: userFolderToken,
+      copyToken: userAccessToken,
     });
   } catch (e) {
     console.error(`[prd-writer] template copy failed for "${featureName}":`, e);
