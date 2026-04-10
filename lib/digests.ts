@@ -42,7 +42,7 @@ const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 // Discovered via the field meta probe. These are work-item level fields.
 const FIELD_KEY_FIGMA = 'ui_design_zeplin_link';          // UI&UX设计文档
 const FIELD_KEY_AB_REPORT = 'effect_analyze_report_t';  // TikTok-T 实验报告
-const FIELD_KEY_VERSION_NUMBER = 'estimated_version';   // 版本号 (TT Exp.Version)
+const FIELD_KEY_VERSION_NUMBER = 'description';          // 描述 (Details) — used for short version number
 
 // Version source fields — launched takes priority over planned.
 const VERSION_LAUNCHED_FIELDS = ['ios_actual_online_version', 'android_actual_online_version'];
