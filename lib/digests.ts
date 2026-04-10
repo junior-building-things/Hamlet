@@ -40,7 +40,7 @@ const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
 // ─── Task 3: link field keys ──────────────────────────────────────────────
 // Discovered via the field meta probe. These are work-item level fields.
-const FIELD_KEY_FIGMA = 'field_3';                      // 设计链接
+const FIELD_KEY_FIGMA = 'ui_design_zeplin_link';          // UI&UX设计文档
 const FIELD_KEY_AB_REPORT = 'effect_analyze_report_t';  // TikTok-T 实验报告
 
 /** Cooldown before re-searching a feature whose links came back empty. */
