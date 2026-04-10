@@ -1057,20 +1057,23 @@ export async function copyPrdTemplate(
 
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-  // Doc updates (sequential) + collaborator add (parallel)
+  // Doc updates (sequential) + collaborator add (parallel).
+  // Use the bot token for edits — the user token was only needed for the
+  // copy so the file is owned by the PM. The bot still needs access for
+  // the template-fill helpers, which addCollaborator grants.
   await Promise.all([
     (async () => {
-      await updateInitialVersionDate(fileToken, today, token);
+      await updateInitialVersionDate(fileToken, today, botToken);
       await updatePrdBasicInfo(fileToken, {
         meegoUrl: options?.meegoUrl,
         complianceUrl: options?.complianceUrl,
-      }, token).catch(e => console.warn('PRD basic info fill failed:', e));
+      }, botToken).catch(e => console.warn('PRD basic info fill failed:', e));
       if (featureDescription?.trim()) {
-        await fillWhatWeAreBuilding(fileToken, featureDescription.trim(), token)
+        await fillWhatWeAreBuilding(fileToken, featureDescription.trim(), botToken)
           .catch(e => console.warn('Fill "What are we building" failed:', e));
       }
     })(),
-    addCollaborator(fileToken, token),
+    addCollaborator(fileToken, botToken),
   ]);
 
   return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;
