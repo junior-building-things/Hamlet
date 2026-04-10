@@ -2108,27 +2108,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   if (exited.length > 0) console.log(`[digests] dropped ${exited.length} exited features from state: ${exited.join(', ')}`);
   const stale = pruneStaleRisks(state);
   if (stale.length > 0) console.log(`[digests] pruned ${stale.length} stale entries from state: ${stale.join(', ')}`);
-  // Step 5: Auto-fetch project links (Task 3). Iterates over ALL non-ended
-  // features (not just in-dev) and tries to discover Figma + AB report URLs
-  // using the same extraction functions Hamlet's UI uses. Results are cached
-  // in the state file so subsequent runs skip already-populated features.
-  // Currently in DRY-RUN mode (ENABLE_LINK_WRITES = false) — logs what would
-  // be written to Meego without calling update_field.
-  let linksFetched = 0;
-  let linksFound = 0;
-  let linksWritten = 0;
-  const nonEnded = features.filter(f => f.overallStatusKey !== 'end');
-  for (const feature of nonEnded) {
-    try {
-      const result = await fetchAndCacheLinks(feature, state);
-      linksFetched++;
-      if (result.figmaUrl || result.abReportUrl) linksFound++;
-      linksWritten += result.written;
-    } catch (e) {
-      console.warn(`[digests] link fetch failed for ${feature.name}:`, e);
-    }
-  }
-  console.log(`[digests] Task 3 link fetch: ${linksFetched}/${nonEnded.length} processed, ${linksFound} with links, ${linksWritten} written to Meego`);
+  // Step 5: Auto-fetch project links (Task 3). TEMPORARILY DISABLED while
+  // we debug the AB report search. Only the targeted probe (above) runs.
+  // TODO: re-enable once the search is confirmed working.
+  console.log('[digests] Task 3 link fetch: DISABLED (debugging AB search)');
 
   await saveDigestState(state);
   console.log(`[digests] saved digest state with ${Object.keys(state.features).length} active feature entries, ${Object.keys(state.featureLinks ?? {}).length} link cache entries`);
