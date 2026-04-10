@@ -118,6 +118,16 @@ export interface DigestStateFile {
    * but not found"; these are re-attempted after LINK_RETRY_COOLDOWN_DAYS.
    */
   featureLinks?: Record<string, CachedFeatureLinks>;
+  /**
+   * Lark user refresh token for Drive search. The bot's tenant token only
+   * returns docs the bot itself has access to; a user_access_token from the
+   * PM's account covers their full Drive scope. The refresh_token rotates on
+   * each use — the latest one is persisted here so the next run can chain.
+   *
+   * Bootstrapped by setting `LARK_USER_REFRESH_TOKEN` env var (one-time);
+   * after the first successful refresh the env var is no longer needed.
+   */
+  larkUserRefreshToken?: string;
 }
 
 /**
@@ -185,6 +195,13 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     ? (obj.watchlist as unknown[]).filter((x): x is string => typeof x === 'string')
     : undefined;
 
+  const featureLinks = (obj.featureLinks && typeof obj.featureLinks === 'object')
+    ? (obj.featureLinks as DigestStateFile['featureLinks'])
+    : undefined;
+  const larkUserRefreshToken = typeof obj.larkUserRefreshToken === 'string'
+    ? obj.larkUserRefreshToken
+    : undefined;
+
   return {
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
     recentRunTimes: Array.isArray(obj.recentRunTimes) ? (obj.recentRunTimes as string[]) : [],
@@ -192,6 +209,8 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     discoveredIdsCache,
     juniorChatsCache,
     watchlist,
+    featureLinks,
+    larkUserRefreshToken,
   };
 }
 

@@ -7,6 +7,7 @@ import {
   joinFeatureChat,
   listJuniorChats,
   getLarkBotToken,
+  refreshUserToken,
   searchAbReport,
   extractFigmaUrlFromPrd,
   ChatMessage,
@@ -1743,6 +1744,7 @@ const ENABLE_LINK_WRITES = false; // Deploy 3: flip to true
 async function fetchAndCacheLinks(
   feature: MeegoFeature,
   state: DigestStateFile,
+  userToken?: string,
 ): Promise<{ figmaUrl: string; abReportUrl: string; written: number }> {
   const cached = state.featureLinks?.[feature.workItemId];
   const nowIso = new Date().toISOString();
@@ -1774,10 +1776,12 @@ async function fetchAndCacheLinks(
     }
   }
 
-  // Fetch AB report via Lark Drive search.
+  // Fetch AB report via Lark Drive search. Uses a user_access_token (when
+  // available) so the search covers the PM's full Drive scope — the bot's
+  // tenant token only returns docs the bot itself has access to.
   if (!abReportUrl && feature.name) {
     try {
-      const result = await searchAbReport(feature.name, undefined, feature.prd);
+      const result = await searchAbReport(feature.name, userToken, feature.prd);
       abReportUrl = result.abReportUrl;
     } catch (e) {
       console.warn(`[digests] AB report search failed for ${feature.name}:`, e);
@@ -1888,22 +1892,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     await new Promise(r => setTimeout(r, 200));
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
-
-  // ── Task 3 diagnostic: trace searchAbReport for feature 6839802029 ──────
-  try {
-    const probeFeature = features.find(f => f.workItemId === '6839802029');
-    if (probeFeature) {
-      console.log(`[digests] AB probe: feature="${probeFeature.name}" prd=${probeFeature.prd ?? '(none)'}`);
-      const { searchAbReport: sar } = await import('./lark');
-      const result = await sar(probeFeature.name, undefined, probeFeature.prd);
-      console.log(`[digests] AB probe result: abReport=${result.abReportUrl || '(empty)'} libra=${result.libraUrl || '(empty)'}`);
-    } else {
-      console.log('[digests] AB probe: feature 6839802029 not in discovery set');
-    }
-  } catch (e) {
-    console.warn('[digests] AB probe failed:', e);
-  }
-  // ── end diagnostic ────────────────────────────────────────────────────────
 
   // Log distribution of active node IDs across all features (how many times
   // each ID appears as one of a feature's active nodes). This is what the
@@ -2108,10 +2096,48 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   if (exited.length > 0) console.log(`[digests] dropped ${exited.length} exited features from state: ${exited.join(', ')}`);
   const stale = pruneStaleRisks(state);
   if (stale.length > 0) console.log(`[digests] pruned ${stale.length} stale entries from state: ${stale.join(', ')}`);
-  // Step 5: Auto-fetch project links (Task 3). TEMPORARILY DISABLED while
-  // we debug the AB report search. Only the targeted probe (above) runs.
-  // TODO: re-enable once the search is confirmed working.
-  console.log('[digests] Task 3 link fetch: DISABLED (debugging AB search)');
+  // Step 5: Auto-fetch project links (Task 3). For each non-ended feature,
+  // discover Figma + AB report URLs and cache them in state. AB report search
+  // requires the PM's user_access_token (bot token only sees bot-accessible
+  // docs). The refresh token is bootstrapped from LARK_USER_REFRESH_TOKEN env
+  // var and rotated into the GCS state on each successful refresh.
+  let userAccessToken = '';
+  {
+    const storedRefresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
+    if (storedRefresh) {
+      try {
+        const result = await refreshUserToken(storedRefresh);
+        if (result) {
+          userAccessToken = result.accessToken;
+          // Persist the rotated refresh token for the next run.
+          state.larkUserRefreshToken = result.refreshToken;
+          console.log('[digests] user token refreshed for Drive search');
+        } else {
+          console.warn('[digests] user token refresh returned null — Drive search will use bot token (limited scope)');
+        }
+      } catch (e) {
+        console.warn('[digests] user token refresh failed:', e);
+      }
+    } else {
+      console.log('[digests] no user refresh token available — Drive search will use bot token (limited scope)');
+    }
+  }
+
+  let linksFetched = 0;
+  let linksFound = 0;
+  let linksWritten = 0;
+  const nonEnded = features.filter(f => f.overallStatusKey !== 'end');
+  for (const feature of nonEnded) {
+    try {
+      const result = await fetchAndCacheLinks(feature, state, userAccessToken || undefined);
+      linksFetched++;
+      if (result.figmaUrl || result.abReportUrl) linksFound++;
+      linksWritten += result.written;
+    } catch (e) {
+      console.warn(`[digests] link fetch failed for ${feature.name}:`, e);
+    }
+  }
+  console.log(`[digests] Task 3 link fetch: ${linksFetched}/${nonEnded.length} processed, ${linksFound} with links, ${linksWritten} written to Meego`);
 
   await saveDigestState(state);
   console.log(`[digests] saved digest state with ${Object.keys(state.features).length} active feature entries, ${Object.keys(state.featureLinks ?? {}).length} link cache entries`);
