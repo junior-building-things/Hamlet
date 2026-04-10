@@ -1025,12 +1025,12 @@ async function fillWhatWeAreBuilding(
 export async function copyPrdTemplate(
   featureName: string,
   featureDescription?: string,
-  options?: { useHalfDayPrd?: boolean; meegoUrl?: string; complianceUrl?: string },
+  options?: { useHalfDayPrd?: boolean; meegoUrl?: string; complianceUrl?: string; folderToken?: string },
 ): Promise<string> {
   const token = await getAccessToken();
   const templateToken = options?.useHalfDayPrd ? HALF_DAY_WIKI_NODE_TOKEN : WIKI_NODE_TOKEN;
   const [folderToken, objToken] = await Promise.all([
-    getRootFolderToken(token),
+    options?.folderToken ? Promise.resolve(options.folderToken) : getRootFolderToken(token),
     getWikiObjToken(token, templateToken),
   ]);
 

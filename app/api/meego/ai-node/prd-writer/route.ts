@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { copyPrdTemplate } from '@/lib/lark';
+import { copyPrdTemplate, refreshUserToken } from '@/lib/lark';
 import { callMeegoMcp } from '@/lib/digests';
+import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 const MEEGO_AI_NODE_TOKEN = process.env.MEEGO_AI_NODE_TOKEN;
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 const HALF_DAY_LABEL = '极简需求/Half-Day Feature';
+const LARK_BASE_URL = process.env.LARK_BASE_URL || 'https://open.larksuite.com';
 
 /**
  * Meego AI Node webhook endpoint for auto-creating PRDs.
@@ -134,13 +136,42 @@ async function handlePrdCreation(workItemId: string): Promise<{ prdUrl?: string;
   const useHalfDay = tagStr.includes(HALF_DAY_LABEL);
   console.log(`[prd-writer] "${featureName}": tags="${tagStr}", template=${useHalfDay ? 'half-day' : 'regular'}`);
 
-  // Step 4: Copy the PRD template.
+  // Step 4: Resolve the user's root folder so the PRD lands in "My Document
+  // Library" instead of the bot's "Shared With Me". Uses the PM's refresh
+  // token from GCS state (same one the digest pipeline uses for Drive search).
+  let userFolderToken: string | undefined;
+  try {
+    const state = await loadDigestState();
+    const refreshToken = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
+    if (refreshToken) {
+      const result = await refreshUserToken(refreshToken);
+      if (result) {
+        // Persist the rotated token.
+        state.larkUserRefreshToken = result.refreshToken;
+        await saveDigestState(state);
+        // Get the user's root folder.
+        const folderRes = await fetch(`${LARK_BASE_URL}/open-apis/drive/explorer/v2/root_folder/meta`, {
+          headers: { Authorization: `Bearer ${result.accessToken}` },
+        });
+        const folderData = await folderRes.json() as { code: number; data?: { token: string } };
+        if (folderData.code === 0 && folderData.data?.token) {
+          userFolderToken = folderData.data.token;
+          console.log('[prd-writer] resolved user root folder');
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[prd-writer] failed to resolve user folder, will use bot root:', e);
+  }
+
+  // Step 5: Copy the PRD template.
   const description = getFieldValue(fields, 'description');
   let prdUrl: string;
   try {
     prdUrl = await copyPrdTemplate(featureName, description || undefined, {
       useHalfDayPrd: useHalfDay,
       meegoUrl,
+      folderToken: userFolderToken,
     });
   } catch (e) {
     console.error(`[prd-writer] template copy failed for "${featureName}":`, e);
