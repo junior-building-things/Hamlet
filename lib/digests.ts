@@ -1749,19 +1749,6 @@ async function fetchAndCacheLinks(
   const cached = state.featureLinks?.[feature.workItemId];
   const nowIso = new Date().toISOString();
 
-  // Skip if fully populated in cache.
-  if (cached?.allPopulated) {
-    return { figmaUrl: cached.figmaUrl, abReportUrl: cached.abReportUrl, written: 0 };
-  }
-
-  // Skip if we tried recently and got empty results (cooldown).
-  if (cached && !cached.allPopulated) {
-    const elapsed = Date.now() - Date.parse(cached.lastFetchedIso);
-    if (elapsed < LINK_RETRY_COOLDOWN_MS) {
-      return { figmaUrl: cached.figmaUrl, abReportUrl: cached.abReportUrl, written: 0 };
-    }
-  }
-
   // If PRD changed since last fetch, re-fetch Figma (it's extracted from PRD).
   const prdChanged = cached && cached.prdAtFetch !== (feature.prd ?? '');
   let figmaUrl = (cached?.figmaUrl && !prdChanged) ? cached.figmaUrl : '';
@@ -2109,9 +2096,11 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         const result = await refreshUserToken(storedRefresh);
         if (result) {
           userAccessToken = result.accessToken;
-          // Persist the rotated refresh token for the next run.
+          // Persist the rotated refresh token IMMEDIATELY so it's not lost
+          // if the link-fetch loop times out before the final state save.
           state.larkUserRefreshToken = result.refreshToken;
-          console.log('[digests] user token refreshed for Drive search');
+          await saveDigestState(state);
+          console.log('[digests] user token refreshed for Drive search (state saved with rotated token)');
         } else {
           console.warn('[digests] user token refresh returned null — Drive search will use bot token (limited scope)');
         }
@@ -2123,11 +2112,33 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     }
   }
 
+  // Cap the number of features processed per run so the digest finishes
+  // within Cloud Run's timeout. Each AB report search does 3 Lark Drive
+  // queries which can be slow. Unprocessed features will be picked up on
+  // subsequent runs (the cache ensures already-done features are skipped).
+  const LINK_FETCH_MAX_PER_RUN = 10;
   let linksFetched = 0;
   let linksFound = 0;
   let linksWritten = 0;
+  let linksSkippedCached = 0;
   const nonEnded = features.filter(f => f.overallStatusKey !== 'end');
   for (const feature of nonEnded) {
+    // Skip if already fully cached.
+    const cached = state.featureLinks?.[feature.workItemId];
+    if (cached?.allPopulated) {
+      linksSkippedCached++;
+      continue;
+    }
+    // Cooldown: skip if we tried recently and got empty.
+    if (cached && !cached.allPopulated) {
+      const elapsed = Date.now() - Date.parse(cached.lastFetchedIso);
+      if (elapsed < LINK_RETRY_COOLDOWN_MS) {
+        linksSkippedCached++;
+        continue;
+      }
+    }
+    // Cap per run.
+    if (linksFetched >= LINK_FETCH_MAX_PER_RUN) break;
     try {
       const result = await fetchAndCacheLinks(feature, state, userAccessToken || undefined);
       linksFetched++;
@@ -2135,9 +2146,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       linksWritten += result.written;
     } catch (e) {
       console.warn(`[digests] link fetch failed for ${feature.name}:`, e);
+      linksFetched++; // count toward cap so a chain of failures doesn't loop forever
     }
   }
-  console.log(`[digests] Task 3 link fetch: ${linksFetched}/${nonEnded.length} processed, ${linksFound} with links, ${linksWritten} written to Meego`);
+  console.log(`[digests] Task 3 link fetch: ${linksFetched}/${nonEnded.length} processed (${linksSkippedCached} cached/cooldown, cap=${LINK_FETCH_MAX_PER_RUN}), ${linksFound} with links, ${linksWritten} written to Meego`);
 
   await saveDigestState(state);
   console.log(`[digests] saved digest state with ${Object.keys(state.features).length} active feature entries, ${Object.keys(state.featureLinks ?? {}).length} link cache entries`);
