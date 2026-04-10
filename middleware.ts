@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySession, COOKIE_NAME } from '@/lib/session';
 
 // Paths that don't require authentication
-const PUBLIC = ['/login', '/api/auth/', '/api/agents/webhook', '/api/digests/run'];
+const PUBLIC = ['/login', '/api/auth/', '/api/agents/webhook', '/api/digests/run', '/api/meego/ai-node'];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

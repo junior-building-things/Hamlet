@@ -58,7 +58,7 @@ function pickNode(nodes: Array<{ key: string; name: string }>): { key: string; n
   })[0];
 }
 
-async function callMeegoMcp(toolName: string, args: Record<string, unknown>) {
+export async function callMeegoMcp(toolName: string, args: Record<string, unknown>) {
   const token = process.env.MEEGO_USER_TOKEN;
   if (!token) throw new Error('MEEGO_USER_TOKEN not configured');
 
