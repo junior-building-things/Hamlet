@@ -476,7 +476,6 @@ export async function searchAbReport(
       continue;
     }
     const rawResults = searchData.data?.docs_entities ?? [];
-    console.log(`[lark] Drive search query="${query}": ${rawResults.length} raw results${rawResults.length > 0 ? ` — titles: ${rawResults.map(d => d.title).join(', ')}` : ''}`);
     for (const doc of rawResults) {
       if (seen.has(doc.docs_token)) continue;
       seen.add(doc.docs_token);

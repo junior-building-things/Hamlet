@@ -1739,7 +1739,7 @@ export function formatUnansweredDigest(findings: UnansweredFinding[]): string {
  * false until we've verified the dry-run output looks correct. Flip it to
  * true for Deploy 3.
  */
-const ENABLE_LINK_WRITES = false; // Deploy 3: flip to true
+const ENABLE_LINK_WRITES = true;
 
 async function fetchAndCacheLinks(
   feature: MeegoFeature,
