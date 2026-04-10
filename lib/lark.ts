@@ -592,28 +592,38 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
 
 export async function extractFigmaUrlFromPrd(prdUrl: string): Promise<string> {
   if (!prdUrl) return '';
-  // Extract doc token from URLs like https://*.larkoffice.com/docx/TOKEN
-  const m = prdUrl.match(/\/docx\/([A-Za-z0-9]+)/);
-  if (!m) return '';
-  const docId = m[1];
+  // Resolve both /docx/TOKEN and /wiki/TOKEN URLs to a docx ID.
+  let docId: string;
+  try {
+    docId = await resolveDocId(prdUrl);
+  } catch {
+    return ''; // not a Lark doc URL
+  }
 
   const token  = await getAccessToken();
   const blocks = await getDocBlocks(docId, token);
-  const byId   = new Map(blocks.map(b => [b.block_id, b]));
 
-  // Search ALL blocks in the document for a Figma URL
+  // Search ALL blocks in the document for a Figma URL. Check every
+  // text-bearing container (text, heading*, bullet, ordered, etc.) since
+  // the Figma link could be inside a heading or bullet, not just a plain
+  // paragraph.
   for (const block of blocks) {
-    for (const el of block.text?.elements ?? []) {
-      // Check hyperlinked text
-      const style = el.text_run?.text_element_style as Record<string, unknown> | undefined;
-      const link  = style?.link as Record<string, unknown> | undefined;
-      if (typeof link?.url === 'string' && link.url.includes('figma.com')) {
-        return link.url;
+    for (const key of TEXT_BEARING_KEYS) {
+      const container = block[key] as ElementsContainer | undefined;
+      const elements = container?.elements;
+      if (!elements) continue;
+      for (const el of elements) {
+        // Check hyperlinked text
+        const style = el.text_run?.text_element_style as Record<string, unknown> | undefined;
+        const link  = style?.link as Record<string, unknown> | undefined;
+        if (typeof link?.url === 'string' && link.url.includes('figma.com')) {
+          return link.url;
+        }
+        // Check plain-text URLs
+        const content  = el.text_run?.content ?? '';
+        const urlMatch = content.match(/https?:\/\/[^\s]*figma\.com[^\s]*/);
+        if (urlMatch) return urlMatch[0];
       }
-      // Check plain-text URLs
-      const content  = el.text_run?.content ?? '';
-      const urlMatch = content.match(/https?:\/\/[^\s]*figma\.com[^\s]*/);
-      if (urlMatch) return urlMatch[0];
     }
   }
 
