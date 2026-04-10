@@ -1841,6 +1841,36 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     console.warn('[digests] failed to get Lark bot token:', e);
   }
 
+  // ── Version number field probe (TEMPORARY) ─────────────────────────────────
+  try {
+    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6740389019`;
+    // Try work-item level with guessed keys
+    const briefRaw = await callMeegoMcp('get_workitem_brief', {
+      url: probeUrl,
+      fields: ['version_number', 'field_version', 'ios_actual_online_version', 'android_actual_online_version', 'field_08a9ca', 'field_c88970', 'estimated_version'],
+    });
+    const briefJson = JSON.parse(briefRaw) as BriefJson;
+    const vFields = (briefJson.work_item_fields ?? []).map(
+      (f: BriefField) => `${f.key}=${f.name}: ${JSON.stringify(f.value).slice(0, 80)}`,
+    );
+    console.log(`[digests] version probe brief fields: ${vFields.join('; ') || '(none)'}`);
+    // Also scan ALL node form items for 版本号
+    const nodeRaw = await callMeegoMcp('get_node_detail', { url: probeUrl });
+    interface NF { field_key?: string; field_name?: string; value?: string }
+    interface NE { basic?: { node_key?: string }; form_items?: NF[] }
+    const nodeData = JSON.parse(nodeRaw) as { list?: NE[] };
+    for (const n of nodeData.list ?? []) {
+      for (const fi of n.form_items ?? []) {
+        if (/版本号|version.?number/i.test(fi.field_name ?? '') || /版本号|version.?number/i.test(fi.field_key ?? '')) {
+          console.log(`[digests] version probe HIT: node=${n.basic?.node_key} key=${fi.field_key} name=${fi.field_name} value=${(fi.value ?? '').slice(0, 100)}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[digests] version probe failed:', e);
+  }
+  // ── end probe ─────────────────────────────────────────────────────────────
+
   // Step 0b: Refresh (or reuse) Junior's chat list. This drives both the
   // discovery augmentation in Step 1 and the Q&A scan in Step 6.
   let juniorChats: JuniorChatCacheEntry[] = [];
