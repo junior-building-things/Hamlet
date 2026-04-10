@@ -60,16 +60,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'missing work_item_id' }, { status: 400 });
   }
 
-  // Respond immediately — Meego expects a fast response.
-  // Process the PRD creation asynchronously.
-  handlePrdCreation(workItemId).catch(e => {
-    console.error(`[prd-writer] background processing failed for ${workItemId}:`, e);
-  });
-
-  return NextResponse.json({ ok: true, work_item_id: workItemId });
+  // Process synchronously so Cloud Run doesn't kill the instance before
+  // the copy finishes. If Meego's webhook times out (~5s), the PRD is
+  // still created and the idempotency check prevents duplicates on retry.
+  try {
+    const result = await handlePrdCreation(workItemId);
+    return NextResponse.json({ ok: true, work_item_id: workItemId, ...result });
+  } catch (e) {
+    console.error(`[prd-writer] processing failed for ${workItemId}:`, e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'PRD creation failed' },
+      { status: 500 },
+    );
+  }
 }
 
-async function handlePrdCreation(workItemId: string): Promise<void> {
+async function handlePrdCreation(workItemId: string): Promise<{ prdUrl?: string; skipped?: boolean }> {
   const meegoUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/${workItemId}`;
   console.log(`[prd-writer] processing work item ${workItemId}`);
 
@@ -88,7 +94,7 @@ async function handlePrdCreation(workItemId: string): Promise<void> {
     brief = JSON.parse(raw);
   } catch (e) {
     console.error(`[prd-writer] failed to fetch brief for ${workItemId}:`, e);
-    return;
+    throw new Error(`Failed to fetch brief: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   const featureName = brief.work_item_attribute?.work_item_name ?? `Feature ${workItemId}`;
@@ -98,13 +104,29 @@ async function handlePrdCreation(workItemId: string): Promise<void> {
   const existingPrd = getFieldValue(fields, 'wiki');
   if (existingPrd) {
     console.log(`[prd-writer] PRD already exists for "${featureName}", skipping: ${existingPrd}`);
-    return;
+    return { skipped: true };
   }
 
-  // Step 3: Check Label field to pick template.
-  const label = getFieldValue(fields, 'tags');
-  const useHalfDay = label.includes(HALF_DAY_LABEL);
-  console.log(`[prd-writer] "${featureName}": label="${label}", template=${useHalfDay ? 'half-day' : 'regular'}`);
+  // Step 3: Check Label (tags) field to pick template.
+  // The tags field can come as: a string, an array of strings, an array of
+  // {label,value} objects, or a comma-separated string. Normalize to a
+  // single joined string for the half-day check.
+  const rawTags = fields.find(f => f.key === 'tags')?.value;
+  let tagStr = '';
+  if (typeof rawTags === 'string') {
+    tagStr = rawTags;
+  } else if (Array.isArray(rawTags)) {
+    tagStr = rawTags.map(t => {
+      if (typeof t === 'string') return t;
+      if (t && typeof t === 'object') return String((t as Record<string, unknown>).label ?? (t as Record<string, unknown>).name ?? (t as Record<string, unknown>).value ?? '');
+      return String(t);
+    }).join(', ');
+  } else if (rawTags && typeof rawTags === 'object') {
+    const obj = rawTags as Record<string, unknown>;
+    tagStr = String(obj.label ?? obj.name ?? obj.value ?? JSON.stringify(rawTags));
+  }
+  const useHalfDay = tagStr.includes(HALF_DAY_LABEL);
+  console.log(`[prd-writer] "${featureName}": tags="${tagStr}", template=${useHalfDay ? 'half-day' : 'regular'}`);
 
   // Step 4: Copy the PRD template.
   const description = getFieldValue(fields, 'description');
@@ -116,7 +138,7 @@ async function handlePrdCreation(workItemId: string): Promise<void> {
     });
   } catch (e) {
     console.error(`[prd-writer] template copy failed for "${featureName}":`, e);
-    return;
+    throw new Error(`Template copy failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   console.log(`[prd-writer] PRD created for "${featureName}": ${prdUrl}`);
@@ -132,6 +154,8 @@ async function handlePrdCreation(workItemId: string): Promise<void> {
   } catch (e) {
     console.error(`[prd-writer] failed to write PRD URL to Meego for "${featureName}":`, e);
   }
+
+  return { prdUrl };
 }
 
 /**
