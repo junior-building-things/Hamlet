@@ -1800,7 +1800,7 @@ async function fetchAndCacheLinks(
       try {
         await callMeegoMcp('update_field', {
           project_key: TIKTOK_PROJECT_KEY,
-          work_item_id: Number(feature.workItemId),
+          work_item_id: feature.workItemId,
           fields: writes.map(w => ({ field_key: w.field_key, field_value: w.field_value })),
         });
         written = writes.length;
