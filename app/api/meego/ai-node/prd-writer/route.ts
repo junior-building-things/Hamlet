@@ -147,7 +147,7 @@ async function handlePrdCreation(workItemId: string): Promise<{ prdUrl?: string;
   try {
     await callMeegoMcp('update_field', {
       project_key: TIKTOK_PROJECT_KEY,
-      work_item_id: Number(workItemId),
+      work_item_id: workItemId,
       fields: [{ field_key: 'wiki', field_value: prdUrl }],
     });
     console.log(`[prd-writer] Meego wiki field updated for "${featureName}"`);
