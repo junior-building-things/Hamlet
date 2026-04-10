@@ -1880,41 +1880,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
 
-  // ── Figma Link field key probe (TEMPORARY) ─────────────────────────────────
-  // The "Figma Link" field appears in the basic info section but wasn't in
-  // list_workitem_field_config (50 fields). Scan node-level fields + try
-  // fetching the brief with guessed field keys to find it.
-  try {
-    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839802029`;
-
-    // 1) Scan all node form items for "figma"
-    const nodeRaw = await callMeegoMcp('get_node_detail', { url: probeUrl });
-    interface NF { field_key?: string; field_name?: string; value?: string }
-    interface NE { basic?: { node_key?: string }; form_items?: NF[] }
-    const nodeData = JSON.parse(nodeRaw) as { list?: NE[] };
-    const figmaHits: string[] = [];
-    for (const n of nodeData.list ?? []) {
-      for (const fi of n.form_items ?? []) {
-        if (/figma/i.test(fi.field_name ?? '') || /figma/i.test(fi.field_key ?? '')) {
-          figmaHits.push(`node=${n.basic?.node_key} key=${fi.field_key} name=${fi.field_name} value=${(fi.value ?? '').slice(0, 100)}`);
-        }
-      }
-    }
-    console.log(`[digests] Figma probe node scan: ${figmaHits.length} hits: ${figmaHits.join(' | ') || '(none)'}`);
-
-    // 2) Try fetching brief with guessed field keys
-    const guesses = ['figma_link', 'figma', 'design_link', 'field_3', 'ui_design_zeplin_link'];
-    const briefRaw = await callMeegoMcp('get_workitem_brief', { url: probeUrl, fields: guesses });
-    const briefJson = JSON.parse(briefRaw) as BriefJson;
-    const matchedFields = (briefJson.work_item_fields ?? [])
-      .filter((f: BriefField) => f.value !== undefined && f.value !== null && f.value !== '')
-      .map((f: BriefField) => `${f.key}=${f.name}: ${JSON.stringify(f.value).slice(0, 100)}`);
-    console.log(`[digests] Figma probe brief guesses: ${matchedFields.join('; ') || '(all empty)'}`);
-  } catch (e) {
-    console.warn('[digests] Figma probe failed:', e);
-  }
-  // ── end probe ─────────────────────────────────────────────────────────────
-
   // Log distribution of active node IDs across all features (how many times
   // each ID appears as one of a feature's active nodes). This is what the
   // filter actually operates on.
