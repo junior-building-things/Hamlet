@@ -4,6 +4,7 @@ import {
   readChatMessages,
   resolveOpenIds,
   sendInteractiveCardToChat,
+  sendFeatureCard,
   joinFeatureChat,
   listJuniorChats,
   getLarkBotToken,
@@ -17,6 +18,7 @@ import {
 } from './lark';
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
+import { readFeatureCache, writeFeatureCache } from './feature-cache';
 import {
   loadDigestState,
   saveDigestState,
@@ -1972,6 +1974,63 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     await new Promise(r => setTimeout(r, 200));
   }
   console.log(`[digests] fetched raw state for ${features.length} features`);
+
+  // Step 2b: Update the GCS feature cache with fresh status/name/priority
+  // from each brief, AND detect status transitions that need notifications.
+  // Currently notifies when a feature enters 待线内评审 (Line Review).
+  const LINE_REVIEW_STATUS = '待线内评审';
+  try {
+    const prevCache = await readFeatureCache();
+    const prevStatusMap = new Map<string, string>();
+    if (prevCache) {
+      for (const f of prevCache.features) {
+        if (f.meegoIssueId || f.id) prevStatusMap.set(f.meegoIssueId ?? f.id, f.status);
+      }
+    }
+
+    // Detect transitions to Line Review and send notification cards.
+    for (const f of features) {
+      const prevStatus = prevStatusMap.get(f.workItemId);
+      if (f.overallStatusName === LINE_REVIEW_STATUS && prevStatus && prevStatus !== 'Line Review') {
+        console.log(`[digests] status transition: "${f.name}" ${prevStatus} → Line Review`);
+        sendFeatureCard({
+          name: f.name,
+          meegoUrl: f.meegoUrl,
+          prdUrl: f.prd,
+          priority: f.priority ?? 'P1',
+          headerTitle: 'Entering Line Review 📋',
+          headerTemplate: 'orange',
+        }).catch(e => console.warn(`[digests] Line Review card send failed for "${f.name}":`, e));
+      }
+    }
+
+    // Write updated feature list to GCS cache so the Hamlet UI sees fresh data.
+    const updatedFeatures = features.map(f => ({
+      id: f.workItemId,
+      meegoIssueId: f.workItemId,
+      name: f.name,
+      description: '',
+      status: f.overallStatusName,
+      priority: (f.priority ?? 'P1') as import('./types').Priority,
+      owner: (f.roles['PM'] ?? [])[0] ?? '',
+      tasks: [] as import('./types').Task[],
+      lastUpdated: f.lastUpdatedIso ?? '',
+      meegoUrl: f.meegoUrl,
+      meegoProjectKey: TIKTOK_PROJECT_KEY,
+      prd: f.prd,
+      iosVersion: f.iosVersion,
+      // Preserve enriched fields from previous cache (Figma, AB report, etc.)
+      ...(prevCache?.features.find(p => (p.meegoIssueId ?? p.id) === f.workItemId) ?? {}),
+      // Override with fresh brief data
+      status: f.overallStatusName,
+      name: f.name,
+      priority: (f.priority ?? 'P1') as import('./types').Priority,
+    })) as import('./types').Feature[];
+    await writeFeatureCache(updatedFeatures);
+    console.log(`[digests] GCS feature cache updated with ${updatedFeatures.length} features`);
+  } catch (e) {
+    console.warn('[digests] feature cache update / transition detection failed:', e);
+  }
 
   // Log distribution of active node IDs across all features (how many times
   // each ID appears as one of a feature's active nodes). This is what the

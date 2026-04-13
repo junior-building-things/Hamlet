@@ -1593,6 +1593,10 @@ export async function sendFeatureCard(opts: {
   priority: string;
   businessLine?: string;
   socialComponent?: string;
+  /** Custom card header title. Defaults to "Feature Created ✅". */
+  headerTitle?: string;
+  /** Custom card header color template. Defaults to "blue". */
+  headerTemplate?: string;
 }): Promise<void> {
   const token = await getAccessToken();
 
@@ -1638,8 +1642,8 @@ export async function sendFeatureCard(opts: {
   const card = {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: 'Feature Created \u2705' },
-      template: 'blue',
+      title: { tag: 'plain_text', content: opts.headerTitle ?? 'Feature Created \u2705' },
+      template: opts.headerTemplate ?? 'blue',
     },
     elements,
   };
