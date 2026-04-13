@@ -417,6 +417,34 @@ export async function refreshUserToken(refreshToken: string): Promise<{ accessTo
  * Returns the URL of the best match, or '' if nothing found.
  */
 const LIBRA_URL_RE = /https?:\/\/libra[^\s"')]*\/flight\/\d+[^\s"')"]*/i;
+const LIBRA_PEER_REVIEW_RE = /https?:\/\/libra[^\s"')]*\/peer-review\/(\d+)[^\s"')"]*/i;
+
+/**
+ * Normalize a Libra URL: peer-review URLs are reformatted to the canonical
+ * flight/edit form. E.g.:
+ *   https://libra-sg.tiktok-row.net/libra/peer-review/71914392/view/101162049?version=new
+ *   → https://libra-sg.tiktok-row.net/libra/flight/71914392/edit
+ */
+function normalizeLibraUrl(raw: string): string {
+  const prMatch = raw.match(LIBRA_PEER_REVIEW_RE);
+  if (prMatch) {
+    const host = raw.match(/https?:\/\/[^/]+/)?.[0] ?? 'https://libra-sg.tiktok-row.net';
+    return `${host}/libra/flight/${prMatch[1]}/edit`;
+  }
+  return raw;
+}
+
+/**
+ * Try to extract a Libra URL from a string. Checks both /flight/ and
+ * /peer-review/ patterns. Returns the normalized URL or empty string.
+ */
+function extractLibraUrl(text: string): string {
+  const flightMatch = text.match(LIBRA_URL_RE);
+  if (flightMatch) return flightMatch[0];
+  const prMatch = text.match(LIBRA_PEER_REVIEW_RE);
+  if (prMatch) return normalizeLibraUrl(prMatch[0]);
+  return '';
+}
 
 export async function searchAbReport(
   featureName: string, userAccessToken?: string, prdUrl?: string,
@@ -537,8 +565,8 @@ export async function searchAbReport(
           if (!libraUrl) {
             const allUrls = [linkUrl, content, el.mention_doc?.url ?? ''];
             for (const u of allUrls) {
-              const m = u.match(LIBRA_URL_RE);
-              if (m) { libraUrl = m[0]; break; }
+              const found = extractLibraUrl(u);
+              if (found) { libraUrl = found; break; }
             }
           }
         }
@@ -584,8 +612,8 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
   // Messages are newest-first — return the first Libra link found
   for (const msg of data.data?.items ?? []) {
     const content = msg.body?.content ?? '';
-    const match = content.match(LIBRA_URL_RE);
-    if (match) return match[0];
+    const found = extractLibraUrl(content);
+    if (found) return found;
   }
   return '';
 }
