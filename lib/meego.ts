@@ -5,37 +5,40 @@ const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const MY_EMAIL = process.env.OWNER_EMAIL!;
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
-// Ordered priority list — when multiple nodes are active, pick the highest one
-const NODE_PRIORITY = [
-  '产品需求准备',
-  '产品线内初评',
-  '技术评估&排优',
-  '需求详评',
-  '技术方案设计',
-  'iOS 开发',
-  'UI&UX验收',
-  'Server上线',
-  'AB实验',
-  '结束',
+// Status display groups — maps Meego node names to consolidated display
+// labels. When multiple nodes are active, the LATEST (most advanced) stage
+// wins. Higher index = more advanced.
+const STATUS_GROUPS: Array<{ label: string; nodes: string[] }> = [
+  { label: 'PRD Prep',      nodes: ['产品需求准备'] },
+  { label: 'Line Review',   nodes: ['产品线内初评'] },
+  { label: 'RD Allocation', nodes: ['技术评估&排优'] },
+  { label: 'PRD Review',    nodes: ['需求详评', '需求评审'] },
+  { label: 'Tech Design',   nodes: ['技术方案设计'] },
+  { label: 'Development',   nodes: ['iOS 开发', 'Android 开发', 'Server 开发', 'Server上线'] },
+  { label: 'QA',            nodes: ['QA测试准备', 'QA测试', 'QA功能测试'] },
+  { label: 'UAT',           nodes: ['PM验收', 'PM走查', 'UI&UX验收'] },
+  { label: 'AB Testing',    nodes: ['AB实验'] },
+  { label: 'Done',          nodes: ['结束'] },
 ];
 
-const NODE_TRANSLATIONS: Record<string, string> = {
-  '产品需求准备':  'Requirements Prep',
-  '产品线内初评':  'Initial Review',
-  '技术评估&排优': 'Tech Assessment',
-  '需求详评':     'Detailed Review',
-  '需求评审':     'Requirements Review',
-  '技术方案设计':  'Technical Design',
-  'iOS 开发':     'iOS Development',
-  'UI&UX验收':    'UI/UX Acceptance',
-  'Server上线':   'Server Launch',
-  'AB实验':       'AB Testing',
-  '结束':         'Done',
-  'PM验收':       'PM Acceptance',
-  'PM走查':       'PM Walkthrough',
-  '依赖判断':     'Dependency Check',
-  '合规评估':     'Compliance Review',
-};
+// Build a lookup: Chinese node name → { label, priority }
+const NODE_TO_STATUS = new Map<string, { label: string; priority: number }>();
+for (let i = 0; i < STATUS_GROUPS.length; i++) {
+  for (const node of STATUS_GROUPS[i].nodes) {
+    NODE_TO_STATUS.set(node, { label: STATUS_GROUPS[i].label, priority: i });
+  }
+}
+
+// Legacy translation map kept for any code that calls translateNode() directly.
+const NODE_TRANSLATIONS: Record<string, string> = {};
+for (const group of STATUS_GROUPS) {
+  for (const node of group.nodes) {
+    NODE_TRANSLATIONS[node] = group.label;
+  }
+}
+// Extra translations for nodes not in STATUS_GROUPS.
+NODE_TRANSLATIONS['依赖判断'] = 'Dependency Check';
+NODE_TRANSLATIONS['合规评估'] = 'Compliance Review';
 
 // P0–P3 option IDs in Meego
 const PRIORITY_TO_MEEGO: Record<Priority, string> = {
@@ -51,10 +54,12 @@ export function translateNode(node: string): string {
 
 function pickNode(nodes: Array<{ key: string; name: string }>): { key: string; name: string } | null {
   if (nodes.length === 0) return null;
+  // Pick the most advanced (highest priority index) active node.
+  // Nodes not in STATUS_GROUPS sort to -1 so any known stage wins.
   return nodes.slice().sort((a, b) => {
-    const ia = NODE_PRIORITY.indexOf(a.name);
-    const ib = NODE_PRIORITY.indexOf(b.name);
-    return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+    const ia = NODE_TO_STATUS.get(a.name)?.priority ?? -1;
+    const ib = NODE_TO_STATUS.get(b.name)?.priority ?? -1;
+    return ib - ia; // descending — highest priority first
   })[0];
 }
 
