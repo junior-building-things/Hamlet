@@ -1906,8 +1906,32 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // ── Libra field probe (TEMPORARY) ───────────────────────────────────────────
   try {
     const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839802029`;
-    const raw = await callMeegoMcp('list_deliverables', { url: probeUrl });
-    console.log(`[digests] Libra probe list_deliverables length=${raw.length}, sample: ${raw.slice(0, 2000)}`);
+
+    // 1) list_related_workitem — AB experiments might be linked work items
+    try {
+      const relRaw = await callMeegoMcp('list_related_workitem', { url: probeUrl });
+      console.log(`[digests] Libra probe list_related_workitem length=${relRaw.length}, sample: ${relRaw.slice(0, 2000)}`);
+    } catch (e) {
+      console.warn('[digests] Libra probe list_related_workitem failed:', e);
+    }
+
+    // 2) search_by_mql — query the AB experiment table by parent work item
+    try {
+      const mql1 = `SELECT * FROM \`TikTok\`.\`AB实验\` WHERE \`work_item_id\` = 6839802029`;
+      const mqlRaw1 = await callMeegoMcp('search_by_mql', { project_key: 'TikTok', mql: mql1 });
+      console.log(`[digests] Libra probe MQL AB实验 length=${mqlRaw1.length}, sample: ${mqlRaw1.slice(0, 2000)}`);
+    } catch (e) {
+      console.warn('[digests] Libra probe MQL AB实验 failed:', e);
+    }
+
+    // 3) Try a different MQL — query by parent_id or related fields
+    try {
+      const mql2 = `SELECT * FROM \`TikTok\`.\`效果分析\` WHERE \`work_item_id\` = 6839802029`;
+      const mqlRaw2 = await callMeegoMcp('search_by_mql', { project_key: 'TikTok', mql: mql2 });
+      console.log(`[digests] Libra probe MQL 效果分析 length=${mqlRaw2.length}, sample: ${mqlRaw2.slice(0, 2000)}`);
+    } catch (e) {
+      console.warn('[digests] Libra probe MQL 效果分析 failed:', e);
+    }
   } catch (e) {
     console.warn('[digests] Libra probe failed:', e);
   }
