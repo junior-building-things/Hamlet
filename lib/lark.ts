@@ -416,8 +416,8 @@ export async function refreshUserToken(refreshToken: string): Promise<{ accessTo
  * combined with the feature name (or key words from it).
  * Returns the URL of the best match, or '' if nothing found.
  */
-const LIBRA_URL_RE = /https?:\/\/libra[^\s"')]*\/flight\/\d+[^\s"')"]*/i;
-const LIBRA_PEER_REVIEW_RE = /https?:\/\/libra[^\s"')]*\/peer-review\/(\d+)[^\s"')"]*/i;
+const LIBRA_URL_RE = /https?:\/\/libra[^\s"')<>]*\/flight\/\d+[^\s"')<>]*/i;
+const LIBRA_PEER_REVIEW_RE = /https?:\/\/libra[^\s"')<>]*\/peer-review\/(\d+)[^\s"')<>]*/i;
 
 /**
  * Normalize a Libra URL: peer-review URLs are reformatted to the canonical
@@ -435,14 +435,22 @@ function normalizeLibraUrl(raw: string): string {
 }
 
 /**
+ * Clean up a matched URL by stripping trailing HTML-encoded tags (%3C, %3E)
+ * and other junk that the regex might have captured from rich-text content.
+ */
+function cleanLibraUrl(url: string): string {
+  return url.replace(/%3[CEce].*/i, '').replace(/[<>].*/, '');
+}
+
+/**
  * Try to extract a Libra URL from a string. Checks both /flight/ and
- * /peer-review/ patterns. Returns the normalized URL or empty string.
+ * /peer-review/ patterns. Returns the normalized + cleaned URL or empty string.
  */
 function extractLibraUrl(text: string): string {
   const flightMatch = text.match(LIBRA_URL_RE);
-  if (flightMatch) return flightMatch[0];
+  if (flightMatch) return cleanLibraUrl(flightMatch[0]);
   const prMatch = text.match(LIBRA_PEER_REVIEW_RE);
-  if (prMatch) return normalizeLibraUrl(prMatch[0]);
+  if (prMatch) return normalizeLibraUrl(cleanLibraUrl(prMatch[0]));
   return '';
 }
 
@@ -605,7 +613,7 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
     start_time: String(startTime),
     end_time: String(endTime),
     sort_type: 'ByCreateTimeDesc',
-    page_size: '50',
+    page_size: '200',
   });
   const res = await fetch(
     `${LARK_BASE_URL}/open-apis/im/v1/messages?${params}`,
