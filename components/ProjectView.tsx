@@ -126,11 +126,12 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     if (withUrl.length === 0) return;
     setDetailSyncTotal(withUrl.length);
     setDetailSyncCount(0);
+    // Mark ALL features as syncing upfront so every card shows the spinner
+    // immediately, even before its batch starts.
+    setSyncingIds(new Set(withUrl.map(f => f.id)));
     const BATCH = 2; // Keep low to avoid Lark API rate limits during AB doc reads
     for (let i = 0; i < withUrl.length; i += BATCH) {
       const batch = withUrl.slice(i, i + BATCH);
-      // Mark the batch as syncing before starting.
-      setSyncingIds(prev => { const next = new Set(prev); batch.forEach(f => next.add(f.id)); return next; });
       await Promise.all(batch.map(async (f) => {
         try {
           const res  = await fetch('/api/meego/sync', {
