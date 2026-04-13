@@ -9,7 +9,7 @@ const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 // labels. When multiple nodes are active, the LATEST (most advanced) stage
 // wins. Higher index = more advanced.
 const STATUS_GROUPS: Array<{ label: string; nodes: string[] }> = [
-  { label: 'PRD Prep',      nodes: ['产品需求准备'] },
+  { label: 'PRD/Design Prep', nodes: ['产品需求准备'] },
   { label: 'Line Review',   nodes: ['产品线内初评'] },
   { label: 'RD Allocation', nodes: ['技术评估&排优'] },
   { label: 'PRD Walkthrough', nodes: ['需求详评', '需求评审'] },
