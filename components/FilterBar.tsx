@@ -1,7 +1,7 @@
 'use client';
 import { Priority } from '@/lib/types';
 import { Search, LayoutGrid, List, Plus, Layers, ArrowUpDown, ArrowUp, ArrowDown, CircleDot, Tag } from 'lucide-react';
-import { CustomSelect } from './AvatarSelect';
+import { CustomSelect, MultiSelect } from './AvatarSelect';
 
 export type GroupBy  = 'none' | 'priority' | 'status' | 'businessLine' | 'socialComponent';
 export type SortBy   = 'none' | 'priority' | 'status' | 'lastUpdated';
@@ -9,13 +9,13 @@ export type SortDir  = 'asc' | 'desc';
 
 interface Props {
   search: string;
-  statusFilter: string;
+  statusFilter: string[];
   statuses: string[];
-  priorityFilter: Priority | 'All';
+  priorityFilter: string[];
   view: 'grid' | 'list';
   onSearchChange: (v: string) => void;
-  onStatusChange: (v: string) => void;
-  onPriorityChange: (v: Priority | 'All') => void;
+  onStatusChange: (v: string[]) => void;
+  onPriorityChange: (v: string[]) => void;
   onViewChange: (v: 'grid' | 'list') => void;
   onAddFeature: () => void;
   hideAddButton?: boolean;
@@ -50,25 +50,23 @@ export function FilterBar({
         />
       </div>
 
-      {/* Status filter */}
-      <CustomSelect
+      {/* Status filter (multi-select) */}
+      <MultiSelect
         icon={<CircleDot className="w-4 h-4" />}
         options={statuses.map(s => ({ value: s, label: s }))}
-        value={statusFilter === 'All' ? '' : statusFilter}
-        onChange={v => onStatusChange(v || 'All')}
+        value={statusFilter}
+        onChange={onStatusChange}
         placeholder="Status"
-        allowDeselect
         className={selectCls}
       />
 
-      {/* Priority filter */}
-      <CustomSelect
+      {/* Priority filter (multi-select) */}
+      <MultiSelect
         icon={<Tag className="w-4 h-4" />}
         options={priorities.map(p => ({ value: p, label: p }))}
-        value={priorityFilter === 'All' ? '' : priorityFilter}
-        onChange={v => onPriorityChange((v || 'All') as Priority | 'All')}
+        value={priorityFilter}
+        onChange={onPriorityChange}
         placeholder="Priority"
-        allowDeselect
         className={selectCls}
       />
 

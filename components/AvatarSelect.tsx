@@ -165,3 +165,61 @@ export function CustomSelect({ options, value, onChange, placeholder, allowDesel
     </div>
   );
 }
+
+// ─── MultiSelect — multi-selectable variant ─────────────────────────────────
+
+interface MultiSelectProps {
+  options: SelectOption[];
+  value: string[];
+  onChange: (value: string[]) => void;
+  placeholder?: string;
+  icon?: React.ReactNode;
+  className?: string;
+}
+
+export function MultiSelect({ options, value, onChange, placeholder, icon, className = 'w-full' }: MultiSelectProps) {
+  const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
+  const selected = new Set(value);
+
+  let label: string;
+  if (selected.size === 0) {
+    label = '';
+  } else if (selected.size === 1) {
+    label = options.find(o => selected.has(o.value))?.label ?? '';
+  } else {
+    label = `${selected.size} Selected`;
+  }
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button type="button" onClick={() => open ? setOpen(false) : openDropdown()} className={triggerCls}>
+        {icon && <span className="text-gray-500 flex-shrink-0 flex items-center">{icon}</span>}
+        <span className={`flex-1 text-left whitespace-nowrap ${!label && placeholder ? 'text-gray-500' : ''}`}>
+          {label || placeholder || '—'}
+        </span>
+        <ChevronDown className="w-3.5 h-3.5 text-gray-500 flex-shrink-0 ml-auto" />
+      </button>
+
+      {open && (
+        <div className={listDownCls} style={{ maxHeight }}>
+          {options.map(opt => (
+            <div key={opt.value}
+              className={`${itemBaseCls} ${selected.has(opt.value) ? 'bg-[#1e2240]' : ''}`}
+              onClick={() => {
+                const next = new Set(selected);
+                if (next.has(opt.value)) {
+                  next.delete(opt.value);
+                } else {
+                  next.add(opt.value);
+                }
+                onChange([...next]);
+              }}>
+              <span className="text-sm text-white flex-1">{opt.label}</span>
+              {selected.has(opt.value) && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

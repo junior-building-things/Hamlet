@@ -84,8 +84,8 @@ interface Props {
 export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Props) {
   const [view,           setView]           = useState<'grid' | 'list'>('list');
   const [search,         setSearch]         = useState('');
-  const [statusFilter,   setStatusFilter]   = useState<string>('All');
-  const [priorityFilter, setPriority]       = useState<Priority | 'All'>('All');
+  const [statusFilter,   setStatusFilter]   = useState<string[]>([]);
+  const [priorityFilter, setPriority]       = useState<string[]>([]);
   const [loading,        setLoading]        = useState(features.length === 0);
   const [fetchError,     setFetchError]     = useState<string | null>(null);
   const [syncingAll,     setSyncingAll]     = useState(false);
@@ -379,22 +379,18 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   );
 
   const filtered = useMemo(() => {
-    const result = features.filter(f => {
+    const statusSet   = new Set(statusFilter);
+    const prioritySet = new Set(priorityFilter);
+    return features.filter(f => {
       // Hide features with Unknown status (deleted/completed on Meego)
       if (f.status === 'Unknown') return false;
       const q = search.toLowerCase();
       return (
         (!q || f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q) || f.owner.toLowerCase().includes(q)) &&
-        (statusFilter   === 'All' || f.status   === statusFilter) &&
-        (priorityFilter === 'All' || f.priority === priorityFilter)
+        (statusSet.size   === 0 || statusSet.has(f.status ?? '')) &&
+        (prioritySet.size === 0 || prioritySet.has(f.priority ?? ''))
       );
     });
-    if (priorityFilter !== 'All' && result.some(f => f.priority !== priorityFilter)) {
-      console.warn('[ProjectView] Filter bug detected: filtered array contains wrong priority', {
-        priorityFilter, features: result.map(f => ({ id: f.id, name: f.name, priority: f.priority }))
-      });
-    }
-    return result;
   }, [features, search, statusFilter, priorityFilter]);
 
   // ── Sort ───────────────────────────────────────────────────────────────────
@@ -587,7 +583,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-2 text-gray-500">
             <p className="text-sm">No features match your filters.</p>
-            <button onClick={() => { setSearch(''); setStatusFilter('All'); setPriority('All'); }}
+            <button onClick={() => { setSearch(''); setStatusFilter([]); setPriority([]); }}
               className="text-xs text-blue-400 hover:text-blue-300 underline">Clear filters</button>
           </div>
         ) : view === 'grid' ? (
