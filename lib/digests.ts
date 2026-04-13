@@ -1906,15 +1906,8 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // ── Libra field probe (TEMPORARY) ───────────────────────────────────────────
   try {
     const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839802029`;
-    const raw = await callMeegoMcp('get_workitem_brief', {
-      url: probeUrl,
-      fields: ['effect_analyze_link_t', 'effect_analyze_link_d', 'effect_analyze_link_m'],
-    });
-    const briefJson = JSON.parse(raw) as BriefJson;
-    const fields = (briefJson.work_item_fields ?? []).map(
-      (f: BriefField) => `${f.key}=${f.name}: ${JSON.stringify(f.value).slice(0, 150)}`,
-    );
-    console.log(`[digests] Libra probe: ${fields.join('; ') || '(empty)'}`);
+    const raw = await callMeegoMcp('list_deliverables', { url: probeUrl });
+    console.log(`[digests] Libra probe list_deliverables length=${raw.length}, sample: ${raw.slice(0, 2000)}`);
   } catch (e) {
     console.warn('[digests] Libra probe failed:', e);
   }
