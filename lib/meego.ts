@@ -53,32 +53,15 @@ export function translateNode(node: string): string {
 }
 
 /**
- * Resolve the display status for the projects page. The overall work item
- * status (from work_item_attribute.work_item_status) takes precedence over
- * active nodes — it represents the true lifecycle state even when leftover
- * nodes are still technically open.
- *
- * Falls back to the most-advanced active node when the overall status
- * doesn't map to a known label.
+ * Resolve the display status for the projects page. Uses the overall work
+ * item status name directly from Meego — no translation or node-priority
+ * logic. The overall status is the source of truth for a feature's
+ * lifecycle state.
  */
 function resolveDisplayStatus(
-  overallStatusKey: string,
   overallStatusName: string,
-  bestNodeName: string | undefined,
 ): string {
-  // Overall status overrides — these take priority over active nodes.
-  if (overallStatusKey === 'end') return 'Done';
-  // AB experiment: the overall status key varies across templates but the
-  // Chinese name consistently contains '实验' (experiment).
-  if (/experiment|实验/i.test(overallStatusKey) || /experiment|实验/i.test(overallStatusName)) {
-    return 'AB Testing';
-  }
-
-  // Fall back to the most-advanced active node.
-  if (bestNodeName) {
-    return translateNode(bestNodeName);
-  }
-  return 'Unknown';
+  return overallStatusName || 'Unknown';
 }
 
 function pickNode(nodes: Array<{ key: string; name: string }>): { key: string; name: string } | null {
@@ -686,7 +669,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   }
 
   return {
-    status:      resolveDisplayStatus(overallStatusKey, overallStatusName, best?.name),
+    status:      resolveDisplayStatus(overallStatusName),
     name:        workItemName,
     lastUpdated: parseUpdateTime(raw),
     owner,
