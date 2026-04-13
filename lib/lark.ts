@@ -605,42 +605,50 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
 
   // Include a time window (last 30 days) — without start_time/end_time the
   // API may return stale messages instead of the most recent ones.
+  // Paginate up to 4 pages (200 messages) to catch thread replies and older
+  // messages. Sort newest-first so the most recent Libra link wins.
   const endTime = Math.floor(Date.now() / 1000);
   const startTime = endTime - 30 * 24 * 60 * 60; // 30 days ago
-  const params = new URLSearchParams({
-    container_id_type: 'chat',
-    container_id: chatId,
-    start_time: String(startTime),
-    end_time: String(endTime),
-    sort_type: 'ByCreateTimeDesc',
-    page_size: '200',
-  });
-  const res = await fetch(
-    `${LARK_BASE_URL}/open-apis/im/v1/messages?${params}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  const data = await parseJson(res, 'chat_messages_libra') as {
-    code: number; msg?: string;
-    data?: { items?: Array<{ msg_type: string; body?: { content?: string } }> };
-  };
-  if (data.code !== 0) {
-    console.warn(`[libra chat] message fetch failed for ${chatId}: code=${data.code} msg=${data.msg}`);
-    return '';
-  }
+  let pageToken = '';
 
-  // Messages are newest-first — return the first Libra link found.
-  // Search both the raw content string AND a flattened version (for post/
-  // rich-text messages where the URL is nested inside JSON elements).
-  const items = data.data?.items ?? [];
-  console.warn(`[libra chat] ${chatId}: ${items.length} messages fetched`);
-  for (const msg of items) {
-    const content = msg.body?.content ?? '';
-    const flat = typeof content === 'string' ? content : JSON.stringify(content);
-    if (flat.toLowerCase().includes('libra')) {
-      console.warn(`[libra chat] potential match in msg type=${msg.msg_type}: ${flat.slice(0, 300)}`);
+  for (let page = 0; page < 4; page++) {
+    const params = new URLSearchParams({
+      container_id_type: 'chat',
+      container_id: chatId,
+      start_time: String(startTime),
+      end_time: String(endTime),
+      sort_type: 'ByCreateTimeDesc',
+      page_size: '50',
+    });
+    if (pageToken) params.set('page_token', pageToken);
+
+    const res = await fetch(
+      `${LARK_BASE_URL}/open-apis/im/v1/messages?${params}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const data = await parseJson(res, 'chat_messages_libra') as {
+      code: number; msg?: string;
+      data?: {
+        items?: Array<{ msg_type: string; body?: { content?: string } }>;
+        has_more?: boolean;
+        page_token?: string;
+      };
+    };
+    if (data.code !== 0) {
+      console.warn(`[libra chat] message fetch failed for ${chatId}: code=${data.code} msg=${data.msg}`);
+      return '';
     }
-    const found = extractLibraUrl(flat);
-    if (found) return found;
+
+    const items = data.data?.items ?? [];
+    for (const msg of items) {
+      const content = msg.body?.content ?? '';
+      const flat = typeof content === 'string' ? content : JSON.stringify(content);
+      const found = extractLibraUrl(flat);
+      if (found) return found;
+    }
+
+    if (!data.data?.has_more || !data.data?.page_token) break;
+    pageToken = data.data.page_token;
   }
   return '';
 }
