@@ -424,7 +424,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
-    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'created_at', 'field_0cec98', 'field_6909f6'],
+    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'created_at', 'field_0cec98', 'field_6909f6', 'effect_analyze_link_t'],
   });
 
   const lines = raw.split('\n');
@@ -611,14 +611,25 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     } catch { /* ignore — Figma link is optional */ }
   }
 
-  // Search for AB report on Lark Drive (best-effort) — also extracts Libra URL
+  // Libra URL: prioritize the Meego 实验链接 field (effect_analyze_link_t)
+  // before falling back to the AB report content scan or chat history.
+  let libraUrl = parseWorkItemField(raw, 'TikTok-T 实验链接');
+  if (!libraUrl) {
+    // Try parsing from JSON brief (the field might be in work_item_fields)
+    try {
+      const briefJson = JSON.parse(raw) as { work_item_fields?: Array<{ key?: string; value?: unknown }> };
+      const linkField = (briefJson.work_item_fields ?? []).find(f => f.key === 'effect_analyze_link_t');
+      if (linkField && typeof linkField.value === 'string') libraUrl = linkField.value;
+    } catch { /* not JSON, already tried markdown parse above */ }
+  }
+
+  // Search for AB report on Lark Drive (best-effort) — also extracts Libra URL as fallback
   let abReportUrl = '';
-  let libraUrl = '';
   if (workItemName) {
     try {
       const abResult = await searchAbReport(workItemName, userAccessToken, prd);
       abReportUrl = abResult.abReportUrl;
-      libraUrl = abResult.libraUrl;
+      if (!libraUrl) libraUrl = abResult.libraUrl;
     } catch (e) {
       console.warn('[sync] AB report search error:', e);
     }
