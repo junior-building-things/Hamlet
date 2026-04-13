@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncFeatureStatus } from '@/lib/meego';
-import { batchFetchAvatars, refreshUserToken } from '@/lib/lark';
+import { batchFetchAvatars, refreshUserToken, searchLibraInChat, getLarkBotToken } from '@/lib/lark';
 import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
 import { cookies } from 'next/headers';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
@@ -105,6 +105,32 @@ export async function POST(req: NextRequest) {
         const larkAvatars = await batchFetchAvatars(missingEmails, userToken);
         Object.assign(pocAvatars, larkAvatars);
       } catch { /* ignore */ }
+    }
+
+    // Fallback: if syncFeatureStatus didn't find a chat (Lark search miss),
+    // look it up from the digest pipeline's Junior chat cache (GCS). The
+    // cache matches by Meego ID in the chat description, which is more
+    // reliable than name-based search.
+    if (!result.chatId || !result.libraUrl) {
+      try {
+        const meegoId = meegoUrl.match(/\/detail\/(\d+)/)?.[1] ?? '';
+        if (meegoId) {
+          const state = await loadDigestState();
+          const cached = (state.juniorChatsCache?.chats ?? []).find(c => c.meegoId === meegoId);
+          if (cached) {
+            if (!result.chatId) result.chatId = cached.chatId;
+            if (!result.libraUrl) {
+              const botToken = await getLarkBotToken();
+              result.libraUrl = await searchLibraInChat(cached.chatId) || '';
+              if (result.libraUrl) {
+                console.warn(`[sync] "${result.name}": libra found via GCS chat cache fallback: ${result.libraUrl.slice(0, 80)}`);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[sync] GCS chat cache fallback failed:', e);
+      }
     }
 
     console.warn(`[sync] result for "${result.name}": status=${result.status}, libra=${result.libraUrl || '(empty)'}, abReport=${result.abReportUrl ? 'found' : 'empty'}, chatId=${result.chatId || '(none)'}`);
