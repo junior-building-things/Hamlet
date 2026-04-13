@@ -12,7 +12,7 @@ const STATUS_GROUPS: Array<{ label: string; nodes: string[] }> = [
   { label: 'PRD Prep',      nodes: ['产品需求准备'] },
   { label: 'Line Review',   nodes: ['产品线内初评'] },
   { label: 'RD Allocation', nodes: ['技术评估&排优'] },
-  { label: 'PRD Review',    nodes: ['需求详评', '需求评审'] },
+  { label: 'PRD Walkthrough', nodes: ['需求详评', '需求评审'] },
   { label: 'Tech Design',   nodes: ['技术方案设计'] },
   { label: 'Development',   nodes: ['iOS 开发', 'Android 开发', 'Server 开发', 'Server上线'] },
   { label: 'QA',            nodes: ['QA测试准备', 'QA测试', 'QA功能测试'] },
