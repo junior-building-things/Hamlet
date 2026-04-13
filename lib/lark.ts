@@ -604,8 +604,7 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
     data?: { items?: Array<{ msg_type: string; body?: { content?: string } }> };
   };
   if (data.code !== 0) {
-    // 230002 = bot not in chat — expected for older features, don't log
-    if (data.code !== 230002) console.warn('[libra chat] message fetch failed:', data.code, data.msg);
+    console.warn(`[libra chat] message fetch failed for ${chatId}: code=${data.code} msg=${data.msg}`);
     return '';
   }
 
@@ -613,10 +612,13 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
   // Search both the raw content string AND a flattened version (for post/
   // rich-text messages where the URL is nested inside JSON elements).
   const items = data.data?.items ?? [];
+  console.warn(`[libra chat] ${chatId}: ${items.length} messages fetched`);
   for (const msg of items) {
     const content = msg.body?.content ?? '';
-    // Flatten: stringify the entire content so nested URLs are findable.
     const flat = typeof content === 'string' ? content : JSON.stringify(content);
+    if (flat.toLowerCase().includes('libra')) {
+      console.warn(`[libra chat] potential match in msg type=${msg.msg_type}: ${flat.slice(0, 300)}`);
+    }
     const found = extractLibraUrl(flat);
     if (found) return found;
   }
