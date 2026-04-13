@@ -121,9 +121,16 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   // ── Detail sync ────────────────────────────────────────────────────────────
 
-  const syncAllDetails = useCallback(async (list: Feature[]) => {
+  const syncAllDetails = useCallback(async (list: Feature[], visibleIds?: Set<string>) => {
     const withUrl = list.filter(f => f.meegoUrl);
     if (withUrl.length === 0) return;
+    // Prioritize visible features (currently on screen) first, then the rest.
+    if (visibleIds && visibleIds.size > 0) {
+      const visible = withUrl.filter(f => visibleIds.has(f.id));
+      const rest = withUrl.filter(f => !visibleIds.has(f.id));
+      withUrl.length = 0;
+      withUrl.push(...visible, ...rest);
+    }
     setDetailSyncTotal(withUrl.length);
     setDetailSyncCount(0);
     // Mark ALL features as syncing upfront so every card shows the spinner
@@ -356,7 +363,9 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     const list = await fetchFromMeego();
     setSyncingAll(false);
     if (list) {
-      syncAllDetails(list);
+      // Pass the currently visible feature IDs so they sync first.
+      const visibleIds = new Set(sorted.map(f => f.id));
+      syncAllDetails(list, visibleIds);
       if (typeof window !== 'undefined') localStorage.setItem('hamlet_last_sync', String(Date.now()));
     }
   }
