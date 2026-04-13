@@ -198,10 +198,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   // ── Fetch from Meego ───────────────────────────────────────────────────────
 
-  const fetchFromMeego = useCallback(async (): Promise<Feature[] | null> => {
+  const fetchFromMeego = useCallback(async (force = false): Promise<Feature[] | null> => {
     setFetchError(null);
     try {
-      const res  = await fetch('/api/meego/features');
+      const res  = await fetch(`/api/meego/features${force ? '?force=1' : ''}`);
       const data = await res.json() as { features?: Feature[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       if (data.features && data.features.length > 0) {
@@ -262,40 +262,38 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   useEffect(() => {
     async function init() {
+      // Try loading from server-side GCS cache first (instant, no Meego call).
       let list: Feature[] | null = null;
-      const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as Feature[];
-          if (parsed.length > 0) { list = parsed; setFeatures(parsed); }
-        } catch { /* fall through */ }
+      let cacheAge = Infinity;
+      try {
+        const cacheRes = await fetch('/api/features/cache');
+        if (cacheRes.ok) {
+          const cacheData = await cacheRes.json() as { features?: Feature[]; updatedAt?: string };
+          if (cacheData.features && cacheData.features.length > 0) {
+            list = cacheData.features;
+            setFeatures(list);
+            cacheAge = cacheData.updatedAt ? Date.now() - Date.parse(cacheData.updatedAt) : Infinity;
+          }
+        }
+      } catch { /* fall through to live fetch */ }
+
+      // If no cache or cache is stale, fetch live from Meego.
+      if (!list) {
+        list = await fetchFromMeego();
       }
-      if (!list) list = await fetchFromMeego();
+
       setLoading(false);
-      if (list) {
+
+      // Sync details if we have features and cache is stale or missing.
+      if (list && cacheAge >= SYNC_COOLDOWN_MS) {
         syncAllDetails(list);
-        if (typeof window !== 'undefined') localStorage.setItem('hamlet_last_sync', String(Date.now()));
       }
     }
-    const lastSync = typeof window !== 'undefined' ? Number(localStorage.getItem('hamlet_last_sync') || '0') : 0;
-    const elapsed = Date.now() - lastSync;
 
     if (features.length === 0) init();
-    else if (elapsed >= SYNC_COOLDOWN_MS) {
-      setLoading(false);
-      syncAllDetails(features);
-      if (typeof window !== 'undefined') localStorage.setItem('hamlet_last_sync', String(Date.now()));
-    } else {
-      setLoading(false);
-    }
+    else setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (features.length > 0) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(features)); } catch { /* ignore */ }
-    }
-  }, [features]);
 
   // ── Periodic auto-sync every 2 hours ──────────────────────────────────────
   useEffect(() => {
@@ -360,13 +358,12 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   async function syncAll() {
     onClearPin?.();
     setSyncingAll(true);
-    const list = await fetchFromMeego();
+    const list = await fetchFromMeego(true); // force=true bypasses GCS cache
     setSyncingAll(false);
     if (list) {
       // Pass the currently visible feature IDs so they sync first.
       const visibleIds = new Set(sorted.map(f => f.id));
       syncAllDetails(list, visibleIds);
-      if (typeof window !== 'undefined') localStorage.setItem('hamlet_last_sync', String(Date.now()));
     }
   }
 

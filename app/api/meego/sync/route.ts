@@ -4,6 +4,7 @@ import { batchFetchAvatars, refreshUserToken, searchLibraInChat, getLarkBotToken
 import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
 import { cookies } from 'next/headers';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
+import { updateFeatureInCache } from '@/lib/feature-cache';
 
 // Cache refreshed tokens in memory to avoid refreshing on every sync call
 let cachedUserToken = '';
@@ -134,6 +135,32 @@ export async function POST(req: NextRequest) {
     }
 
     console.warn(`[sync] result for "${result.name}": status=${result.status}, libra=${result.libraUrl || '(empty)'}, abReport=${result.abReportUrl ? 'found' : 'empty'}, chatId=${result.chatId || '(none)'}`);
+
+    // Write the synced feature back to the GCS cache (best-effort, don't block response).
+    const meegoId = meegoUrl.match(/\/detail\/(\d+)/)?.[1] ?? '';
+    if (meegoId) {
+      updateFeatureInCache(meegoId, {
+        status: result.status,
+        name: result.name,
+        owner: result.owner,
+        prd: result.prd,
+        figmaUrl: result.figmaUrl,
+        complianceUrl: result.complianceUrl,
+        priority: result.priority ?? undefined,
+        iosVersion: result.iosVersion,
+        abReportUrl: result.abReportUrl,
+        libraUrl: result.libraUrl,
+        chatId: result.chatId,
+        pmOwner: result.pmOwner,
+        techOwner: result.techOwner,
+        iosOwner: result.iosOwner,
+        androidOwner: result.androidOwner,
+        serverOwner: result.serverOwner,
+        qaOwner: result.qaOwner,
+        avatars: pocAvatars,
+      }).catch(e => console.warn('[sync] cache update failed:', e));
+    }
+
     return NextResponse.json({ ...result, pocAvatars });
   } catch (err) {
     console.error('Meego sync error:', err);
