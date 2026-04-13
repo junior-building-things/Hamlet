@@ -426,6 +426,18 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   const priorityRaw = parseWorkItemField(raw, '优先级');
   const priority: Priority | null = /^P[0-3]$/.test(priorityRaw) ? priorityRaw as Priority : null;
 
+  // Check the overall work item status first. If the feature is completed
+  // at the work-item level, show "Done" regardless of which nodes are still
+  // technically active (Meego doesn't always close all nodes when a feature
+  // is marked completed).
+  let overallStatusKey = '';
+  try {
+    const briefJson = JSON.parse(raw) as { work_item_attribute?: { work_item_status?: { key?: string } } };
+    overallStatusKey = briefJson.work_item_attribute?.work_item_status?.key ?? '';
+  } catch {
+    // Brief might be markdown, not JSON — fall through to node-based status.
+  }
+
   const activeNodes = parseActiveNodes(raw);
   const best = pickNode(activeNodes.map(n => ({ key: n.key, name: n.name })));
   const bestWithOwners = activeNodes.find(n => n.key === best?.key);
@@ -638,7 +650,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   }
 
   return {
-    status:      best ? translateNode(best.name) : 'Unknown',
+    status:      overallStatusKey === 'end' ? 'Done' : (best ? translateNode(best.name) : 'Unknown'),
     name:        workItemName,
     lastUpdated: parseUpdateTime(raw),
     owner,
