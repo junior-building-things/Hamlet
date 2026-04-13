@@ -89,7 +89,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   const [loading,        setLoading]        = useState(features.length === 0);
   const [fetchError,     setFetchError]     = useState<string | null>(null);
   const [syncingAll,     setSyncingAll]     = useState(false);
-  const [syncingId,      setSyncingId]      = useState<string | null>(null);
+  const [syncingIds,     setSyncingIds]      = useState<Set<string>>(new Set());
   const [detailSyncCount, setDetailSyncCount] = useState(0);
   const [detailSyncTotal, setDetailSyncTotal] = useState(0);
   const [modalMode,      setModalMode]      = useState<'edit' | null>(null);
@@ -128,7 +128,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     setDetailSyncCount(0);
     const BATCH = 2; // Keep low to avoid Lark API rate limits during AB doc reads
     for (let i = 0; i < withUrl.length; i += BATCH) {
-      await Promise.all(withUrl.slice(i, i + BATCH).map(async (f) => {
+      const batch = withUrl.slice(i, i + BATCH);
+      // Mark the batch as syncing before starting.
+      setSyncingIds(prev => { const next = new Set(prev); batch.forEach(f => next.add(f.id)); return next; });
+      await Promise.all(batch.map(async (f) => {
         try {
           const res  = await fetch('/api/meego/sync', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -177,6 +180,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
           }));
         } catch { /* ignore per-card errors */ }
+        setSyncingIds(prev => { const next = new Set(prev); next.delete(f.id); return next; });
         setDetailSyncCount(c => c + 1);
       }));
     }
@@ -296,7 +300,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   const syncOne = useCallback(async (feature: Feature) => {
     if (!feature.meegoUrl) return;
-    setSyncingId(feature.id);
+    setSyncingIds(prev => new Set(prev).add(feature.id));
     try {
       const res  = await fetch('/api/meego/sync', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -342,7 +346,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
       }));
     } catch { /* ignore */ }
-    finally { setSyncingId(null); }
+    finally { setSyncingIds(prev => { const next = new Set(prev); next.delete(feature.id); return next; }); }
   }, [setFeatures]);
 
   async function syncAll() {
@@ -528,7 +532,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   function renderListRows(items: Feature[]) {
     return items.map(f => (
-      <FeatureListItem key={f.id} feature={f} syncing={syncingId === f.id}
+      <FeatureListItem key={f.id} feature={f} syncing={syncingIds.has(f.id)}
         onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne}
         completing={completingId === f.id} onComplete={handleComplete}
         pinned={f.id === pinnedId} onToggleAgent={handleToggleAgent} />
@@ -589,7 +593,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         ) : view === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {sorted.map(f => (
-              <FeatureCard key={f.id} feature={f} syncing={syncingId === f.id}
+              <FeatureCard key={f.id} feature={f} syncing={syncingIds.has(f.id)}
                 onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne} />
             ))}
           </div>
