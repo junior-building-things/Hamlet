@@ -52,6 +52,35 @@ export function translateNode(node: string): string {
   return NODE_TRANSLATIONS[node] ?? node;
 }
 
+/**
+ * Resolve the display status for the projects page. The overall work item
+ * status (from work_item_attribute.work_item_status) takes precedence over
+ * active nodes — it represents the true lifecycle state even when leftover
+ * nodes are still technically open.
+ *
+ * Falls back to the most-advanced active node when the overall status
+ * doesn't map to a known label.
+ */
+function resolveDisplayStatus(
+  overallStatusKey: string,
+  overallStatusName: string,
+  bestNodeName: string | undefined,
+): string {
+  // Overall status overrides — these take priority over active nodes.
+  if (overallStatusKey === 'end') return 'Done';
+  // AB experiment: the overall status key varies across templates but the
+  // Chinese name consistently contains '实验' (experiment).
+  if (/experiment|实验/i.test(overallStatusKey) || /experiment|实验/i.test(overallStatusName)) {
+    return 'AB Testing';
+  }
+
+  // Fall back to the most-advanced active node.
+  if (bestNodeName) {
+    return translateNode(bestNodeName);
+  }
+  return 'Unknown';
+}
+
 function pickNode(nodes: Array<{ key: string; name: string }>): { key: string; name: string } | null {
   if (nodes.length === 0) return null;
   // Pick the most advanced (highest priority index) active node.
@@ -436,9 +465,11 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   // technically active (Meego doesn't always close all nodes when a feature
   // is marked completed).
   let overallStatusKey = '';
+  let overallStatusName = '';
   try {
-    const briefJson = JSON.parse(raw) as { work_item_attribute?: { work_item_status?: { key?: string } } };
+    const briefJson = JSON.parse(raw) as { work_item_attribute?: { work_item_status?: { key?: string; name?: string } } };
     overallStatusKey = briefJson.work_item_attribute?.work_item_status?.key ?? '';
+    overallStatusName = briefJson.work_item_attribute?.work_item_status?.name ?? '';
   } catch {
     // Brief might be markdown, not JSON — fall through to node-based status.
   }
@@ -655,7 +686,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   }
 
   return {
-    status:      overallStatusKey === 'end' ? 'Done' : (best ? translateNode(best.name) : 'Unknown'),
+    status:      resolveDisplayStatus(overallStatusKey, overallStatusName, best?.name),
     name:        workItemName,
     lastUpdated: parseUpdateTime(raw),
     owner,
