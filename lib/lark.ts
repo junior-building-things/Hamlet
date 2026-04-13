@@ -609,10 +609,15 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
     return '';
   }
 
-  // Messages are newest-first — return the first Libra link found
-  for (const msg of data.data?.items ?? []) {
+  // Messages are newest-first — return the first Libra link found.
+  // Search both the raw content string AND a flattened version (for post/
+  // rich-text messages where the URL is nested inside JSON elements).
+  const items = data.data?.items ?? [];
+  for (const msg of items) {
     const content = msg.body?.content ?? '';
-    const found = extractLibraUrl(content);
+    // Flatten: stringify the entire content so nested URLs are findable.
+    const flat = typeof content === 'string' ? content : JSON.stringify(content);
+    const found = extractLibraUrl(flat);
     if (found) return found;
   }
   return '';
