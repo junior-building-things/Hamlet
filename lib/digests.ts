@@ -1904,31 +1904,33 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
 
   // ── Libra field probe (TEMPORARY) ───────────────────────────────────────────
+  // The AB List uses "Libra 实验" work items (type: libra_new). Try MQL to
+  // query them by parent story, and also try get_workitem_brief with all
+  // effect_analyze fields to see which ones are populated.
   try {
-    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839802029`;
-
-    // 1) list_workitem_types — discover what types exist (story, AB experiment, etc.)
+    // 1) MQL: query Libra experiments linked to the story
     try {
-      const typesRaw = await callMeegoMcp('list_workitem_types', { project_key: TIKTOK_PROJECT_KEY });
-      console.log(`[digests] Libra probe types: ${typesRaw.slice(0, 2000)}`);
+      const mql = "SELECT `work_item_id`, `name` FROM `TikTok`.`Libra 实验` WHERE `__parent_id` = 6839802029";
+      const raw = await callMeegoMcp('search_by_mql', { project_key: 'TikTok', mql });
+      console.log(`[digests] Libra probe MQL: ${raw.slice(0, 2000)}`);
     } catch (e) {
-      console.warn('[digests] Libra probe list_workitem_types failed:', e);
+      console.warn('[digests] Libra probe MQL failed:', e);
     }
 
-    // 2) list_workitem_relations — discover relation types for this feature
+    // 2) Fetch the brief with ALL effect_analyze fields
     try {
-      const relRaw = await callMeegoMcp('list_workitem_relations', { url: probeUrl });
-      console.log(`[digests] Libra probe relations: ${relRaw.slice(0, 2000)}`);
+      const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839802029`;
+      const raw = await callMeegoMcp('get_workitem_brief', {
+        url: probeUrl,
+        fields: ['effect_analyze', 'effect_analyze_link_t', 'effect_analyze_link_d', 'effect_analyze_link_m', 'effect_analyze_name', 'effect_analyze_report_t', 'effect_analyze_status_t'],
+      });
+      const briefJson = JSON.parse(raw) as BriefJson;
+      const fields = (briefJson.work_item_fields ?? []).map(
+        (f: BriefField) => `${f.key}=${f.name}: ${JSON.stringify(f.value).slice(0, 200)}`,
+      );
+      console.log(`[digests] Libra probe effect_analyze fields: ${fields.join('; ') || '(empty)'}`);
     } catch (e) {
-      console.warn('[digests] Libra probe list_workitem_relations failed:', e);
-    }
-
-    // 3) Try list_related_workitem with the feature URL (no relation_id, see what error says)
-    try {
-      const relatedRaw = await callMeegoMcp('list_related_workitem', { url: probeUrl, relation_id: '0' });
-      console.log(`[digests] Libra probe related(0): ${relatedRaw.slice(0, 2000)}`);
-    } catch (e) {
-      console.warn('[digests] Libra probe list_related_workitem failed:', e);
+      console.warn('[digests] Libra probe brief failed:', e);
     }
   } catch (e) {
     console.warn('[digests] Libra probe failed:', e);
