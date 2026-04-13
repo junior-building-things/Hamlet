@@ -427,27 +427,67 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'created_at', 'field_0cec98', 'field_6909f6', 'effect_analyze_link_t'],
   });
 
-  const lines = raw.split('\n');
+  // Try parsing the brief as JSON first (current MCP format), then fall back
+  // to markdown parsing (legacy format). The digest pipeline uses JSON
+  // exclusively; this function needs to support both during the transition.
   let workItemName = '';
   let owner = '';
+  let prd = '';
+  let complianceUrl = '';
+  let priorityRaw = '';
+  let libraUrl = '';
 
-  for (const line of lines) {
-    if (line.includes('工作项名称')) {
-      const match = line.match(/\|\s*工作项名称\s*\|\s*(.+?)\s*\|/);
-      if (match) workItemName = match[1].trim();
+  try {
+    const briefJson = JSON.parse(raw) as {
+      work_item_attribute?: {
+        work_item_name?: string;
+        work_item_status?: { key?: string; name?: string };
+        role_members?: Array<{ key?: string; name?: string; members?: Array<{ name?: string; email?: string }> }>;
+      };
+      work_item_fields?: Array<{ key?: string; name?: string; value?: unknown }>;
+    };
+    workItemName = briefJson.work_item_attribute?.work_item_name ?? '';
+    // Extract PM owner from role_members
+    const pmRole = briefJson.work_item_attribute?.role_members?.find(r => r.key === 'PM' || r.name === 'PM');
+    if (pmRole?.members?.[0]?.name) owner = pmRole.members[0].name;
+    // Extract fields from work_item_fields
+    const getField = (key: string): string => {
+      const f = briefJson.work_item_fields?.find(fi => fi.key === key);
+      if (!f || f.value === undefined || f.value === null) return '';
+      if (typeof f.value === 'string') return f.value;
+      if (typeof f.value === 'object' && 'value' in (f.value as Record<string, unknown>)) {
+        return String((f.value as Record<string, unknown>).value ?? '');
+      }
+      return String(f.value);
+    };
+    prd = getField('wiki');
+    complianceUrl = getField('field_due3fb');
+    priorityRaw = getField('priority');
+    // Try to get Libra URL from effect_analyze_link_t
+    const effectLink = getField('effect_analyze_link_t');
+    if (effectLink) libraUrl = effectLink;
+  } catch {
+    // Legacy markdown parsing
+    const lines = raw.split('\n');
+    for (const line of lines) {
+      if (line.includes('工作项名称')) {
+        const match = line.match(/\|\s*工作项名称\s*\|\s*(.+?)\s*\|/);
+        if (match) workItemName = match[1].trim();
+      }
+      if (line.includes('角色成员') && line.includes('PM')) {
+        const pmMatch = line.match(/"PM":"([^"]+)"/);
+        if (pmMatch) owner = pmMatch[1].split('(')[0].trim();
+      }
     }
-    if (line.includes('角色成员') && line.includes('PM')) {
-      const pmMatch = line.match(/"PM":"([^"]+)"/);
-      if (pmMatch) owner = pmMatch[1].split('(')[0].trim();
-    }
+    prd = parseWorkItemField(raw, 'PRD');
+    complianceUrl = parseWorkItemField(raw, '合规评估工单链接');
+    priorityRaw = parseWorkItemField(raw, '优先级');
   }
 
-  const prd = parseWorkItemField(raw, 'PRD');
-  const complianceUrl = parseWorkItemField(raw, '合规评估工单链接');
-
-  // Parse priority option name (P0–P3)
-  const priorityRaw = parseWorkItemField(raw, '优先级');
-  const priority: Priority | null = /^P[0-3]$/.test(priorityRaw) ? priorityRaw as Priority : null;
+  // Parse priority option name (P0–P3) — works for both JSON ('0') and markdown ('P0')
+  if (/^[0-3]$/.test(priorityRaw)) priorityRaw = `P${priorityRaw}`;
+  const priorityRawOriginal = priorityRaw;
+  const priority: Priority | null = /^P[0-3]$/.test(priorityRawOriginal) ? priorityRawOriginal as Priority : null;
 
   // Check the overall work item status first. If the feature is completed
   // at the work-item level, show "Done" regardless of which nodes are still
@@ -611,16 +651,10 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     } catch { /* ignore — Figma link is optional */ }
   }
 
-  // Libra URL: prioritize the Meego 实验链接 field (effect_analyze_link_t)
-  // before falling back to the AB report content scan or chat history.
-  let libraUrl = parseWorkItemField(raw, 'TikTok-T 实验链接');
+  // Libra URL may already be set from the JSON brief parsing above
+  // (effect_analyze_link_t). If not, try the legacy markdown parse.
   if (!libraUrl) {
-    // Try parsing from JSON brief (the field might be in work_item_fields)
-    try {
-      const briefJson = JSON.parse(raw) as { work_item_fields?: Array<{ key?: string; value?: unknown }> };
-      const linkField = (briefJson.work_item_fields ?? []).find(f => f.key === 'effect_analyze_link_t');
-      if (linkField && typeof linkField.value === 'string') libraUrl = linkField.value;
-    } catch { /* not JSON, already tried markdown parse above */ }
+    libraUrl = parseWorkItemField(raw, 'TikTok-T 实验链接');
   }
 
   // Search for AB report on Lark Drive (best-effort) — also extracts Libra URL as fallback
