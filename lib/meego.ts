@@ -52,16 +52,22 @@ export function translateNode(node: string): string {
   return NODE_TRANSLATIONS[node] ?? node;
 }
 
-/**
- * Resolve the display status for the projects page. Uses the overall work
- * item status name directly from Meego — no translation or node-priority
- * logic. The overall status is the source of truth for a feature's
- * lifecycle state.
- */
-function resolveDisplayStatus(
-  overallStatusName: string,
-): string {
-  return overallStatusName || 'Unknown';
+/** Chinese overall status name → English display label. */
+const OVERALL_STATUS_MAP: Record<string, string> = {
+  '开始':         'PRD/Design Prep',
+  '待线内评审':    'Line Review',
+  '线内评审完成':  'Dependency Check',
+  '待评估&排忧':   'RD Allocation',
+  '待需求详评':    'PRD Walkthrough',
+  '技术方案设计中': 'Tech Design',
+  '开发中':        'Development',
+  '测试中':        'QA Testing',
+  '实验中':        'AB Testing',
+  '已完成':        'Done',
+};
+
+function resolveDisplayStatus(overallStatusName: string): string {
+  return OVERALL_STATUS_MAP[overallStatusName] ?? overallStatusName || 'Unknown';
 }
 
 function pickNode(nodes: Array<{ key: string; name: string }>): { key: string; name: string } | null {
