@@ -63,6 +63,7 @@ const OVERALL_STATUS_MAP: Record<string, string> = {
   '开发中':        'Development',
   '测试中':        'QA Testing',
   '实验中':        'AB Testing',
+  '已上车':        'Merged',
   '已完成':        'Done',
 };
 
@@ -436,6 +437,18 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let complianceUrl = '';
   let priorityRaw = '';
   let libraUrl = '';
+  // JSON-extracted role owners (used when MCP returns JSON instead of markdown)
+  let jsonPmOwner = '';
+  let jsonTpmOwner = '';
+  let jsonTechOwner = '';
+  let jsonIosOwner = '';
+  let jsonAndroidOwner = '';
+  let jsonServerOwner = '';
+  let jsonQaOwner = '';
+  let jsonDaOwner = '';
+  let jsonUiuxOwner = '';
+  let jsonContentDesigner = '';
+  const jsonPocEmails: Record<string, string> = {};
 
   try {
     const briefJson = JSON.parse(raw) as {
@@ -447,9 +460,29 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       work_item_fields?: Array<{ key?: string; name?: string; value?: unknown }>;
     };
     workItemName = briefJson.work_item_attribute?.work_item_name ?? '';
-    // Extract PM owner from role_members
-    const pmRole = briefJson.work_item_attribute?.role_members?.find(r => r.key === 'PM' || r.name === 'PM');
-    if (pmRole?.members?.[0]?.name) owner = pmRole.members[0].name;
+    // Extract all role members from JSON for owner fields + pocEmails + avatars
+    const roleMembers = briefJson.work_item_attribute?.role_members ?? [];
+    const getRoleOwner = (roleKey: string, roleName?: string): string => {
+      const role = roleMembers.find(r => r.key === roleKey || (roleName && r.name === roleName));
+      return role?.members?.map(m => m.name).filter(Boolean).join(', ') ?? '';
+    };
+    jsonPmOwner = getRoleOwner('PM');
+    jsonTpmOwner = getRoleOwner('TPM');
+    jsonTechOwner = getRoleOwner('Tech_Owner', 'Tech owner');
+    jsonIosOwner = getRoleOwner('iOS');
+    jsonAndroidOwner = getRoleOwner('Android');
+    jsonServerOwner = getRoleOwner('Server');
+    jsonQaOwner = getRoleOwner('QA');
+    jsonDaOwner = getRoleOwner('DA');
+    jsonUiuxOwner = getRoleOwner('UI_UX', 'UI&UX');
+    jsonContentDesigner = getRoleOwner('Content_Designer', 'Content Designer');
+    owner = jsonPmOwner.split(',')[0]?.trim() ?? '';
+    // Build pocEmails from all role members
+    for (const role of roleMembers) {
+      for (const m of role.members ?? []) {
+        if (m.name && m.email) jsonPocEmails[m.name] = m.email;
+      }
+    }
     // Extract fields from work_item_fields
     const getField = (key: string): string => {
       const f = briefJson.work_item_fields?.find(fi => fi.key === key);
@@ -517,19 +550,22 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   const businessLine   = parseWorkItemField(raw, 'DM Business Line');
   const socialComponent = parseWorkItemField(raw, 'Social模块');
 
-  const pmOwner        = parseRoleMember(raw, 'PM');
-  const tpmOwner       = parseRoleMember(raw, 'TPM');
-  const techOwner      = parseRoleMember(raw, 'Tech owner');
-  const iosOwner       = parseRoleMember(raw, 'iOS');
-  const androidOwner   = parseRoleMember(raw, 'Android');
-  const serverOwner    = parseRoleMember(raw, 'Server');
-  const qaOwner        = parseRoleMember(raw, 'QA');
-  const daOwner        = parseRoleMember(raw, 'DA');
-  const uiuxOwner      = parseRoleMember(raw, 'UI&UX');
-  const contentDesigner = parseRoleMember(raw, 'Content Designer');
+  // Use JSON-extracted role owners if available, fall back to markdown parsing.
+  const pmOwner        = jsonPmOwner || parseRoleMember(raw, 'PM');
+  const tpmOwner       = jsonTpmOwner || parseRoleMember(raw, 'TPM');
+  const techOwner      = jsonTechOwner || parseRoleMember(raw, 'Tech owner');
+  const iosOwner       = jsonIosOwner || parseRoleMember(raw, 'iOS');
+  const androidOwner   = jsonAndroidOwner || parseRoleMember(raw, 'Android');
+  const serverOwner    = jsonServerOwner || parseRoleMember(raw, 'Server');
+  const qaOwner        = jsonQaOwner || parseRoleMember(raw, 'QA');
+  const daOwner        = jsonDaOwner || parseRoleMember(raw, 'DA');
+  const uiuxOwner      = jsonUiuxOwner || parseRoleMember(raw, 'UI&UX');
+  const contentDesigner = jsonContentDesigner || parseRoleMember(raw, 'Content Designer');
 
-  // Collect name→email pairs from brief
-  const pocEmails = Object.fromEntries(collectAllPocEmails(raw));
+  // Collect name→email pairs — JSON-extracted takes priority.
+  const pocEmails = Object.keys(jsonPocEmails).length > 0
+    ? jsonPocEmails
+    : Object.fromEntries(collectAllPocEmails(raw));
 
   // Resolve avatars from node detail form items (role fields contain JSON with avatar URLs)
   let meegoAvatars: Record<string, string> = {};
@@ -579,8 +615,8 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     console.warn('[meego] avatar fetch failed:', e);
   }
 
-  // Fetch version from work item brief (version fields are work-item-level, not node-level)
-  // Priority: iOS Launched > Android Launched > iOS Planned > Android Planned
+  // Fetch version from work item brief. Priority: launched > planned, lowest wins.
+  // The MCP returns JSON now — extract version names from the work_item_fields array.
   let iosVersion = '';
   try {
     const versionFields = ['ios_actual_online_version', 'android_actual_online_version', 'field_08a9ca', 'field_c88970'];
@@ -589,33 +625,21 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       fields: versionFields,
     });
 
-    // Extract version names from the brief response
-    // Format: | fieldName | [{"工作项 ID":"123","工作项名称":"TikTok-M-iOS-44.6.0"}] |
-    function extractVersionFromBrief(fieldName: string): string {
-      const regex = new RegExp(`${fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\|\\s*([^\\n]+)`);
-      const match = versionRaw.match(regex);
-      if (!match) return '';
-      const val = match[1].trim();
-      if (val === '[]' || !val) return '';
-      // Parse version names from JSON-like array
-      const names: string[] = [];
-      const nameRegex = /工作项名称[""]\s*[:：]\s*["""]([^""]+)["""]/g;
-      let m: RegExpExecArray | null;
-      while ((m = nameRegex.exec(val)) !== null) {
-        names.push(m[1]);
+    function extractShortVersion(val: unknown): string[] {
+      if (!val) return [];
+      const items: Array<{ name?: string; id?: number }> = Array.isArray(val) ? val : [val];
+      const versions: string[] = [];
+      for (const item of items) {
+        const name = typeof item === 'string' ? item : (item?.name ?? '');
+        const m = name.match(/(\d+\.\d+)(?:\.\d+)?/);
+        if (m) versions.push(m[1]);
       }
-      if (names.length === 0) return '';
-      // Extract short version numbers and pick the lowest
-      const shortNames = names.map(n => {
-        const vm = n.match(/(\d+\.\d+)(?:\.\d+)?$/);
-        return vm ? vm[1] : n;
-      });
-      shortNames.sort((a, b) => {
+      versions.sort((a, b) => {
         const [aMaj, aMin] = a.split('.').map(Number);
         const [bMaj, bMin] = b.split('.').map(Number);
         return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
       });
-      return shortNames[0];
+      return versions;
     }
 
     function pickLowest(a: string, b: string): string {
@@ -623,22 +647,40 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       if (!b) return a;
       const [aMaj, aMin] = a.split('.').map(Number);
       const [bMaj, bMin] = b.split('.').map(Number);
-      const cmp = (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
-      return cmp <= 0 ? a : b;
+      return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0)) <= 0 ? a : b;
     }
 
-    // Prioritize launched, fall back to planned
-    const iosLaunched = extractVersionFromBrief('iOS实际上车版本');
-    const androidLaunched = extractVersionFromBrief('Android实际上车版本');
-    const launched = pickLowest(iosLaunched, androidLaunched);
-
-    if (launched) {
-      iosVersion = launched;
-    } else {
-      const iosPlanned = extractVersionFromBrief('iOS预计上车版本');
-      const androidPlanned = extractVersionFromBrief('Android预计上车版本');
-      iosVersion = pickLowest(iosPlanned, androidPlanned);
+    // Try JSON parsing first (current MCP format)
+    let launched = '';
+    let planned = '';
+    try {
+      const vJson = JSON.parse(versionRaw) as { work_item_fields?: Array<{ key?: string; value?: unknown }> };
+      const vFields = vJson.work_item_fields ?? [];
+      const getVer = (key: string) => extractShortVersion(vFields.find(f => f.key === key)?.value);
+      const iosL = getVer('ios_actual_online_version')[0] ?? '';
+      const andL = getVer('android_actual_online_version')[0] ?? '';
+      launched = pickLowest(iosL, andL);
+      if (!launched) {
+        const iosP = getVer('field_08a9ca')[0] ?? '';
+        const andP = getVer('field_c88970')[0] ?? '';
+        planned = pickLowest(iosP, andP);
+      }
+    } catch {
+      // Legacy markdown fallback — extract version names via regex
+      const nameRegex = /(\d+\.\d+)(?:\.\d+)?/g;
+      const allVersions: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = nameRegex.exec(versionRaw)) !== null) allVersions.push(m[1]);
+      if (allVersions.length > 0) {
+        allVersions.sort((a, b) => {
+          const [aMaj, aMin] = a.split('.').map(Number);
+          const [bMaj, bMin] = b.split('.').map(Number);
+          return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
+        });
+        planned = allVersions[0];
+      }
     }
+    iosVersion = launched || planned;
   } catch (e) {
     console.log('[meego] version fetch failed:', e);
   }

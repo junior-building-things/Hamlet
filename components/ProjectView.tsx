@@ -6,14 +6,17 @@ import { FeatureCard } from '@/components/FeatureCard';
 import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
+import { statusStyle } from '@/components/StatusBadge';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { AV } from '@/lib/avatars';
 
-const STORAGE_KEY      = 'hamlet_features_v1';
-const STORAGE_GROUP_BY = 'hamlet_group_by';
-const STORAGE_SORT_BY  = 'hamlet_sort_by';
-const STORAGE_SORT_DIR = 'hamlet_sort_dir';
+const STORAGE_KEY             = 'hamlet_features_v1';
+const STORAGE_GROUP_BY        = 'hamlet_group_by';
+const STORAGE_SORT_BY         = 'hamlet_sort_by';
+const STORAGE_SORT_DIR        = 'hamlet_sort_dir';
+const STORAGE_STATUS_FILTER   = 'hamlet_status_filter';
+const STORAGE_PRIORITY_FILTER = 'hamlet_priority_filter';
 const SYNC_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
@@ -39,18 +42,7 @@ function priorityChipCls(key: string): string {
 }
 
 function statusChipCls(key: string): string {
-  const s = key.toLowerCase();
-  if (s.includes('上线') || s.includes('launch') || s.includes('灰度') || s.includes('已发布') || s.includes('已完成') || s.includes('验收'))
-    return 'bg-[#0d2b1f] border border-emerald-900 text-emerald-400';
-  if (s.includes('ab') || s.includes('测试') || s.includes('testing'))
-    return 'bg-[#1e2240] border border-yellow-900/50 text-yellow-300';
-  if (s.includes('开发') || s.includes('dev') || s.includes('coding') || s.includes('impl'))
-    return 'bg-[#1a2535] border border-blue-900/50 text-blue-300';
-  if (s.includes('设计') || s.includes('design') || s.includes('走查'))
-    return 'bg-[#1e2240] border border-blue-900/50 text-blue-300';
-  if (s.includes('hold') || s.includes('暂停') || s.includes('搁置'))
-    return 'bg-[#221a10] border border-amber-900 text-amber-400';
-  return 'bg-[#1e2240] border border-[#2e3460] text-gray-300';
+  return statusStyle(key);
 }
 
 function groupChipCls(groupBy: GroupBy, key: string): string {
@@ -84,8 +76,16 @@ interface Props {
 export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Props) {
   const [view,           setView]           = useState<'grid' | 'list'>('list');
   const [search,         setSearch]         = useState('');
-  const [statusFilter,   setStatusFilter]   = useState<string[]>([]);
-  const [priorityFilter, setPriority]       = useState<string[]>([]);
+  const [statusFilter,   setStatusFilterState]   = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem(STORAGE_STATUS_FILTER) ?? '[]'); } catch { return []; }
+  });
+  const [priorityFilter, setPriorityState]       = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem(STORAGE_PRIORITY_FILTER) ?? '[]'); } catch { return []; }
+  });
+  function setStatusFilter(v: string[])   { setStatusFilterState(v);  localStorage.setItem(STORAGE_STATUS_FILTER, JSON.stringify(v)); }
+  function setPriority(v: string[])       { setPriorityState(v);      localStorage.setItem(STORAGE_PRIORITY_FILTER, JSON.stringify(v)); }
   const [loading,        setLoading]        = useState(features.length === 0);
   const [fetchError,     setFetchError]     = useState<string | null>(null);
   const [syncingAll,     setSyncingAll]     = useState(false);
