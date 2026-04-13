@@ -1904,33 +1904,30 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
 
   // ── Libra field probe (TEMPORARY) ───────────────────────────────────────────
-  // The AB List uses "Libra 实验" work items (type: libra_new). Try MQL to
-  // query them by parent story, and also try get_workitem_brief with all
-  // effect_analyze fields to see which ones are populated.
+  // Search for a known Libra URL across every MCP response for feature 6740389019.
+  // Known URL: https://libra-sg.tiktok-row.net/libra/flight/71926724/report/main
   try {
-    // 1) MQL: query Libra experiments linked to the story
-    try {
-      const mql = "SELECT `work_item_id`, `name` FROM `TikTok`.`Libra 实验` WHERE `__parent_id` = 6839802029";
-      const raw = await callMeegoMcp('search_by_mql', { project_key: 'TikTok', mql });
-      console.log(`[digests] Libra probe MQL: ${raw.slice(0, 2000)}`);
-    } catch (e) {
-      console.warn('[digests] Libra probe MQL failed:', e);
-    }
-
-    // 2) Fetch the brief with ALL effect_analyze fields
-    try {
-      const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839802029`;
-      const raw = await callMeegoMcp('get_workitem_brief', {
-        url: probeUrl,
-        fields: ['effect_analyze', 'effect_analyze_link_t', 'effect_analyze_link_d', 'effect_analyze_link_m', 'effect_analyze_name', 'effect_analyze_report_t', 'effect_analyze_status_t'],
-      });
-      const briefJson = JSON.parse(raw) as BriefJson;
-      const fields = (briefJson.work_item_fields ?? []).map(
-        (f: BriefField) => `${f.key}=${f.name}: ${JSON.stringify(f.value).slice(0, 200)}`,
-      );
-      console.log(`[digests] Libra probe effect_analyze fields: ${fields.join('; ') || '(empty)'}`);
-    } catch (e) {
-      console.warn('[digests] Libra probe brief failed:', e);
+    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6740389019`;
+    const NEEDLE = 'libra';
+    const tools: Array<{ name: string; args: Record<string, unknown> }> = [
+      { name: 'get_workitem_brief', args: { url: probeUrl } },
+      { name: 'get_node_detail', args: { url: probeUrl } },
+      { name: 'get_workitem_op_record', args: { url: probeUrl } },
+      { name: 'list_workitem_comments', args: { url: probeUrl } },
+      { name: 'list_deliverables', args: { url: probeUrl } },
+    ];
+    for (const tool of tools) {
+      try {
+        const raw = await callMeegoMcp(tool.name, tool.args);
+        if (raw.toLowerCase().includes(NEEDLE)) {
+          const idx = raw.toLowerCase().indexOf(NEEDLE);
+          console.log(`[digests] Libra probe FOUND in ${tool.name} at idx=${idx}: ...${raw.slice(Math.max(0, idx - 100), idx + 200)}...`);
+        } else {
+          console.log(`[digests] Libra probe: NOT in ${tool.name} (${raw.length} chars)`);
+        }
+      } catch (e) {
+        console.warn(`[digests] Libra probe ${tool.name} failed:`, e);
+      }
     }
   } catch (e) {
     console.warn('[digests] Libra probe failed:', e);
