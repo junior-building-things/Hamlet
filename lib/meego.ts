@@ -630,6 +630,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       const abResult = await searchAbReport(workItemName, userAccessToken, prd);
       abReportUrl = abResult.abReportUrl;
       if (!libraUrl) libraUrl = abResult.libraUrl;
+      console.log(`[sync] "${workItemName}": libraFromMeego=${libraUrl ? 'yes' : 'no'}, libraFromAB=${abResult.libraUrl ? 'yes' : 'no'}, abReport=${abReportUrl ? 'found' : 'empty'}`);
     } catch (e) {
       console.warn('[sync] AB report search error:', e);
     }
@@ -676,9 +677,14 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       if (!libraUrl && chatId) {
         try {
           libraUrl = await searchLibraInChat(chatId);
+          console.log(`[sync] "${workItemName}": libraFromChat=${libraUrl ? libraUrl.slice(0, 80) : 'empty'}, chatId=${chatId}`);
         } catch (e) {
           console.warn('[sync] Libra chat search error:', e);
         }
+      } else if (libraUrl) {
+        console.log(`[sync] "${workItemName}": libra already resolved, skipping chat search`);
+      } else {
+        console.log(`[sync] "${workItemName}": no chatId, skipping Libra chat search`);
       }
     } catch (e) {
       console.warn('[sync] join feature chat / package QR error:', e);
