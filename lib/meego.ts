@@ -57,7 +57,7 @@ const OVERALL_STATUS_MAP: Record<string, string> = {
   '开始':         'PRD/Design Prep',
   '待线内评审':    'Line Review',
   '线内评审完成':  'Dependency Check',
-  '待评估&排忧':   'RD Allocation',
+  '待评估&排优':   'RD Allocation',
   '待需求详评':    'PRD Walkthrough',
   '技术方案设计中': 'Tech Design',
   '开发中':        'Development',
