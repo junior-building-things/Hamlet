@@ -595,8 +595,20 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
   if (!chatId) return '';
   const token = await getAccessToken();
 
+  // Include a time window (last 30 days) — without start_time/end_time the
+  // API may return stale messages instead of the most recent ones.
+  const endTime = Math.floor(Date.now() / 1000);
+  const startTime = endTime - 30 * 24 * 60 * 60; // 30 days ago
+  const params = new URLSearchParams({
+    container_id_type: 'chat',
+    container_id: chatId,
+    start_time: String(startTime),
+    end_time: String(endTime),
+    sort_type: 'ByCreateTimeDesc',
+    page_size: '50',
+  });
   const res = await fetch(
-    `${LARK_BASE_URL}/open-apis/im/v1/messages?container_id_type=chat&container_id=${chatId}&page_size=50`,
+    `${LARK_BASE_URL}/open-apis/im/v1/messages?${params}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   const data = await parseJson(res, 'chat_messages_libra') as {
