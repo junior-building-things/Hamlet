@@ -67,7 +67,7 @@ const OVERALL_STATUS_MAP: Record<string, string> = {
 };
 
 function resolveDisplayStatus(overallStatusName: string): string {
-  return OVERALL_STATUS_MAP[overallStatusName] ?? overallStatusName || 'Unknown';
+  return OVERALL_STATUS_MAP[overallStatusName] ?? (overallStatusName || 'Unknown');
 }
 
 function pickNode(nodes: Array<{ key: string; name: string }>): { key: string; name: string } | null {
