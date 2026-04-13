@@ -1998,8 +1998,8 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           meegoUrl: f.meegoUrl,
           prdUrl: f.prd,
           priority: f.priority ?? 'P1',
-          headerTitle: 'Entering Line Review 📋',
-          headerTemplate: 'orange',
+          headerTitle: 'PRD Ready ✅',
+          headerTemplate: 'green',
         }).catch(e => console.warn(`[digests] Line Review card send failed for "${f.name}":`, e));
       }
     }
