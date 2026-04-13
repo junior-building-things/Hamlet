@@ -107,6 +107,7 @@ export async function POST(req: NextRequest) {
       } catch { /* ignore */ }
     }
 
+    console.warn(`[sync] result for "${result.name}": status=${result.status}, libra=${result.libraUrl || '(empty)'}, abReport=${result.abReportUrl ? 'found' : 'empty'}, chatId=${result.chatId || '(none)'}`);
     return NextResponse.json({ ...result, pocAvatars });
   } catch (err) {
     console.error('Meego sync error:', err);
