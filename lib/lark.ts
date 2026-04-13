@@ -626,10 +626,11 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
       `${LARK_BASE_URL}/open-apis/im/v1/messages?${params}`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
+    interface MsgItem { message_id: string; msg_type: string; body?: { content?: string }; thread_id?: string }
     const data = await parseJson(res, 'chat_messages_libra') as {
       code: number; msg?: string;
       data?: {
-        items?: Array<{ msg_type: string; body?: { content?: string } }>;
+        items?: MsgItem[];
         has_more?: boolean;
         page_token?: string;
       };
@@ -640,7 +641,39 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
     }
 
     const items = data.data?.items ?? [];
-    for (const msg of items) {
+
+    // For each message (newest first), check its thread replies first
+    // (they're more recent than the parent), then the message itself.
+    // This ensures a newer Libra URL in a thread reply wins over the
+    // parent message's URL. Only fetch threads for the first 10 messages
+    // to keep API call count reasonable.
+    for (let i = 0; i < items.length; i++) {
+      const msg = items[i];
+
+      // Check thread replies first (newest reply wins).
+      if (i < 10) {
+        try {
+          const replyRes = await fetch(
+            `${LARK_BASE_URL}/open-apis/im/v1/messages/${msg.message_id}/replies?page_size=50`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          const replyData = await replyRes.json() as {
+            code: number;
+            data?: { items?: MsgItem[] };
+          };
+          if (replyData.code === 0) {
+            const replies = (replyData.data?.items ?? []).reverse();
+            for (const reply of replies) {
+              const rc = reply.body?.content ?? '';
+              const rf = typeof rc === 'string' ? rc : JSON.stringify(rc);
+              const found = extractLibraUrl(rf);
+              if (found) return found;
+            }
+          }
+        } catch { /* ignore thread fetch errors */ }
+      }
+
+      // Then check the top-level message itself.
       const content = msg.body?.content ?? '';
       const flat = typeof content === 'string' ? content : JSON.stringify(content);
       const found = extractLibraUrl(flat);
