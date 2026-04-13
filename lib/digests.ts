@@ -1907,30 +1907,28 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   try {
     const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839802029`;
 
-    // 1) list_related_workitem — AB experiments might be linked work items
+    // 1) list_workitem_types — discover what types exist (story, AB experiment, etc.)
     try {
-      const relRaw = await callMeegoMcp('list_related_workitem', { url: probeUrl });
-      console.log(`[digests] Libra probe list_related_workitem length=${relRaw.length}, sample: ${relRaw.slice(0, 2000)}`);
+      const typesRaw = await callMeegoMcp('list_workitem_types', { project_key: TIKTOK_PROJECT_KEY });
+      console.log(`[digests] Libra probe types: ${typesRaw.slice(0, 2000)}`);
+    } catch (e) {
+      console.warn('[digests] Libra probe list_workitem_types failed:', e);
+    }
+
+    // 2) list_workitem_relations — discover relation types for this feature
+    try {
+      const relRaw = await callMeegoMcp('list_workitem_relations', { url: probeUrl });
+      console.log(`[digests] Libra probe relations: ${relRaw.slice(0, 2000)}`);
+    } catch (e) {
+      console.warn('[digests] Libra probe list_workitem_relations failed:', e);
+    }
+
+    // 3) Try list_related_workitem with the feature URL (no relation_id, see what error says)
+    try {
+      const relatedRaw = await callMeegoMcp('list_related_workitem', { url: probeUrl, relation_id: '0' });
+      console.log(`[digests] Libra probe related(0): ${relatedRaw.slice(0, 2000)}`);
     } catch (e) {
       console.warn('[digests] Libra probe list_related_workitem failed:', e);
-    }
-
-    // 2) search_by_mql — query the AB experiment table by parent work item
-    try {
-      const mql1 = `SELECT * FROM \`TikTok\`.\`AB实验\` WHERE \`work_item_id\` = 6839802029`;
-      const mqlRaw1 = await callMeegoMcp('search_by_mql', { project_key: 'TikTok', mql: mql1 });
-      console.log(`[digests] Libra probe MQL AB实验 length=${mqlRaw1.length}, sample: ${mqlRaw1.slice(0, 2000)}`);
-    } catch (e) {
-      console.warn('[digests] Libra probe MQL AB实验 failed:', e);
-    }
-
-    // 3) Try a different MQL — query by parent_id or related fields
-    try {
-      const mql2 = `SELECT * FROM \`TikTok\`.\`效果分析\` WHERE \`work_item_id\` = 6839802029`;
-      const mqlRaw2 = await callMeegoMcp('search_by_mql', { project_key: 'TikTok', mql: mql2 });
-      console.log(`[digests] Libra probe MQL 效果分析 length=${mqlRaw2.length}, sample: ${mqlRaw2.slice(0, 2000)}`);
-    } catch (e) {
-      console.warn('[digests] Libra probe MQL 效果分析 failed:', e);
     }
   } catch (e) {
     console.warn('[digests] Libra probe failed:', e);
