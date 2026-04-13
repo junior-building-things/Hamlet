@@ -2005,27 +2005,27 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     }
 
     // Write updated feature list to GCS cache so the Hamlet UI sees fresh data.
-    const updatedFeatures = features.map(f => ({
-      id: f.workItemId,
-      meegoIssueId: f.workItemId,
-      name: f.name,
-      description: '',
-      status: f.overallStatusName,
-      priority: (f.priority ?? 'P1') as import('./types').Priority,
-      owner: (f.roles['PM'] ?? [])[0] ?? '',
-      tasks: [] as import('./types').Task[],
-      lastUpdated: f.lastUpdatedIso ?? '',
-      meegoUrl: f.meegoUrl,
-      meegoProjectKey: TIKTOK_PROJECT_KEY,
-      prd: f.prd,
-      iosVersion: f.iosVersion,
-      // Preserve enriched fields from previous cache (Figma, AB report, etc.)
-      ...(prevCache?.features.find(p => (p.meegoIssueId ?? p.id) === f.workItemId) ?? {}),
-      // Override with fresh brief data
-      status: f.overallStatusName,
-      name: f.name,
-      priority: (f.priority ?? 'P1') as import('./types').Priority,
-    })) as import('./types').Feature[];
+    // Preserve enriched fields from the previous cache (Figma, AB report, avatars,
+    // etc.), then override with fresh brief data (status, name, priority).
+    const updatedFeatures = features.map(f => {
+      const prev = prevCache?.features.find(p => (p.meegoIssueId ?? p.id) === f.workItemId);
+      return {
+        ...(prev ?? {}),
+        id: f.workItemId,
+        meegoIssueId: f.workItemId,
+        name: f.name,
+        description: prev?.description ?? '',
+        status: f.overallStatusName,
+        priority: (f.priority ?? prev?.priority ?? 'P1') as import('./types').Priority,
+        owner: (f.roles['PM'] ?? [])[0] ?? prev?.owner ?? '',
+        tasks: prev?.tasks ?? ([] as import('./types').Task[]),
+        lastUpdated: f.lastUpdatedIso ?? prev?.lastUpdated ?? '',
+        meegoUrl: f.meegoUrl,
+        meegoProjectKey: TIKTOK_PROJECT_KEY,
+        prd: f.prd ?? prev?.prd,
+        iosVersion: f.iosVersion ?? prev?.iosVersion,
+      } as import('./types').Feature;
+    });
     await writeFeatureCache(updatedFeatures);
     console.log(`[digests] GCS feature cache updated with ${updatedFeatures.length} features`);
   } catch (e) {
