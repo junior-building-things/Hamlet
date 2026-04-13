@@ -1903,6 +1903,23 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     console.warn('[digests] failed to get Lark bot token:', e);
   }
 
+  // ── Libra field probe (TEMPORARY) ───────────────────────────────────────────
+  try {
+    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6839802029`;
+    const raw = await callMeegoMcp('get_workitem_brief', {
+      url: probeUrl,
+      fields: ['effect_analyze_link_t', 'effect_analyze_link_d', 'effect_analyze_link_m'],
+    });
+    const briefJson = JSON.parse(raw) as BriefJson;
+    const fields = (briefJson.work_item_fields ?? []).map(
+      (f: BriefField) => `${f.key}=${f.name}: ${JSON.stringify(f.value).slice(0, 150)}`,
+    );
+    console.log(`[digests] Libra probe: ${fields.join('; ') || '(empty)'}`);
+  } catch (e) {
+    console.warn('[digests] Libra probe failed:', e);
+  }
+  // ── end probe ─────────────────────────────────────────────────────────────
+
   // Step 0b: Refresh (or reuse) Junior's chat list. This drives both the
   // discovery augmentation in Step 1 and the Q&A scan in Step 6.
   let juniorChats: JuniorChatCacheEntry[] = [];
