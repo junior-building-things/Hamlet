@@ -3,6 +3,7 @@ import { syncFeatureStatus } from '@/lib/meego';
 import { batchFetchAvatars, refreshUserToken } from '@/lib/lark';
 import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
 import { cookies } from 'next/headers';
+import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 
 // Cache refreshed tokens in memory to avoid refreshing on every sync call
 let cachedUserToken = '';
@@ -17,15 +18,33 @@ async function getFreshUserToken(): Promise<string | undefined> {
   }
 
   const session = await getSession();
-  // Use the most recent refresh token: in-memory cache or session cookie
-  const refreshToken = cachedRefreshToken || session?.larkRefreshToken;
-  if (!refreshToken) return session?.larkAccessToken;
+  // Try refresh tokens in order: in-memory cache → session cookie → GCS state.
+  // The digest pipeline rotates the token and stores it in GCS, so the cookie
+  // may have a stale (consumed) token after a digest run.
+  const tokenSources = [
+    cachedRefreshToken,
+    session?.larkRefreshToken,
+  ].filter(Boolean) as string[];
 
-  const refreshed = await refreshUserToken(refreshToken);
+  // Also try the GCS state token as a last resort.
+  let gcsToken: string | undefined;
+  try {
+    const state = await loadDigestState();
+    if (state.larkUserRefreshToken) gcsToken = state.larkUserRefreshToken;
+  } catch { /* ignore GCS errors */ }
+  if (gcsToken) tokenSources.push(gcsToken);
+
+  // Deduplicate (same token may appear in multiple sources).
+  const uniqueTokens = [...new Set(tokenSources)];
+
+  let refreshed: { accessToken: string; refreshToken: string } | null = null;
+  for (const token of uniqueTokens) {
+    refreshed = await refreshUserToken(token);
+    if (refreshed) break;
+  }
+
   if (!refreshed) {
-    // Don't return stale token — it causes cascading 99991668 errors for every API call.
-    // Return undefined so user-token features (AB search, chat search) are gracefully skipped.
-    console.warn('[sync] token refresh failed — skipping user-token features (re-login needed)');
+    console.warn('[sync] token refresh failed (tried session + GCS) — skipping user-token features (re-login needed)');
     return undefined;
   }
 
@@ -49,6 +68,16 @@ async function getFreshUserToken(): Promise<string | undefined> {
     });
   } catch (e) {
     console.warn('[sync] cookie write failed (token still cached in memory):', e);
+  }
+
+  // Also persist to GCS state so the digest pipeline and future sync
+  // instances can use the rotated token even after this instance dies.
+  try {
+    const state = await loadDigestState();
+    state.larkUserRefreshToken = refreshed.refreshToken;
+    await saveDigestState(state);
+  } catch (e) {
+    console.warn('[sync] GCS state token persist failed:', e);
   }
 
   return refreshed.accessToken;
