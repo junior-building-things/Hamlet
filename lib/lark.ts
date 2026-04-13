@@ -658,17 +658,25 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
             { headers: { Authorization: `Bearer ${token}` } },
           );
           const replyData = await replyRes.json() as {
-            code: number;
+            code: number; msg?: string;
             data?: { items?: MsgItem[] };
           };
           if (replyData.code === 0) {
             const replies = (replyData.data?.items ?? []).reverse();
+            if (replies.length > 0) {
+              console.warn(`[libra chat] msg ${i}: ${replies.length} thread replies`);
+            }
             for (const reply of replies) {
               const rc = reply.body?.content ?? '';
               const rf = typeof rc === 'string' ? rc : JSON.stringify(rc);
+              if (rf.toLowerCase().includes('libra')) {
+                console.warn(`[libra chat] thread reply contains libra: ${rf.slice(0, 300)}`);
+              }
               const found = extractLibraUrl(rf);
               if (found) return found;
             }
+          } else if (replyData.code !== 230001) {
+            console.warn(`[libra chat] replies fetch failed for msg ${i}: code=${replyData.code} msg=${replyData.msg}`);
           }
         } catch { /* ignore thread fetch errors */ }
       }
