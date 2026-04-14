@@ -51,7 +51,7 @@ function LinksTooltip({ links, anchor, onEnter, onLeave }: {
 }) {
   const el = (
     <div
-      className="fixed flex flex-col gap-1 px-3 py-2 rounded-lg bg-[#1a1d32] border border-[#2e3460] shadow-xl"
+      className="fixed flex flex-col gap-1 px-3 py-2 rounded-lg bg-[var(--card)] border border-[var(--border)] shadow-xl"
       style={{
         top: anchor.top - 6,
         left: anchor.left + anchor.width / 2,

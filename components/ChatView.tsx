@@ -134,9 +134,9 @@ export function ChatView({ onFeatureCreated }: Props) {
     <div className="flex flex-col" style={{ height: '100vh' }}>
 
       {/* ── Header ────────────────────────────────────────────────────────────── */}
-      <div className="px-6 pt-7 pb-5 shrink-0 border-b border-[#1a1d35]">
+      <div className="px-6 pt-7 pb-5 shrink-0 border-b border-[var(--border)]">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
+          <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
             Hamlet
           </h1>
           <div className="flex items-center gap-1.5">
@@ -159,8 +159,8 @@ export function ChatView({ onFeatureCreated }: Props) {
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                   msg.role === 'user'
-                    ? 'bg-blue-700 text-white rounded-br-sm'
-                    : 'bg-[#1e2240] text-gray-200 rounded-bl-sm'
+                    ? 'bg-blue-700 text-[var(--foreground)] rounded-br-sm'
+                    : 'bg-[var(--card-hover)] text-gray-200 rounded-bl-sm'
                 }`}>
                   {msg.content}
 
@@ -188,7 +188,7 @@ export function ChatView({ onFeatureCreated }: Props) {
           {/* Typing indicator */}
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-[#1e2240] px-4 py-3 rounded-2xl rounded-bl-sm">
+              <div className="bg-[var(--card-hover)] px-4 py-3 rounded-2xl rounded-bl-sm">
                 <div className="flex gap-1 items-center h-3">
                   {[0, 150, 300].map(d => (
                     <span
@@ -205,7 +205,7 @@ export function ChatView({ onFeatureCreated }: Props) {
       </div>
 
       {/* ── Input ─────────────────────────────────────────────────────────────── */}
-      <div className="px-6 pb-8 pt-4 shrink-0 border-t border-[#1a1d35]">
+      <div className="px-6 pb-8 pt-4 shrink-0 border-t border-[var(--border)]">
         <div className="max-w-2xl flex gap-2 items-end">
           <textarea
             ref={textareaRef}
@@ -217,12 +217,12 @@ export function ChatView({ onFeatureCreated }: Props) {
             rows={2}
             placeholder="Ask Hamlet anything…"
             disabled={loading}
-            className="flex-1 bg-[#0e1120] border border-[#1e2240] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 resize-none focus:outline-none focus:border-blue-600 transition-colors disabled:opacity-60"
+            className="flex-1 bg-[var(--background)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm text-[var(--foreground)] placeholder-gray-500 resize-none focus:outline-none focus:border-blue-600 transition-colors disabled:opacity-60"
           />
           <button
             onClick={send}
             disabled={loading || !input.trim()}
-            className="p-3 bg-blue-700 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+            className="p-3 bg-blue-700 text-[var(--foreground)] rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             {loading
               ? <Loader2 className="w-4 h-4 animate-spin" />

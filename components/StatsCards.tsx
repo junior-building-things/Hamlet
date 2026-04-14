@@ -26,10 +26,10 @@ export function StatsCards({ features }: { features: Feature[] }) {
   return (
     <div className="grid grid-cols-2 gap-4 px-6 mt-1">
       {cards.map(({ label, value, Icon, iconBg, iconColor }) => (
-        <div key={label} className="bg-[#13162a] border border-[#1e2240] rounded-xl p-5 flex items-center justify-between">
+        <div key={label} className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-400">{label}</p>
-            <p className="text-4xl font-bold text-white mt-1">{value}</p>
+            <p className="text-4xl font-bold text-[var(--foreground)] mt-1">{value}</p>
           </div>
           <div className={`w-10 h-10 rounded-full ${iconBg} flex items-center justify-center ${iconColor}`}>
             <Icon className="w-5 h-5" />

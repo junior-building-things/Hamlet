@@ -198,7 +198,7 @@ function FormLabel({ children, required }: { children: React.ReactNode; required
   );
 }
 
-const inputCls = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 placeholder-gray-600';
+const inputCls = 'w-full bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 placeholder-gray-600';
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -393,17 +393,17 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-[#0e1120] border border-[#1e2240] rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+        <div className="relative bg-[var(--background)] border border-[var(--border)] rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
 
-          <div className="px-6 py-4 border-b border-[#1e2240] shrink-0 flex items-center justify-between">
-            <h2 className="text-white font-semibold text-lg">New Feature</h2>
-            <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+          <div className="px-6 py-4 border-b border-[var(--border)] shrink-0 flex items-center justify-between">
+            <h2 className="text-[var(--foreground)] font-semibold text-lg">New Feature</h2>
+            <button onClick={onClose} className="text-gray-500 hover:text-[var(--foreground)] transition-colors">
               <X className="w-5 h-5" />
             </button>
           </div>
 
           <form onSubmit={handleCreate} className="flex flex-col min-h-0 flex-1">
-            <div className="px-6 py-5 flex flex-col gap-0 overflow-y-auto flex-1 divide-y divide-[#1e2240]">
+            <div className="px-6 py-5 flex flex-col gap-0 overflow-y-auto flex-1 divide-y divide-[var(--border)]">
 
               {/* PRD Details */}
               <div className="pb-5 flex flex-col gap-4">
@@ -429,7 +429,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                       value={form.name} onChange={e => setField('name', e.target.value)} />
                     <button type="button" disabled={!form.name.trim() || rewritingName}
                       onClick={() => handleRewrite('name')}
-                      className="shrink-0 p-2 rounded-lg border border-[#2e3460] text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:text-purple-400 enabled:hover:border-purple-500/50">
+                      className="shrink-0 p-2 rounded-lg border border-[var(--border)] text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:text-purple-400 enabled:hover:border-purple-500/50">
                       {rewritingName ? <Loader2 className="w-4 h-4 animate-spin" /> : <WandSparkles className="w-4 h-4" />}
                     </button>
                   </div>
@@ -447,7 +447,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                     />
                     <button type="button" disabled={!featureDescription.trim() || rewritingDesc}
                       onClick={() => handleRewrite('description')}
-                      className="shrink-0 p-2 rounded-lg border border-[#2e3460] text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:text-purple-400 enabled:hover:border-purple-500/50 mt-1">
+                      className="shrink-0 p-2 rounded-lg border border-[var(--border)] text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:text-purple-400 enabled:hover:border-purple-500/50 mt-1">
                       {rewritingDesc ? <Loader2 className="w-4 h-4 animate-spin" /> : <WandSparkles className="w-4 h-4" />}
                     </button>
                   </div>
@@ -543,13 +543,13 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
             </div>
 
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#1e2240] shrink-0">
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-[var(--border)] shrink-0">
               <button type="button" onClick={onClose}
-                className="px-5 py-2 bg-[#1e2240] text-gray-300 hover:text-white text-sm font-semibold rounded-lg transition-colors">
+                className="px-5 py-2 bg-[var(--card-hover)] text-gray-300 hover:text-[var(--foreground)] text-sm font-semibold rounded-lg transition-colors">
                 Cancel
               </button>
               <button type="submit" disabled={!form.name.trim()}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-[var(--foreground)] text-sm font-semibold rounded-lg transition-colors">
                 Create Feature
               </button>
             </div>
@@ -564,14 +564,14 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-[#0e1120] border border-[#1e2240] rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="relative bg-[var(--background)] border border-[var(--border)] rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
 
-        <div className="px-6 py-4 border-b border-[#1e2240] shrink-0">
+        <div className="px-6 py-4 border-b border-[var(--border)] shrink-0">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-white font-semibold text-lg leading-snug pr-2">
+            <h2 className="text-[var(--foreground)] font-semibold text-lg leading-snug pr-2">
               {feature?.name ?? 'Feature'}
             </h2>
-            <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors shrink-0 mt-0.5">
+            <button onClick={onClose} className="text-gray-500 hover:text-[var(--foreground)] transition-colors shrink-0 mt-0.5">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -609,7 +609,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
           )}
         </div>
 
-        <div className="px-6 py-5 flex flex-col gap-0 overflow-y-auto divide-y divide-[#1e2240]">
+        <div className="px-6 py-5 flex flex-col gap-0 overflow-y-auto divide-y divide-[var(--border)]">
 
           <div className="pb-5">
             <SectionHeader title="Current Status" />
@@ -618,7 +618,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
             {isMeego && canComplete && (
               <div className="mt-3">
                 <button onClick={handleCompleteNode} disabled={completing}
-                  className="flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+                  className="flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-[var(--foreground)] text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
                   {completing
                     ? <><Loader2 className="w-4 h-4 animate-spin" /> Completing…</>
                     : <>Complete: {nodeName} →</>}
@@ -659,9 +659,9 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
         </div>
 
-        <div className="flex justify-end px-6 py-4 border-t border-[#1e2240] shrink-0">
+        <div className="flex justify-end px-6 py-4 border-t border-[var(--border)] shrink-0">
           <button onClick={onClose}
-            className="px-5 py-2 bg-[#1e2240] text-gray-300 hover:text-white text-sm font-semibold rounded-lg transition-colors">
+            className="px-5 py-2 bg-[var(--card-hover)] text-gray-300 hover:text-[var(--foreground)] text-sm font-semibold rounded-lg transition-colors">
             Close
           </button>
         </div>

@@ -42,10 +42,10 @@ function LoginContent() {
         <div className="text-center mb-8 flex flex-col items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/hamlet.png" alt="Hamlet" className="w-16 h-16 object-contain" />
-          <h1 className="text-5xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>Hamlet</h1>
+          <h1 className="text-5xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>Hamlet</h1>
         </div>
 
-        <div className="bg-[#0e1120] border border-[#1e2240] rounded-2xl p-8 shadow-2xl flex flex-col gap-6">
+        <div className="bg-[var(--background)] border border-[var(--border)] rounded-2xl p-8 shadow-2xl flex flex-col gap-6">
 
           {/* Feature bullets */}
           <div className="flex flex-col gap-4">
@@ -54,16 +54,16 @@ function LoginContent() {
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}`}>
                   {icon}
                 </div>
-                <span className="text-sm font-semibold text-white leading-snug">{text}</span>
+                <span className="text-sm font-semibold text-[var(--foreground)] leading-snug">{text}</span>
               </div>
             ))}
           </div>
 
           {/* Divider */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-[#1e2240]" />
+            <div className="flex-1 h-px bg-[var(--card-hover)]" />
             <span className="text-[11px] font-semibold tracking-widest text-gray-500 uppercase">Continue with</span>
-            <div className="flex-1 h-px bg-[#1e2240]" />
+            <div className="flex-1 h-px bg-[var(--card-hover)]" />
           </div>
 
           {/* Error */}

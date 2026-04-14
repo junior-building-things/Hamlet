@@ -3,6 +3,21 @@
 :root {
   --background: #0c0e1a;
   --foreground: #ffffff;
+  --card: #13162a;
+  --card-hover: #1e2240;
+  --border: #2e3460;
+  --muted: #9ca3af;
+  --muted-dark: #6b7280;
+}
+
+[data-theme="light"] {
+  --background: #f5f6fa;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-hover: #f3f4f6;
+  --border: #e0e2ea;
+  --muted: #6b7280;
+  --muted-dark: #9ca3af;
 }
 
 body {
@@ -16,6 +31,6 @@ body {
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #0c0e1a; }
-::-webkit-scrollbar-thumb { background: #1e2240; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #2e3460; }
+::-webkit-scrollbar-track { background: var(--background); }
+::-webkit-scrollbar-thumb { background: var(--card-hover); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border); }

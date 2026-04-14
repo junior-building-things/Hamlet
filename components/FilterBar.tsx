@@ -1,6 +1,7 @@
 'use client';
+import { useState, useEffect } from 'react';
 import { Priority } from '@/lib/types';
-import { Search, LayoutGrid, List, Plus, Layers, ArrowUpDown, ArrowUp, ArrowDown, CircleDot, Tag } from 'lucide-react';
+import { Search, LayoutGrid, List, Plus, Layers, ArrowUpDown, ArrowUp, ArrowDown, CircleDot, Tag, Sun, Moon } from 'lucide-react';
 import { CustomSelect, MultiSelect } from './AvatarSelect';
 
 export type GroupBy  = 'none' | 'priority' | 'status' | 'businessLine' | 'socialComponent';
@@ -39,14 +40,14 @@ export function FilterBar({
     <div className="flex items-center gap-2 px-6 mt-5 flex-wrap">
 
       {/* Search */}
-      <div className="flex items-center gap-2 bg-[#13162a] border border-[#2e3460] rounded-lg px-3 py-2 min-w-[180px]">
+      <div className="flex items-center gap-2 bg-[var(--card)] border border-[var(--border)] rounded-lg px-3 py-2 min-w-[180px]">
         <Search className="w-4 h-4 text-gray-500 shrink-0" />
         <input
           type="text"
           placeholder="Search features..."
           value={search}
           onChange={e => onSearchChange(e.target.value)}
-          className="bg-transparent text-sm text-white placeholder-gray-500 outline-none w-full"
+          className="bg-transparent text-sm text-[var(--foreground)] placeholder-gray-500 outline-none w-full"
         />
       </div>
 
@@ -71,7 +72,7 @@ export function FilterBar({
       />
 
       {/* Divider */}
-      <div className="w-px h-6 bg-[#1e2240]" />
+      <div className="w-px h-6 bg-[var(--card-hover)]" />
 
       {/* Group By */}
       <CustomSelect
@@ -108,7 +109,7 @@ export function FilterBar({
           onClick={onSortDirToggle}
           disabled={sortBy === 'none'}
           title={sortDir === 'asc' ? 'Ascending (click to reverse)' : 'Descending (click to reverse)'}
-          className="bg-[#13162a] border border-[#2e3460] rounded-lg px-2.5 py-2 text-gray-400 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+          className="bg-[var(--card)] border border-[var(--border)] rounded-lg px-2.5 py-2 text-gray-400 hover:text-[var(--foreground)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
         >
           {sortDir === 'asc'
             ? <ArrowUp   className="w-4 h-4" />
@@ -117,22 +118,25 @@ export function FilterBar({
       </div>
 
       {/* View toggle */}
-      <div className="flex bg-[#13162a] border border-[#2e3460] rounded-lg overflow-hidden">
+      <div className="flex bg-[var(--card)] border border-[var(--border)] rounded-lg overflow-hidden">
         <button
           onClick={() => onViewChange('grid')}
-          className={`px-3 py-2 transition-colors ${view === 'grid' ? 'bg-[#1e2240] text-white' : 'text-gray-500 hover:text-white'}`}
+          className={`px-3 py-2 transition-colors ${view === 'grid' ? 'bg-[var(--card-hover)] text-[var(--foreground)]' : 'text-gray-500 hover:text-[var(--foreground)]'}`}
           title="Grid view"
         >
           <LayoutGrid className="w-4 h-4" />
         </button>
         <button
           onClick={() => onViewChange('list')}
-          className={`px-3 py-2 transition-colors ${view === 'list' ? 'bg-[#1e2240] text-white' : 'text-gray-500 hover:text-white'}`}
+          className={`px-3 py-2 transition-colors ${view === 'list' ? 'bg-[var(--card-hover)] text-[var(--foreground)]' : 'text-gray-500 hover:text-[var(--foreground)]'}`}
           title="List view"
         >
           <List className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Theme toggle */}
+      <ThemeToggle />
 
       {/* Add Feature */}
       {!hideAddButton && (
@@ -145,5 +149,31 @@ export function FilterBar({
         </button>
       )}
     </div>
+  );
+}
+
+function ThemeToggle() {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  useEffect(() => {
+    const stored = document.documentElement.getAttribute('data-theme') as 'dark' | 'light' | null;
+    if (stored) setTheme(stored);
+  }, []);
+
+  function toggle() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('hamlet_theme', next);
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      className="bg-[var(--card)] border border-[var(--border)] rounded-lg px-2.5 py-2 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors shrink-0"
+      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+    </button>
   );
 }

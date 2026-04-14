@@ -2,7 +2,7 @@
 
 export function FeatureListHeader() {
   return (
-    <div className="hidden sm:grid sm:col-span-full sm:[grid-template-columns:subgrid] px-4 py-2 text-xs text-gray-500 font-medium border-b border-[#1e2240]">
+    <div className="hidden sm:grid sm:col-span-full sm:[grid-template-columns:subgrid] px-4 py-2 text-xs text-gray-500 font-medium border-b border-[var(--border)]">
       <span>Feature</span>
       <span className="pl-4">Status</span>
       <span className="pl-4">Version</span>

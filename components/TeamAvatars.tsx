@@ -60,7 +60,7 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
   if (!mounted) return null;
   return createPortal(
     <div
-      className="fixed bg-[#0e1120] border border-[#1e2240] rounded-xl shadow-2xl py-2 px-3 min-w-[160px]"
+      className="fixed bg-[var(--background)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 min-w-[160px]"
       style={{
         top:       pos.top - 8,
         left:      pos.left,
@@ -74,14 +74,14 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
       <div
         className="absolute top-full left-1/2 -translate-x-1/2
                    border-l-[5px] border-r-[5px] border-t-[5px]
-                   border-l-transparent border-r-transparent border-t-[#1e2240]"
+                   border-l-transparent border-r-transparent border-t-[var(--border)]"
       />
       <div className="flex flex-col gap-1.5">
         {pocs.map(poc => (
           <div key={poc.name} className="flex items-center gap-2">
             <UserAvatar name={poc.name} url={poc.url} size={5} />
             <div className="min-w-0">
-              <p className="text-xs text-white leading-tight truncate">{poc.name}</p>
+              <p className="text-xs text-[var(--foreground)] leading-tight truncate">{poc.name}</p>
               <p className="text-[10px] text-gray-500 leading-tight">{poc.role}</p>
             </div>
           </div>
@@ -92,7 +92,7 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
               const r = e.currentTarget.getBoundingClientRect();
               onAddClick({ top: r.top, left: r.left + r.width / 2 });
             }}
-            className="flex items-center gap-2 py-1 px-1 -mx-1 rounded-lg hover:bg-[#1e2240] transition-colors cursor-pointer"
+            className="flex items-center gap-2 py-1 px-1 -mx-1 rounded-lg hover:bg-[var(--card-hover)] transition-colors cursor-pointer"
           >
             <div className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center">
               <Plus className="w-3 h-3 text-purple-400" />
@@ -128,7 +128,7 @@ function AgentPicker({ pos, mounted, assignedAgents, onToggle, onClose }: {
   return createPortal(
     <div
       ref={ref}
-      className="fixed bg-[#0e1120] border border-[#2e3460] rounded-xl shadow-2xl py-1.5 px-1.5 min-w-[180px]"
+      className="fixed bg-[var(--background)] border border-[var(--border)] rounded-xl shadow-2xl py-1.5 px-1.5 min-w-[180px]"
       style={{
         top:       pos.top - 8,
         left:      pos.left,
@@ -147,11 +147,11 @@ function AgentPicker({ pos, mounted, assignedAgents, onToggle, onClose }: {
           <button
             key={agent.key}
             onClick={() => onToggle(agent.key)}
-            className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-[#1e2240] transition-colors cursor-pointer"
+            className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-[var(--card-hover)] transition-colors cursor-pointer"
           >
             <img src={agent.icon} alt="" className="w-6 h-6 object-contain shrink-0" />
             <div className="flex-1 text-left min-w-0">
-              <p className="text-xs text-white leading-tight">{agent.label}</p>
+              <p className="text-xs text-[var(--foreground)] leading-tight">{agent.label}</p>
               <p className="text-[10px] text-gray-500 leading-tight">{agent.shortName}</p>
             </div>
             {assigned && <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />}
@@ -224,7 +224,7 @@ function OverflowBubble({ rest, ringColor = '#13162a', onAddClick }: {
       onMouseLeave={onLeave}
     >
       <div
-        className="w-6 h-6 rounded-full bg-[#1e2240] flex items-center justify-center text-[9px] font-semibold text-gray-300 cursor-default select-none"
+        className="w-6 h-6 rounded-full bg-[var(--card-hover)] flex items-center justify-center text-[9px] font-semibold text-gray-300 cursor-default select-none"
         style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
       >
         +{rest.length}
@@ -241,7 +241,7 @@ function AddAgentCircle({ ringColor = '#13162a', onClick }: { ringColor?: string
     <div style={{ marginLeft: '-5px', zIndex: 0 }}>
       <button
         onClick={onClick}
-        className="w-6 h-6 rounded-full bg-[#1e2240] flex items-center justify-center cursor-pointer hover:bg-[#252a4a] transition-colors"
+        className="w-6 h-6 rounded-full bg-[var(--card-hover)] flex items-center justify-center cursor-pointer hover:bg-[#252a4a] transition-colors"
         style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
       >
         <Plus className="w-3 h-3 text-gray-400" />

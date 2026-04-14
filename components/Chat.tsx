@@ -50,7 +50,7 @@ export function Chat({ onFeatureCreated }: Props) {
 
   return (
     <div className="px-6 pt-6 pb-4">
-      <h2 className="text-3xl text-white mb-5" style={{ fontFamily: 'var(--font-newsreader)' }}>
+      <h2 className="text-3xl text-[var(--foreground)] mb-5" style={{ fontFamily: 'var(--font-newsreader)' }}>
         I&apos;m Hamlet, your personal feature assistant 👋
       </h2>
 
@@ -61,8 +61,8 @@ export function Chat({ onFeatureCreated }: Props) {
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                 msg.role === 'user'
-                  ? 'bg-blue-700 text-white rounded-br-sm'
-                  : 'bg-[#1e2240] text-gray-200 rounded-bl-sm'
+                  ? 'bg-blue-700 text-[var(--foreground)] rounded-br-sm'
+                  : 'bg-[var(--card-hover)] text-gray-200 rounded-bl-sm'
               }`}>
                 {msg.content}
                 {msg.links && msg.links.length > 0 && (
@@ -81,7 +81,7 @@ export function Chat({ onFeatureCreated }: Props) {
 
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-[#1e2240] px-4 py-3 rounded-2xl rounded-bl-sm">
+              <div className="bg-[var(--card-hover)] px-4 py-3 rounded-2xl rounded-bl-sm">
                 <div className="flex gap-1 items-center h-3">
                   {[0, 150, 300].map(d => (
                     <span key={d} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
@@ -103,12 +103,12 @@ export function Chat({ onFeatureCreated }: Props) {
           rows={2}
           placeholder="You can ask me to create new features, or follow up on the progress of ongoing features"
           disabled={loading}
-          className="flex-1 bg-[#0e1120] border border-[#1e2240] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 resize-none focus:outline-none focus:border-blue-600 transition-colors disabled:opacity-60"
+          className="flex-1 bg-[var(--background)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm text-[var(--foreground)] placeholder-gray-500 resize-none focus:outline-none focus:border-blue-600 transition-colors disabled:opacity-60"
         />
         <button
           onClick={send}
           disabled={loading || !input.trim()}
-          className="p-3 bg-blue-700 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+          className="p-3 bg-blue-700 text-[var(--foreground)] rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>

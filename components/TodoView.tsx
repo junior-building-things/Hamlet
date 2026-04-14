@@ -13,14 +13,14 @@ function statusChipCls(key: string): string {
   if (s.includes('上线') || s.includes('launch') || s.includes('灰度') || s.includes('已发布') || s.includes('已完成') || s.includes('验收'))
     return 'bg-[#0d2b1f] border border-emerald-900 text-emerald-400';
   if (s.includes('ab') || s.includes('测试') || s.includes('testing'))
-    return 'bg-[#1e2240] border border-yellow-900/50 text-yellow-300';
+    return 'bg-[var(--card-hover)] border border-yellow-900/50 text-yellow-300';
   if (s.includes('开发') || s.includes('dev') || s.includes('coding') || s.includes('impl'))
     return 'bg-[#1a2535] border border-blue-900/50 text-blue-300';
   if (s.includes('设计') || s.includes('design') || s.includes('走查'))
-    return 'bg-[#1e2240] border border-blue-900/50 text-blue-300';
+    return 'bg-[var(--card-hover)] border border-blue-900/50 text-blue-300';
   if (s.includes('hold') || s.includes('暂停') || s.includes('搁置'))
     return 'bg-[#221a10] border border-amber-900 text-amber-400';
-  return 'bg-[#1e2240] border border-[#2e3460] text-gray-300';
+  return 'bg-[var(--card-hover)] border border-[var(--border)] text-gray-300';
 }
 
 interface Props {
@@ -158,7 +158,7 @@ export function TodoView({ features, setFeatures }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between px-6 pt-7 pb-2">
         <div>
-          <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
+          <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
             To Dos
           </h1>
           <p className="text-sm text-gray-500 mt-1">Nodes waiting for your action</p>
@@ -166,7 +166,7 @@ export function TodoView({ features, setFeatures }: Props) {
         <button
           onClick={syncAll}
           disabled={syncingAll}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1e2240] hover:bg-[#252a4a] text-gray-300 hover:text-white text-sm rounded-xl transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-[var(--card-hover)] hover:bg-[#252a4a] text-gray-300 hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
         >
           {syncingAll
             ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
@@ -181,7 +181,7 @@ export function TodoView({ features, setFeatures }: Props) {
             <button
               onClick={() => bulkComplete('PM Acceptance', pmAcceptanceTodos)}
               disabled={!!bulkRunning}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-[var(--foreground)] text-xs font-semibold rounded-lg transition-colors"
             >
               {bulkRunning === 'PM Acceptance'
                 ? <Loader2 className="w-3 h-3 animate-spin" />
@@ -194,7 +194,7 @@ export function TodoView({ features, setFeatures }: Props) {
             <button
               onClick={() => bulkComplete('UI/UX Acceptance', uiuxAcceptanceTodos)}
               disabled={!!bulkRunning}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-[var(--foreground)] text-xs font-semibold rounded-lg transition-colors"
             >
               {bulkRunning === 'UI/UX Acceptance'
                 ? <Loader2 className="w-3 h-3 animate-spin" />

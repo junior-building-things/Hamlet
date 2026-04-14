@@ -182,7 +182,7 @@ export function RolesView() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="px-6 pt-7 pb-2">
-        <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
+        <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
           R&R
         </h1>
         <p className="text-sm text-gray-500 mt-1">Each feature involves the following roles</p>
@@ -198,7 +198,7 @@ export function RolesView() {
       </div>
 
       {/* Agent roles */}
-      <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+      <h2 className="text-lg font-semibold text-[var(--foreground)] mb-1 flex items-center gap-2">
         <Bot className="w-5 h-5 text-purple-400" />
         AI Agents
       </h2>
@@ -217,8 +217,8 @@ export function RolesView() {
 
 function RoleCard({ role }: { role: Role }) {
   return (
-    <div className={`bg-[#13162a] border rounded-xl p-5 flex flex-col gap-3 ${
-      role.isAgent ? 'border-purple-500/30' : 'border-[#1e2240]'
+    <div className={`bg-[var(--card)] border rounded-xl p-5 flex flex-col gap-3 ${
+      role.isAgent ? 'border-purple-500/30' : 'border-[var(--border)]'
     }`}>
       <div className="flex items-center gap-2.5">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
@@ -231,7 +231,7 @@ function RoleCard({ role }: { role: Role }) {
             : role.isAgent ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-white">{role.title}</h3>
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">{role.title}</h3>
           <span className="text-[11px] text-gray-500">{role.shortName}</span>
         </div>
       </div>

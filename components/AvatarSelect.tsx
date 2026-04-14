@@ -41,10 +41,10 @@ function useDropdown() {
   return { open, setOpen, openDropdown, maxHeight, ref };
 }
 
-const triggerCls  = 'w-full bg-[#13162a] border border-[#2e3460] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 flex items-center gap-2 min-w-0';
-const listDownCls = 'absolute z-20 top-full left-0 right-0 mt-1 bg-[#13162a] border border-[#2e3460] rounded-lg shadow-2xl overflow-y-auto';
-const listUpCls   = 'absolute z-20 bottom-full left-0 right-0 mb-1 bg-[#13162a] border border-[#2e3460] rounded-lg shadow-2xl overflow-y-auto';
-const itemBaseCls = 'px-3 py-2 flex items-center gap-2.5 cursor-pointer hover:bg-[#1e2240]';
+const triggerCls  = 'w-full bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 flex items-center gap-2 min-w-0';
+const listDownCls = 'absolute z-20 top-full left-0 right-0 mt-1 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-2xl overflow-y-auto';
+const listUpCls   = 'absolute z-20 bottom-full left-0 right-0 mb-1 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-2xl overflow-y-auto';
+const itemBaseCls = 'px-3 py-2 flex items-center gap-2.5 cursor-pointer hover:bg-[var(--card-hover)]';
 
 // ─── UserAvatar ───────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ export function UserAvatar({ name, url, size = 5 }: { name: string; url?: string
     return <img src={url} alt={name} className={`${dim} rounded-full object-cover flex-shrink-0`} style={isAgent ? { objectPosition: 'center 30%' } : undefined} onError={() => setImgFailed(true)} />;
   }
   return (
-    <div className={`${dim} rounded-full bg-blue-800 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0`}>
+    <div className={`${dim} rounded-full bg-blue-800 flex items-center justify-center text-[var(--foreground)] text-[9px] font-bold flex-shrink-0`}>
       {initials}
     </div>
   );
@@ -103,10 +103,10 @@ export function AvatarSelect({ options, value, onChange, placeholder = '—', lo
         <div className={dropUp ? listUpCls : listDownCls} style={{ maxHeight }}>
           {options.map(opt => (
             <div key={opt.value}
-              className={`${itemBaseCls} ${value === opt.value ? 'bg-[#1e2240]' : ''}`}
+              className={`${itemBaseCls} ${value === opt.value ? 'bg-[var(--card-hover)]' : ''}`}
               onClick={() => { onChange(opt.value); setOpen(false); }}>
               <UserAvatar name={opt.label} url={opt.avatarUrl} size={5} />
-              <span className="text-sm text-white flex-1">{opt.label}</span>
+              <span className="text-sm text-[var(--foreground)] flex-1">{opt.label}</span>
               {value === opt.value && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
             </div>
           ))}
@@ -151,12 +151,12 @@ export function CustomSelect({ options, value, onChange, placeholder, allowDesel
         <div className={listDownCls} style={{ maxHeight }}>
           {options.map(opt => (
             <div key={opt.value}
-              className={`${itemBaseCls} ${value === opt.value ? 'bg-[#1e2240]' : ''}`}
+              className={`${itemBaseCls} ${value === opt.value ? 'bg-[var(--card-hover)]' : ''}`}
               onClick={() => {
                 onChange(allowDeselect && value === opt.value ? '' : opt.value);
                 setOpen(false);
               }}>
-              <span className="text-sm text-white flex-1">{opt.label}</span>
+              <span className="text-sm text-[var(--foreground)] flex-1">{opt.label}</span>
               {value === opt.value && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
             </div>
           ))}
@@ -204,7 +204,7 @@ export function MultiSelect({ options, value, onChange, placeholder, icon, class
         <div className={listDownCls} style={{ maxHeight }}>
           {options.map(opt => (
             <div key={opt.value}
-              className={`${itemBaseCls} ${selected.has(opt.value) ? 'bg-[#1e2240]' : ''}`}
+              className={`${itemBaseCls} ${selected.has(opt.value) ? 'bg-[var(--card-hover)]' : ''}`}
               onClick={() => {
                 const next = new Set(selected);
                 if (next.has(opt.value)) {
@@ -214,7 +214,7 @@ export function MultiSelect({ options, value, onChange, placeholder, icon, class
                 }
                 onChange([...next]);
               }}>
-              <span className="text-sm text-white flex-1">{opt.label}</span>
+              <span className="text-sm text-[var(--foreground)] flex-1">{opt.label}</span>
               {selected.has(opt.value) && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
             </div>
           ))}

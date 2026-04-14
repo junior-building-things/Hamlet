@@ -37,7 +37,7 @@ function priorityChipCls(key: string): string {
     case 'P1': return 'bg-orange-900/50 border border-orange-700 text-orange-400';
     case 'P2': return 'bg-blue-900/50 border border-blue-700 text-blue-400';
     case 'P3': return 'bg-gray-800 border border-gray-700 text-gray-400';
-    default:   return 'bg-[#1e2240] border border-[#2e3460] text-gray-400';
+    default:   return 'bg-[var(--card-hover)] border border-[var(--border)] text-gray-400';
   }
 }
 
@@ -46,10 +46,10 @@ function statusChipCls(key: string): string {
 }
 
 function groupChipCls(groupBy: GroupBy, key: string): string {
-  if (!key) return 'bg-[#1e2240] border border-[#2e3460] text-gray-500';
+  if (!key) return 'bg-[var(--card-hover)] border border-[var(--border)] text-gray-500';
   if (groupBy === 'priority') return priorityChipCls(key);
   if (groupBy === 'status')   return statusChipCls(key);
-  return 'bg-[#1e2240] border border-[#2e3460] text-gray-300';
+  return 'bg-[var(--card-hover)] border border-[var(--border)] text-gray-300';
 }
 
 function GroupHeader({ label, count, first, groupBy }: { label: string; count: number; first: boolean; groupBy: GroupBy }) {
@@ -552,7 +552,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       {/* Toolbar */}
       <div className="px-6 pt-7 pb-2 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl text-white" style={{ fontFamily: 'var(--font-newsreader)' }}>
+          <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
             Project View
           </h1>
           <p className="text-sm text-gray-500 mt-1">An overview of your projects</p>
@@ -560,7 +560,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         <button
           onClick={syncAll}
           disabled={syncingAll || detailSyncTotal > 0}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1e2240] hover:bg-[#252a4a] text-gray-300 hover:text-white text-sm rounded-xl transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-[var(--card-hover)] hover:bg-[#252a4a] text-gray-300 hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
         >
           {syncingAll || detailSyncTotal > 0
             ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>

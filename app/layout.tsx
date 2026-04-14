@@ -12,11 +12,22 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Inline script to set theme before paint to avoid flash.
+  const themeScript = `
+    (function() {
+      var t = localStorage.getItem('hamlet_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  `;
+
   return (
-    <html lang="en" className={`${geistSans.variable} ${newsreader.variable} antialiased`} style={{ backgroundColor: '#0c0e1a' }}>
-      <body className="min-h-screen" style={{ backgroundColor: '#0c0e1a', backgroundImage: 'radial-gradient(circle, #ffffff18 1px, transparent 1px)', backgroundSize: '24px 24px', backgroundAttachment: 'fixed' }}>
+    <html lang="en" className={`${geistSans.variable} ${newsreader.variable} antialiased`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
+      <body className="min-h-screen" style={{ backgroundImage: 'radial-gradient(circle, #ffffff08 1px, transparent 1px)', backgroundSize: '24px 24px', backgroundAttachment: 'fixed' }}>
         {children}
-        <Toaster position="bottom-right" theme="dark" richColors />
+        <Toaster position="bottom-right" richColors />
       </body>
     </html>
   );
