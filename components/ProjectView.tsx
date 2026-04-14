@@ -130,7 +130,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     const STATUS_ORDER: Record<string, number> = {
       'PRD/Design Prep': 1, 'Line Review': 2, 'Dependency Check': 3,
       'RD Allocation': 4, 'PRD Walkthrough': 5, 'Tech Design': 6,
-      'Development': 7, 'QA Testing': 8, 'AB Testing': 9, 'Merged': 10,
+      'Development': 7, 'QA Testing': 8, 'Merged': 9, 'AB Testing': 10,
       'Done': 0, // last
     };
     withUrl.sort((a, b) => {
