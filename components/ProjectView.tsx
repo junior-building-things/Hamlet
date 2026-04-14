@@ -121,16 +121,23 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   // ── Detail sync ────────────────────────────────────────────────────────────
 
-  const syncAllDetails = useCallback(async (list: Feature[], visibleIds?: Set<string>) => {
+  const syncAllDetails = useCallback(async (list: Feature[]) => {
     const withUrl = list.filter(f => f.meegoUrl);
     if (withUrl.length === 0) return;
-    // Prioritize visible features (currently on screen) first, then the rest.
-    if (visibleIds && visibleIds.size > 0) {
-      const visible = withUrl.filter(f => visibleIds.has(f.id));
-      const rest = withUrl.filter(f => !visibleIds.has(f.id));
-      withUrl.length = 0;
-      withUrl.push(...visible, ...rest);
-    }
+    // Sort: most progressed first (excluding Done), then Done last.
+    // Higher index = more progressed. Done features go to the end since
+    // they skip expensive lookups anyway.
+    const STATUS_ORDER: Record<string, number> = {
+      'PRD/Design Prep': 1, 'Line Review': 2, 'Dependency Check': 3,
+      'RD Allocation': 4, 'PRD Walkthrough': 5, 'Tech Design': 6,
+      'Development': 7, 'QA Testing': 8, 'AB Testing': 9, 'Merged': 10,
+      'Done': 0, // last
+    };
+    withUrl.sort((a, b) => {
+      const oa = STATUS_ORDER[a.status] ?? 5;
+      const ob = STATUS_ORDER[b.status] ?? 5;
+      return ob - oa; // descending — most progressed first
+    });
     setDetailSyncTotal(withUrl.length);
     setDetailSyncCount(0);
     // Mark ALL features as syncing upfront so every card shows the spinner
@@ -361,9 +368,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     const list = await fetchFromMeego(true); // force=true bypasses GCS cache
     setSyncingAll(false);
     if (list) {
-      // Pass the currently visible feature IDs so they sync first.
-      const visibleIds = new Set(sorted.map(f => f.id));
-      syncAllDetails(list, visibleIds);
+      syncAllDetails(list);
     }
   }
 
