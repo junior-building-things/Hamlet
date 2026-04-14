@@ -221,13 +221,17 @@ async function handleMessage(body: LarkEvent) {
             } catch { /* skip */ }
           }
 
-          // Tier 3: Lark Drive search — for AB report if missing + requested
-          if (!data['AB Report'] && infoType && /ab|report|experiment/i.test(infoType)) {
+          // Tier 3: Lark Drive search — for AB report or Libra if missing.
+          // The AB report doc often contains the Libra URL, so this tier
+          // also serves as a Libra source before falling back to chat search.
+          const needsAB = !data['AB Report'] && infoType && /ab|report|experiment/i.test(infoType);
+          const needsLibraFromAB = !data['Libra'] && infoType && /libra|experiment|ab.*link/i.test(infoType);
+          if (needsAB || needsLibraFromAB) {
             try {
               const abResult = await searchAbReport(feature.name, undefined, feature.prd);
               if (abResult.abReportUrl) data['AB Report'] = abResult.abReportUrl;
-              if (abResult.libraUrl) data['Libra'] = abResult.libraUrl;
-              console.log('[webhook] Tier 3: searched Lark Drive for AB report');
+              if (abResult.libraUrl && !data['Libra']) data['Libra'] = abResult.libraUrl;
+              console.log('[webhook] Tier 3: searched Lark Drive for AB report / Libra');
             } catch { /* skip */ }
           }
 
