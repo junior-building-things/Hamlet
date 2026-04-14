@@ -9,6 +9,7 @@
   --muted: #9ca3af;
   --muted-dark: #6b7280;
   --link-circle: #000000;
+  --dot-color: #ffffff08;
 }
 
 [data-theme="light"] {
@@ -20,6 +21,7 @@
   --muted: #6b7280;
   --muted-dark: #9ca3af;
   --link-circle: #DCDCDC;
+  --dot-color: #00000010;
 }
 
 body {
