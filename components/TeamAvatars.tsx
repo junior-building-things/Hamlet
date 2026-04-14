@@ -224,7 +224,7 @@ function OverflowBubble({ rest, ringColor, onAddClick }: {
       onMouseLeave={onLeave}
     >
       <div
-        className="w-6 h-6 rounded-full bg-[var(--card-hover)] flex items-center justify-center text-[9px] font-semibold text-gray-300 cursor-default select-none"
+        className="w-6 h-6 rounded-full bg-[var(--card-hover)] flex items-center justify-center text-[9px] font-semibold text-[var(--muted)] cursor-default select-none"
         style={{ outline: `2px solid ${ringColor || 'var(--card)'}`, outlineOffset: '-1px' }}
       >
         +{rest.length}
