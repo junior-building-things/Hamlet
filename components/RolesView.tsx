@@ -240,8 +240,8 @@ function RoleCard({ role }: { role: Role }) {
 
       <ul className="flex flex-col gap-1.5">
         {role.responsibilities.map((r, i) => (
-          <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
-            <span className="text-gray-600 mt-0.5 shrink-0">•</span>
+          <li key={i} className="text-xs text-[var(--foreground)] flex items-start gap-2">
+            <span className="text-[var(--muted)] mt-0.5 shrink-0">•</span>
             {r}
           </li>
         ))}

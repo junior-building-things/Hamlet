@@ -61,8 +61,8 @@ export function Chat({ onFeatureCreated }: Props) {
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                 msg.role === 'user'
-                  ? 'bg-blue-700 text-[var(--foreground)] rounded-br-sm'
-                  : 'bg-[var(--card-hover)] text-gray-200 rounded-bl-sm'
+                  ? 'bg-blue-700 text-white rounded-br-sm'
+                  : 'bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] rounded-bl-sm'
               }`}>
                 {msg.content}
                 {msg.links && msg.links.length > 0 && (
