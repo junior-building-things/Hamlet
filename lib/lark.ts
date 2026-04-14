@@ -642,46 +642,48 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
 
     const items = data.data?.items ?? [];
 
-    // For each message (newest first), check its thread replies first
-    // (they're more recent than the parent), then the message itself.
-    // This ensures a newer Libra URL in a thread reply wins over the
-    // parent message's URL. Only fetch threads for the first 10 messages
-    // to keep API call count reasonable.
-    for (let i = 0; i < items.length; i++) {
-      const msg = items[i];
+    // Two-pass search: first check all top-level messages, collecting any
+    // that mention "libra" as candidates for thread-reply search. Then
+    // check thread replies ONLY for those candidates. This avoids the
+    // expensive thread-reply API call for every message (~40 calls per
+    // feature down to ~1-2).
+    const libraParents: MsgItem[] = [];
+    for (const msg of items) {
+      const content = msg.body?.content ?? '';
+      const flat = typeof content === 'string' ? content : JSON.stringify(content);
 
-      // Check thread replies first (newest reply wins).
-      if (i < 10) {
-        try {
-          const replyRes = await fetch(
-            `${LARK_BASE_URL}/open-apis/im/v1/messages/${msg.message_id}/replies?page_size=50`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          const replyData = await replyRes.json() as {
-            code: number; msg?: string;
-            data?: { items?: MsgItem[] };
-          };
-          if (replyData.code === 0) {
-            const replies = (replyData.data?.items ?? []).reverse();
-            if (replies.length > 0) {
-              console.warn(`[libra chat] msg ${i}: ${replies.length} thread replies`);
-            }
-            for (const reply of replies) {
-              const rc = reply.body?.content ?? '';
-              const rf = typeof rc === 'string' ? rc : JSON.stringify(rc);
-              if (rf.toLowerCase().includes('libra')) {
-                console.warn(`[libra chat] thread reply contains libra: ${rf.slice(0, 300)}`);
-              }
-              const found = extractLibraUrl(rf);
-              if (found) return found;
-            }
-          } else if (replyData.code !== 230001) {
-            console.warn(`[libra chat] replies fetch failed for msg ${i}: code=${replyData.code} msg=${replyData.msg}`);
-          }
-        } catch { /* ignore thread fetch errors */ }
+      // Check the top-level message itself.
+      if (flat.toLowerCase().includes('libra')) {
+        libraParents.push(msg);
       }
+    }
 
-      // Then check the top-level message itself.
+    // Check thread replies for messages that mention libra (newest parent first).
+    // A thread reply with a newer Libra URL takes priority.
+    for (const msg of libraParents) {
+      try {
+        const replyRes = await fetch(
+          `${LARK_BASE_URL}/open-apis/im/v1/messages/${msg.message_id}/replies?page_size=50`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        const replyData = await replyRes.json() as {
+          code: number;
+          data?: { items?: MsgItem[] };
+        };
+        if (replyData.code === 0) {
+          const replies = (replyData.data?.items ?? []).reverse();
+          for (const reply of replies) {
+            const rc = reply.body?.content ?? '';
+            const rf = typeof rc === 'string' ? rc : JSON.stringify(rc);
+            const found = extractLibraUrl(rf);
+            if (found) return found;
+          }
+        }
+      } catch { /* ignore thread fetch errors */ }
+    }
+
+    // Fall back to the top-level match if no thread reply had a Libra URL.
+    for (const msg of libraParents) {
       const content = msg.body?.content ?? '';
       const flat = typeof content === 'string' ? content : JSON.stringify(content);
       const found = extractLibraUrl(flat);
