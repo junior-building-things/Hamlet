@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAgentToken } from '@/lib/agents';
 import { sendTextMessage } from '@/lib/lark';
+import { readFeatureCache } from '@/lib/feature-cache';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Feature } from '@/lib/types';
 
 // ─── Agent config ────────────────────────────────────────────────────────────
 
@@ -128,7 +130,6 @@ async function handleMessage(body: LarkEvent) {
 
   console.log(`[webhook] ${agent.name} received: "${userText.slice(0, 100)}" in ${message.chat_type} chat`);
 
-  // Generate response using Gemini
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
     console.warn('[webhook] GOOGLE_AI_API_KEY not set');
@@ -137,15 +138,58 @@ async function handleMessage(body: LarkEvent) {
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-
   const chatType = message.chat_type === 'p2p' ? 'direct message' : 'group chat';
+
+  // ── Feature lookup: find relevant feature data for the question ──────────
+  let featureContext = '';
+  try {
+    const cache = await readFeatureCache();
+    if (cache && cache.features.length > 0) {
+      // Ask Gemini to identify which feature (if any) the user is asking about.
+      const featureNames = cache.features.map(f => f.name).join('\n');
+      const matchResult = await model.generateContent(
+        `Given this user message: "${userText}"\n\nWhich of these features is the user asking about? Return ONLY the exact feature name, or "NONE" if the question is not about a specific feature.\n\nFeatures:\n${featureNames}`
+      );
+      const matchedName = matchResult.response.text().trim();
+
+      if (matchedName && matchedName !== 'NONE') {
+        // Fuzzy match — find the closest feature name
+        const feature = cache.features.find(f =>
+          f.name === matchedName ||
+          f.name.toLowerCase().includes(matchedName.toLowerCase()) ||
+          matchedName.toLowerCase().includes(f.name.toLowerCase())
+        );
+
+        if (feature) {
+          featureContext = formatFeatureContext(feature);
+          console.log(`[webhook] matched feature: "${feature.name}"`);
+        }
+      }
+
+      // If no specific feature matched but the question is general (e.g.
+      // "how many features are in dev?"), provide a summary.
+      if (!featureContext && /how many|list|all|summary|overview/i.test(userText)) {
+        const statusCounts: Record<string, number> = {};
+        for (const f of cache.features) {
+          statusCounts[f.status] = (statusCounts[f.status] ?? 0) + 1;
+        }
+        const summary = Object.entries(statusCounts)
+          .map(([s, n]) => `${s}: ${n}`)
+          .join(', ');
+        featureContext = `\n\nYou have access to ${cache.features.length} features. Status breakdown: ${summary}`;
+      }
+    }
+  } catch (e) {
+    console.warn('[webhook] feature lookup failed:', e);
+  }
 
   const prompt = `${agent.persona}
 
 A team member sent you this ${chatType} message:
 "${userText}"
+${featureContext}
 
-Reply naturally and helpfully. Keep your response concise (1-3 sentences). If you don't know something specific, say so honestly. Don't make up project details.
+Reply naturally and helpfully. Keep your response concise (1-3 sentences). If you have feature data, use it to answer the question directly. If you don't have the specific information requested, say so honestly. Don't make up project details.
 
 Reply with ONLY your response text (no quotes, no explanation).`;
 
@@ -166,4 +210,42 @@ Reply with ONLY your response text (no quotes, no explanation).`;
   } catch (e) {
     console.error(`[webhook] ${agent.name} failed to reply:`, e);
   }
+}
+
+/**
+ * Format a Feature into a context block that Gemini can use to answer
+ * questions. Includes all available fields so Gemini can pick the
+ * relevant ones based on the user's question.
+ */
+function formatFeatureContext(f: Feature): string {
+  const lines: string[] = [
+    '',
+    `Here is the data for feature "${f.name}":`,
+  ];
+  if (f.status)          lines.push(`  Status: ${f.status}`);
+  if (f.priority)        lines.push(`  Priority: ${f.priority}`);
+  if (f.iosVersion)      lines.push(`  Version: ${f.iosVersion}`);
+  if (f.owner)           lines.push(`  Owner: ${f.owner}`);
+  if (f.pmOwner)         lines.push(`  PM: ${f.pmOwner}`);
+  if (f.techOwner)       lines.push(`  Tech Owner: ${f.techOwner}`);
+  if (f.iosOwner)        lines.push(`  iOS: ${f.iosOwner}`);
+  if (f.androidOwner)    lines.push(`  Android: ${f.androidOwner}`);
+  if (f.serverOwner)     lines.push(`  Server: ${f.serverOwner}`);
+  if (f.qaOwner)         lines.push(`  QA: ${f.qaOwner}`);
+  if (f.uiuxOwner)       lines.push(`  UX: ${f.uiuxOwner}`);
+  if (f.daOwner)         lines.push(`  DS: ${f.daOwner}`);
+  if (f.contentDesigner) lines.push(`  Content Designer: ${f.contentDesigner}`);
+  if (f.prd)             lines.push(`  PRD: ${f.prd}`);
+  if (f.figmaUrl)        lines.push(`  Figma: ${f.figmaUrl}`);
+  if (f.meegoUrl)        lines.push(`  Meego: ${f.meegoUrl}`);
+  if (f.complianceUrl)   lines.push(`  Compliance: ${f.complianceUrl}`);
+  if (f.abReportUrl)     lines.push(`  AB Report: ${f.abReportUrl}`);
+  if (f.libraUrl)        lines.push(`  Libra: ${f.libraUrl}`);
+  if (f.riskLevel)       lines.push(`  Risk: ${f.riskLevel === 'red' ? 'High' : f.riskLevel === 'yellow' ? 'Medium' : 'Low'}`);
+  if (f.riskNotes?.length) lines.push(`  Risk Notes: ${f.riskNotes.join(', ')}`);
+  if (f.quarterlyCycle)  lines.push(`  Quarterly Cycle: ${f.quarterlyCycle}`);
+  if (f.businessLine)    lines.push(`  Business Line: ${f.businessLine}`);
+  if (f.lastUpdated)     lines.push(`  Last Updated: ${f.lastUpdated}`);
+  if (f.versionHistory?.length) lines.push(`  Version History: ${f.versionHistory.join(' → ')}`);
+  return lines.join('\n');
 }
