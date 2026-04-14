@@ -199,7 +199,7 @@ function RingAvatar({ poc, ringColor }: { poc: Poc; ringColor?: string }) {
     <div
       ref={ref}
       className="rounded-full cursor-default"
-      style={{ outline: `2px solid ${ringColor || 'var(--background)'}`, outlineOffset: '-1px' }}
+      style={{ outline: `2px solid ${ringColor || 'var(--card)'}`, outlineOffset: '-1px' }}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -225,7 +225,7 @@ function OverflowBubble({ rest, ringColor, onAddClick }: {
     >
       <div
         className="w-6 h-6 rounded-full bg-[var(--card-hover)] flex items-center justify-center text-[9px] font-semibold text-gray-300 cursor-default select-none"
-        style={{ outline: `2px solid ${ringColor || 'var(--background)'}`, outlineOffset: '-1px' }}
+        style={{ outline: `2px solid ${ringColor || 'var(--card)'}`, outlineOffset: '-1px' }}
       >
         +{rest.length}
       </div>
@@ -242,7 +242,7 @@ function AddAgentCircle({ ringColor, onClick }: { ringColor?: string; onClick: (
       <button
         onClick={onClick}
         className="w-6 h-6 rounded-full bg-[var(--card-hover)] flex items-center justify-center cursor-pointer hover:bg-[#252a4a] transition-colors"
-        style={{ outline: `2px solid ${ringColor || 'var(--background)'}`, outlineOffset: '-1px' }}
+        style={{ outline: `2px solid ${ringColor || 'var(--card)'}`, outlineOffset: '-1px' }}
       >
         <Plus className="w-3 h-3 text-gray-400" />
       </button>
