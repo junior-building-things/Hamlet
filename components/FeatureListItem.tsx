@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
@@ -19,11 +19,78 @@ interface Props {
   onComplete?: (feature: Feature) => void;
   pinned?: boolean;
   onToggleAgent?: (featureId: string, agentKey: string) => void;
+  onFieldUpdate?: (featureId: string, updates: Partial<Feature>) => void;
 }
 
-export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete, pinned, onToggleAgent }: Props) {
+// ─── Inline editable text field ─────────────────────────────────────────────
+
+function EditableText({ value, onSave, className, placeholder }: {
+  value: string;
+  onSave: (v: string) => void;
+  className?: string;
+  placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.setSelectionRange(draft.length, draft.length);
+    }
+  }, [editing, draft.length]);
+
+  // Sync external value changes
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+
+  function commit() {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== value) onSave(trimmed);
+    else setDraft(value); // revert
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        className={className}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { setDraft(value); setEditing(false); }
+        }}
+        placeholder={placeholder}
+      />
+    );
+  }
+
+  return (
+    <div className="editable-cell" onClick={() => setEditing(true)}>
+      <span className={className}>{value || placeholder}</span>
+    </div>
+  );
+}
+
+// ─── Main component ─────────────────────────────────────────────────────────
+
+export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
+
+  function handleLinkUpdate(linkKey: string, newUrl: string) {
+    if (!onFieldUpdate) return;
+    const fieldMap: Record<string, keyof Feature> = {
+      meego: 'meegoUrl', prd: 'prd', figma: 'figmaUrl',
+      compliance: 'complianceUrl', libra: 'libraUrl', ab: 'abReportUrl',
+    };
+    const field = fieldMap[linkKey];
+    if (field) onFieldUpdate(feature.id, { [field]: newUrl });
+  }
+
   return (
     <div className={`bg-[var(--card)] border rounded-xl hover:border-[var(--border)] transition-colors
                     sm:col-span-full sm:grid sm:[grid-template-columns:subgrid] sm:items-center
@@ -89,13 +156,28 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       {/* Desktop cells — direct subgrid children */}
-      <button
-        onClick={() => onEdit(feature)}
-        className="hidden sm:flex items-center gap-2 pl-4 py-3 w-full min-w-0 text-left text-[var(--foreground)] text-sm font-semibold hover:text-blue-300 transition-colors cursor-pointer"
-      >
-        <span className="truncate">{feature.name}</span>
-        {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
-      </button>
+
+      {/* Name (editable) */}
+      <div className="hidden sm:flex items-center pl-4 py-3 w-full min-w-0">
+        {onFieldUpdate ? (
+          <div className="flex items-center gap-2 w-full min-w-0">
+            <EditableText
+              value={feature.name}
+              onSave={v => onFieldUpdate(feature.id, { name: v })}
+              className="text-[var(--foreground)] text-sm font-semibold truncate"
+            />
+            {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
+          </div>
+        ) : (
+          <button
+            onClick={() => onEdit(feature)}
+            className="flex items-center gap-2 w-full min-w-0 text-left text-[var(--foreground)] text-sm font-semibold hover:text-blue-300 transition-colors cursor-pointer"
+          >
+            <span className="truncate">{feature.name}</span>
+            {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
+          </button>
+        )}
+      </div>
 
       <div className="hidden sm:flex py-3 pl-4">
         <StatusBadge status={feature.status} />
@@ -110,7 +192,9 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       <div className="hidden sm:flex items-center py-3 pl-4 overflow-visible relative">
-        <LinkIcons feature={feature} ringColor="var(--card)" onPackageClick={(ios) => { setShowPackage(true); if (ios) setShowIos(true); }} />
+        <LinkIcons feature={feature} ringColor="var(--card)"
+          onPackageClick={(ios) => { setShowPackage(true); if (ios) setShowIos(true); }}
+          onLinkUpdate={onFieldUpdate ? handleLinkUpdate : undefined} />
       </div>
 
       {/* Team avatars */}
@@ -132,12 +216,21 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         )}
       </div>
 
-      {/* Notes */}
+      {/* Notes (editable) */}
       <div className="hidden sm:flex items-center py-3 pl-4 max-w-[200px]">
-        {feature.riskNotes && feature.riskNotes.length > 0 && feature.riskLevel !== 'green' && (
-          <span className="text-xs text-[var(--muted)] truncate" title={feature.riskNotes.join(', ')}>
-            {feature.riskNotes.join(', ')}
-          </span>
+        {onFieldUpdate ? (
+          <EditableText
+            value={(feature.riskNotes && feature.riskNotes.length > 0 && feature.riskLevel !== 'green') ? feature.riskNotes.join(', ') : ''}
+            onSave={v => onFieldUpdate(feature.id, { riskNotes: v.split(', ').map(s => s.trim()).filter(Boolean) })}
+            className="text-xs text-[var(--muted)] truncate"
+            placeholder="—"
+          />
+        ) : (
+          feature.riskNotes && feature.riskNotes.length > 0 && feature.riskLevel !== 'green' && (
+            <span className="text-xs text-[var(--muted)] truncate" title={feature.riskNotes.join(', ')}>
+              {feature.riskNotes.join(', ')}
+            </span>
+          )
         )}
       </div>
 

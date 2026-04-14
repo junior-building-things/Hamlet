@@ -550,6 +550,34 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     }
   }
 
+  async function handleFieldUpdate(featureId: string, updates: Partial<Feature>) {
+    // Find feature before update for revert on error
+    const prev = features.find(f => f.id === featureId);
+    if (!prev) return;
+
+    // Optimistic update
+    setFeatures(fs => fs.map(f => f.id !== featureId ? f : { ...f, ...updates }));
+
+    try {
+      await fetch('/api/meego/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectKey: prev.meegoProjectKey,
+          workItemId: prev.meegoIssueId,
+          featureId,
+          fields: { ...updates, ...(updates.name && prev.prd ? { prd: prev.prd } : {}) },
+        }),
+      }).then(r => {
+        if (!r.ok) throw new Error('Update failed');
+      });
+    } catch {
+      // Revert on error
+      setFeatures(fs => fs.map(f => f.id !== featureId ? f : prev));
+      toast.error('Failed to save changes');
+    }
+  }
+
   function handleToggleAgent(featureId: string, agentKey: string) {
     setFeatures(prev => prev.map(f => {
       if (f.id !== featureId) return f;
@@ -564,7 +592,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       <FeatureListItem key={f.id} feature={f} syncing={syncingIds.has(f.id)}
         onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne}
         completing={completingId === f.id} onComplete={handleComplete}
-        pinned={f.id === pinnedId} onToggleAgent={handleToggleAgent} />
+        pinned={f.id === pinnedId} onToggleAgent={handleToggleAgent}
+        onFieldUpdate={handleFieldUpdate} />
     ));
   }
 

@@ -858,6 +858,24 @@ export async function renameDocSection(docUrl: string, oldHeading: string, newHe
 }
 
 /**
+ * Rename a Lark document's title (the page block).
+ * PRD docs are titled "[PRD] Feature Name" — this updates that title.
+ */
+export async function renameDocument(docUrl: string, newTitle: string): Promise<void> {
+  const docId = await resolveDocId(docUrl);
+  const token = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock) throw new Error('No page block found in document');
+
+  await batchUpdateBlocks(docId, [{
+    block_id: pageBlock.block_id,
+    update_text_elements: { elements: [{ text_run: { content: newTitle, text_element_style: {} } }] },
+  }], token);
+}
+
+/**
  * Add a new section (heading + paragraph) to a Lark doc.
  * Inserts at the end of the document by default, or after a specific section if `afterSection` is provided.
  */

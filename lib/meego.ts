@@ -908,7 +908,7 @@ export async function createFeature(params: CreateFeatureParams): Promise<{ id: 
 export async function updateFeatureFields(
   projectKey: string,
   workItemId: string,
-  fields: { name?: string; prd?: string; priority?: Priority },
+  fields: { name?: string; prd?: string; priority?: Priority; figmaUrl?: string },
 ): Promise<void> {
   const updates: { field_key: string; field_value: string }[] = [];
 
@@ -920,6 +920,9 @@ export async function updateFeatureFields(
 
   if (fields.priority !== undefined)
     updates.push({ field_key: 'priority', field_value: PRIORITY_TO_MEEGO[fields.priority] });
+
+  if (fields.figmaUrl !== undefined)
+    updates.push({ field_key: 'ui_design_zeplin_link', field_value: fields.figmaUrl });
 
   if (updates.length === 0) return;
 

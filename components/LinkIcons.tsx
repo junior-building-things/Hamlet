@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
 import Image from 'next/image';
+import { Pencil } from 'lucide-react';
 
 interface LinkDef {
   key: string;
@@ -39,37 +40,98 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): 
 
 // ─── Per-icon tooltip bubble ────────────────────────────────────────────────
 
-function Bubble({ link, anchor, onEnter, onLeave }: {
+function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
   link: LinkDef;
   anchor: { top: number; left: number; width: number };
   onEnter: () => void;
   onLeave: () => void;
+  onLinkUpdate?: (linkKey: string, newUrl: string) => void;
 }) {
-  const inner = (
-    <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: link.color }}>
-      {link.label}
-    </span>
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(link.url ?? '');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.setSelectionRange(draft.length, draft.length);
+    }
+  }, [editing, draft.length]);
+
+  function commit() {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== link.url && onLinkUpdate) {
+      onLinkUpdate(link.key, trimmed);
+    } else {
+      setDraft(link.url ?? '');
+    }
+  }
+
+  const baseCls = "fixed flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)] shadow-xl transition-colors";
+  const style = {
+    top: anchor.top - 6,
+    left: anchor.left + anchor.width / 2,
+    transform: 'translate(-50%, -100%)',
+    zIndex: 9999,
+    ...(editing ? { minWidth: 300 } : {}),
+  };
+
+  const arrow = (
+    <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--background)]" />
   );
 
-  const cls = "fixed flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)] shadow-xl cursor-pointer hover:brightness-125 transition-colors";
-  const style = {
-    top:       anchor.top - 6,
-    left:      anchor.left + anchor.width / 2,
-    transform: 'translate(-50%, -100%)',
-    zIndex:    9999,
-  };
+  if (editing) {
+    const el = (
+      <div className={baseCls} style={style} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { setDraft(link.url ?? ''); setEditing(false); }
+          }}
+          className="flex-1 text-[11px] bg-transparent border-none outline-none text-[var(--foreground)] min-w-0"
+          placeholder="Paste URL…"
+        />
+        {arrow}
+      </div>
+    );
+    return createPortal(el, document.body);
+  }
+
+  const inner = (
+    <>
+      <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: link.color }}>
+        {link.label}
+      </span>
+      {onLinkUpdate && link.url && (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditing(true); }}
+          className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors ml-0.5"
+          title="Edit link"
+        >
+          <Pencil className="w-2.5 h-2.5" />
+        </button>
+      )}
+    </>
+  );
+
+  const cls = `${baseCls} cursor-pointer hover:brightness-125`;
 
   const el = link.url ? (
     <a href={link.url} target="_blank" rel="noreferrer" className={cls} style={style}
       onMouseEnter={onEnter} onMouseLeave={onLeave}>
       {inner}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--background)]" />
+      {arrow}
     </a>
   ) : (
     <button className={cls} style={style}
       onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={link.onClick}>
       {inner}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--background)]" />
+      {arrow}
     </button>
   );
 
@@ -78,7 +140,10 @@ function Bubble({ link, anchor, onEnter, onLeave }: {
 
 // ─── Single stacked icon chip with its own hover tooltip ────────────────────
 
-function LinkChip({ link, index, total }: { link: LinkDef; index: number; total: number }) {
+function LinkChip({ link, index, total, onLinkUpdate }: {
+  link: LinkDef; index: number; total: number;
+  onLinkUpdate?: (linkKey: string, newUrl: string) => void;
+}) {
   const [showBubble, setShowBubble] = useState(false);
   const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0 });
   const [mounted, setMounted] = useState(false);
@@ -127,7 +192,7 @@ function LinkChip({ link, index, total }: { link: LinkDef; index: number; total:
     <>
       {chip}
       {showBubble && mounted && (
-        <Bubble link={link} anchor={anchor} onEnter={show} onLeave={scheduleHide} />
+        <Bubble link={link} anchor={anchor} onEnter={show} onLeave={scheduleHide} onLinkUpdate={onLinkUpdate} />
       )}
     </>
   );
@@ -139,16 +204,17 @@ interface Props {
   feature: Feature;
   ringColor?: string;
   onPackageClick?: (ios: boolean) => void;
+  onLinkUpdate?: (linkKey: string, newUrl: string) => void;
 }
 
-export function LinkIcons({ feature, onPackageClick }: Props) {
+export function LinkIcons({ feature, onPackageClick, onLinkUpdate }: Props) {
   const links = buildLinks(feature, onPackageClick);
   if (links.length === 0) return <span className="text-gray-600 text-xs">—</span>;
 
   return (
     <div className="flex items-center">
       {links.map((link, i) => (
-        <LinkChip key={link.key} link={link} index={i} total={links.length} />
+        <LinkChip key={link.key} link={link} index={i} total={links.length} onLinkUpdate={onLinkUpdate} />
       ))}
     </div>
   );
