@@ -19,6 +19,14 @@ import {
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
 import { readFeatureCache, writeFeatureCache } from './feature-cache';
+
+/** Append a new version to the history if it differs from the last entry. */
+function trackVersionHistory(history: string[] | undefined, newVersion: string | undefined): string[] | undefined {
+  if (!newVersion) return history;
+  const h = history ?? [];
+  if (h.length === 0 || h[h.length - 1] !== newVersion) return [...h, newVersion];
+  return h;
+}
 import {
   loadDigestState,
   saveDigestState,
@@ -2024,6 +2032,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         meegoProjectKey: TIKTOK_PROJECT_KEY,
         prd: f.prd ?? prev?.prd,
         iosVersion: f.iosVersion ?? prev?.iosVersion,
+        versionHistory: trackVersionHistory(prev?.versionHistory, f.iosVersion),
       } as import('./types').Feature;
     });
     await writeFeatureCache(updatedFeatures);
