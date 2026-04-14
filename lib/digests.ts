@@ -2368,6 +2368,33 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     );
   }
 
+  // Step 6b: Write risk data to the GCS feature cache so the Hamlet UI can
+  // display the risk level + notes columns. Also includes delay info.
+  try {
+    const featureCache = await readFeatureCache();
+    if (featureCache) {
+      const riskByWorkItemId = new Map(riskFindings.map(r => [r.feature.workItemId, r]));
+      let updated = 0;
+      for (const cached of featureCache.features) {
+        const fId = cached.meegoIssueId ?? cached.id;
+        const finding = riskByWorkItemId.get(fId);
+        if (finding) {
+          cached.riskLevel = finding.level;
+          const notes: string[] = [...finding.reasons];
+          if (finding.delay) notes.unshift(finding.delay.detail);
+          cached.riskNotes = notes.length > 0 ? notes : undefined;
+          updated++;
+        }
+        // Features not in riskFindings (not in dev) keep their previous risk data
+        // or have none — don't clear, since they might be in QA/AB with a prior risk.
+      }
+      await writeFeatureCache(featureCache.features);
+      console.log(`[digests] risk data written to feature cache for ${updated} features`);
+    }
+  } catch (e) {
+    console.warn('[digests] failed to write risk data to feature cache:', e);
+  }
+
   // Step 7: Send risk digest (always) — interactive card with per-feature
   // buttons, posted to the PM group chat.
   let riskSent = false;

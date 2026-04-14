@@ -118,6 +118,29 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <TeamAvatars feature={feature} ringColor="var(--card)" onToggleAgent={onToggleAgent} />
       </div>
 
+      {/* Risk */}
+      <div className="hidden sm:flex items-center py-3 pl-4">
+        {feature.riskLevel && (
+          <span className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap ${
+            feature.riskLevel === 'red' ? 'text-red-600' :
+            feature.riskLevel === 'yellow' ? 'text-amber-600' :
+            'text-emerald-600'
+          }`}>
+            {feature.riskLevel === 'red' ? '🔴' : feature.riskLevel === 'yellow' ? '🟡' : '🟢'}
+            {feature.riskLevel === 'red' ? 'High' : feature.riskLevel === 'yellow' ? 'Medium' : 'Low'}
+          </span>
+        )}
+      </div>
+
+      {/* Notes */}
+      <div className="hidden sm:flex items-center py-3 pl-4 max-w-[200px]">
+        {feature.riskNotes && feature.riskNotes.length > 0 && feature.riskLevel !== 'green' && (
+          <span className="text-xs text-[var(--muted)] truncate" title={feature.riskNotes.join(', ')}>
+            {feature.riskNotes.join(', ')}
+          </span>
+        )}
+      </div>
+
       {/* Action */}
       <div className="hidden sm:flex items-center pr-4 py-3 pl-4">
         {feature.canCompleteNode && onComplete && (

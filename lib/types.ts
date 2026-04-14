@@ -53,4 +53,7 @@ export interface Feature {
   avatars?: Record<string, string>;
   agents?: string[];
   agentLastRun?: string;
+  // Daily risk assessment data (populated by the digest cron)
+  riskLevel?: 'red' | 'yellow' | 'green';
+  riskNotes?: string[];
 }
