@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAgentToken } from '@/lib/agents';
 import {
-  sendTextMessage, getLarkBotToken, searchAbReport,
+  sendTextMessage, searchAbReport,
   extractFigmaUrlFromPrd, searchLibraInChat, readDocContent,
   joinFeatureChat,
 } from '@/lib/lark';
@@ -156,21 +156,44 @@ async function handleMessage(body: LarkEvent) {
     const cache = await readFeatureCache();
     if (cache && cache.features.length > 0) {
       // Ask Gemini to identify which feature + what info is needed.
+      // The prompt explicitly tells Gemini to do fuzzy/partial matching.
       const featureNames = cache.features.map(f => f.name).join('\n');
       const matchResult = await model.generateContent(
-        `Given this user message: "${userText}"\n\nTwo tasks:\n1. Which feature is the user asking about? Return the exact name from the list, or "NONE".\n2. What info are they looking for? Return a short keyword like "figma", "status", "libra", "team", "risk", "prd", "ab_report", "general", etc.\n\nReturn as: FEATURE_NAME|||INFO_TYPE\n\nFeatures:\n${featureNames}`
+        `Given this user message: "${userText}"\n\nTwo tasks:\n1. Which feature is the user most likely asking about? Match by partial name, keywords, or abbreviation — the user may omit words like "in", "the", "for" or use shorthand. Return the EXACT name from the list that best matches, or "NONE" only if truly no feature is related.\n2. What info are they looking for? Return a short keyword like "figma", "status", "libra", "team", "risk", "prd", "ab_report", "existence", "general", etc.\n\nReturn as: FEATURE_NAME|||INFO_TYPE\n\nFeatures:\n${featureNames}`
       );
       const matchRaw = matchResult.response.text().trim();
-      const [matchedName, infoType] = matchRaw.split('|||').map(s => s.trim());
+      const [matchedName, infoTypeParsed] = matchRaw.split('|||').map(s => s.trim());
+      let infoType = infoTypeParsed;
 
-      if (matchedName && matchedName !== 'NONE') {
-        const feature = cache.features.find(f =>
-          f.name === matchedName ||
-          f.name.toLowerCase().includes(matchedName.toLowerCase()) ||
-          matchedName.toLowerCase().includes(f.name.toLowerCase())
-        );
+      // Fuzzy match from Gemini's response
+      let feature = matchedName && matchedName !== 'NONE'
+        ? cache.features.find(f =>
+            f.name === matchedName ||
+            f.name.toLowerCase().includes(matchedName.toLowerCase()) ||
+            matchedName.toLowerCase().includes(f.name.toLowerCase())
+          )
+        : undefined;
 
-        if (feature) {
+      // Fallback: if Gemini returned NONE or we couldn't match its response,
+      // do a simple keyword search against feature names. This catches cases
+      // like "ai self mix studio" matching "AI Self in Mix Studio".
+      if (!feature) {
+        const words = userText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        if (words.length > 0) {
+          let bestScore = 0;
+          for (const f of cache.features) {
+            const nameLower = f.name.toLowerCase();
+            const score = words.filter(w => nameLower.includes(w)).length;
+            if (score > bestScore && score >= Math.min(2, words.length)) {
+              bestScore = score;
+              feature = f;
+            }
+          }
+          if (feature && !infoType) infoType = 'general';
+        }
+      }
+
+      if (feature) {
           console.log(`[webhook] matched feature: "${feature.name}", info: "${infoType}"`);
 
           // Tier 1: start with cached data
@@ -270,7 +293,6 @@ async function handleMessage(body: LarkEvent) {
 
           featureContext = '\n\nHere is the data for feature "' + feature.name + '":\n' +
             Object.entries(data).filter(([, v]) => v).map(([k, v]) => `  ${k}: ${v}`).join('\n');
-        }
       }
 
       // General queries (no specific feature)
