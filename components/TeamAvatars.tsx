@@ -74,7 +74,7 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
       <div
         className="absolute top-full left-1/2 -translate-x-1/2
                    border-l-[5px] border-r-[5px] border-t-[5px]
-                   border-l-transparent border-r-transparent border-t-[var(--border)]"
+                   border-l-transparent border-r-transparent border-t-[var(--background)]"
       />
       <div className="flex flex-col gap-1.5">
         {pocs.map(poc => (
@@ -139,7 +139,7 @@ function AgentPicker({ pos, mounted, assignedAgents, onToggle, onClose }: {
       <div
         className="absolute top-full left-1/2 -translate-x-1/2
                    border-l-[5px] border-r-[5px] border-t-[5px]
-                   border-l-transparent border-r-transparent border-t-[#2e3460]"
+                   border-l-transparent border-r-transparent border-t-[var(--background)]"
       />
       {AVAILABLE_AGENTS.map(agent => {
         const assigned = assignedAgents.includes(agent.key);

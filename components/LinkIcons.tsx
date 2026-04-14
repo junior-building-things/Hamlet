@@ -51,7 +51,7 @@ function Bubble({ link, anchor, onEnter, onLeave }: {
     </span>
   );
 
-  const cls = "fixed flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] shadow-xl cursor-pointer hover:brightness-125 transition-colors";
+  const cls = "fixed flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)] shadow-xl cursor-pointer hover:brightness-125 transition-colors";
   const style = {
     top:       anchor.top - 6,
     left:      anchor.left + anchor.width / 2,
@@ -63,13 +63,13 @@ function Bubble({ link, anchor, onEnter, onLeave }: {
     <a href={link.url} target="_blank" rel="noreferrer" className={cls} style={style}
       onMouseEnter={onEnter} onMouseLeave={onLeave}>
       {inner}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--background)]" />
     </a>
   ) : (
     <button className={cls} style={style}
       onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={link.onClick}>
       {inner}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--background)]" />
     </button>
   );
 
