@@ -27,9 +27,9 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): 
   if (feature.figmaUrl)
     links.push({ key: 'figma', label: 'Figma', icon: '/figma.svg', iconW: 10, iconH: 14, color: '#FF7362', url: feature.figmaUrl });
   if (feature.packageQrUrl)
-    links.push({ key: 'android-pkg', label: 'Android Package', icon: feature.packageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: '#ffffff', onClick: () => onPackageClick?.(false) });
+    links.push({ key: 'android-pkg', label: 'Android Package', icon: feature.packageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: 'var(--foreground)', onClick: () => onPackageClick?.(false) });
   if (feature.iosPackageQrUrl)
-    links.push({ key: 'ios-pkg', label: 'iOS Package', icon: feature.iosPackageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: '#ffffff', onClick: () => onPackageClick?.(true) });
+    links.push({ key: 'ios-pkg', label: 'iOS Package', icon: feature.iosPackageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: 'var(--foreground)', onClick: () => onPackageClick?.(true) });
   if (feature.libraUrl)
     links.push({ key: 'libra', label: 'Libra', icon: '/libra.png', iconW: 14, iconH: 14, color: '#0073F0', url: feature.libraUrl });
   if (feature.abReportUrl)
