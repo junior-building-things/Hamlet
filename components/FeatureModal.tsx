@@ -164,13 +164,13 @@ function AvatarInfoField({ label, value }: { label: string; value?: string }) {
     <div className="flex flex-col gap-0.5">
       <span className="text-[11px] text-gray-500 font-medium">{label}</span>
       {names.length === 0 ? (
-        <span className="text-sm text-gray-200">—</span>
+        <span className="text-sm text-[var(--foreground)]">—</span>
       ) : (
         <div className="flex flex-col gap-1 mt-0.5">
           {names.map(name => (
             <div key={name} className="flex items-center gap-1.5">
               <UserAvatar name={name} url={AV[name]} size={5} />
-              <span className="text-sm text-gray-200">{name}</span>
+              <span className="text-sm text-[var(--foreground)]">{name}</span>
             </div>
           ))}
         </div>
@@ -183,7 +183,7 @@ function InfoField({ label, value }: { label: string; value?: string }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[11px] text-gray-500 font-medium">{label}</span>
-      <span className="text-sm text-gray-200">{value || '—'}</span>
+      <span className="text-sm text-[var(--foreground)]">{value || '—'}</span>
     </div>
   );
 }
