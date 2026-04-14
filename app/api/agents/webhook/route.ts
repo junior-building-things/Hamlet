@@ -177,21 +177,46 @@ async function handleMessage(body: LarkEvent) {
           const data: Record<string, string> = {};
           Object.assign(data, formatFeatureFields(feature));
 
-          // Tier 2: Meego MCP — fetch live brief if key fields are missing
-          const needsMeego = !feature.status || !feature.priority ||
-            (infoType && /status|priority|owner|team|version/i.test(infoType) && !feature.iosVersion);
-          if (needsMeego && feature.meegoUrl) {
+          // Tier 2: Meego MCP — fetch live brief if any relevant field is
+          // missing. Covers status, priority, version, team, PRD, and more.
+          const hasGaps = !feature.status || !feature.priority || !feature.iosVersion ||
+            !feature.techOwner || !feature.prd ||
+            (infoType && /status|priority|owner|team|version|tech|ios|android|server|qa|prd/i.test(infoType));
+          if (hasGaps && feature.meegoUrl) {
             try {
               const raw = await callMeegoMcp('get_workitem_brief', {
                 url: feature.meegoUrl,
                 fields: ['wiki', 'priority', 'field_08a9ca', 'field_c88970', 'ios_actual_online_version', 'android_actual_online_version'],
               });
               const brief = JSON.parse(raw) as {
-                work_item_attribute?: { work_item_name?: string; work_item_status?: { name?: string } };
+                work_item_attribute?: {
+                  work_item_name?: string;
+                  work_item_status?: { name?: string };
+                  role_members?: Array<{ key?: string; name?: string; members?: Array<{ name?: string; email?: string }> }>;
+                };
                 work_item_fields?: Array<{ key?: string; name?: string; value?: unknown }>;
               };
+              // Status
               if (brief.work_item_attribute?.work_item_status?.name)
                 data['Status (live)'] = brief.work_item_attribute.work_item_status.name;
+              // Team — fill any missing role from the brief
+              const roles = brief.work_item_attribute?.role_members ?? [];
+              const getRole = (key: string, alt?: string) =>
+                roles.find(r => r.key === key || (alt && r.name === alt))?.members?.map(m => m.name).filter(Boolean).join(', ') ?? '';
+              if (!data['Tech Owner']) { const v = getRole('Tech_Owner', 'Tech owner'); if (v) data['Tech Owner'] = v; }
+              if (!data['PM'])         { const v = getRole('PM'); if (v) data['PM'] = v; }
+              if (!data['iOS'])        { const v = getRole('iOS'); if (v) data['iOS'] = v; }
+              if (!data['Android'])    { const v = getRole('Android'); if (v) data['Android'] = v; }
+              if (!data['Server'])     { const v = getRole('Server'); if (v) data['Server'] = v; }
+              if (!data['QA'])         { const v = getRole('QA'); if (v) data['QA'] = v; }
+              if (!data['UX'])         { const v = getRole('UI_UX', 'UI&UX'); if (v) data['UX'] = v; }
+              // PRD
+              const wf = brief.work_item_fields ?? [];
+              const getField = (k: string) => {
+                const f = wf.find(x => x.key === k);
+                return typeof f?.value === 'string' ? f.value : '';
+              };
+              if (!data['PRD']) { const v = getField('wiki'); if (v) data['PRD'] = v; }
               console.log('[webhook] Tier 2: enriched from Meego brief');
             } catch { /* skip */ }
           }
