@@ -536,7 +536,26 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     // Brief might be markdown, not JSON — fall through to node-based status.
   }
 
-  const activeNodes = parseActiveNodes(raw);
+  // Parse active nodes — try JSON first, fall back to markdown.
+  let activeNodes: Array<{ key: string; name: string; owners: string }> = [];
+  try {
+    const briefJson = JSON.parse(raw) as {
+      work_item_current_node?: Array<{
+        id?: string;
+        name?: string;
+        owners?: Array<{ email?: string; name?: string }>;
+      }>;
+    };
+    activeNodes = (briefJson.work_item_current_node ?? [])
+      .filter(n => n.name)
+      .map(n => ({
+        key: n.id ?? '',
+        name: n.name ?? '',
+        owners: (n.owners ?? []).map(o => o.email ?? '').filter(Boolean).join(','),
+      }));
+  } catch {
+    activeNodes = parseActiveNodes(raw);
+  }
   const best = pickNode(activeNodes.map(n => ({ key: n.key, name: n.name })));
   const bestWithOwners = activeNodes.find(n => n.key === best?.key);
   const canCompleteNode = bestWithOwners?.owners.includes(MY_EMAIL) ?? false;
