@@ -110,12 +110,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       <div className="hidden sm:flex items-center py-3 pl-4 overflow-visible relative">
-        <LinkIcons feature={feature} ringColor="#13162a" onPackageClick={(ios) => { setShowPackage(true); if (ios) setShowIos(true); }} />
+        <LinkIcons feature={feature} ringColor="var(--background)" onPackageClick={(ios) => { setShowPackage(true); if (ios) setShowIos(true); }} />
       </div>
 
       {/* Team avatars */}
       <div className="hidden sm:flex items-center py-3 pl-4">
-        <TeamAvatars feature={feature} ringColor="#13162a" onToggleAgent={onToggleAgent} />
+        <TeamAvatars feature={feature} ringColor="var(--background)" onToggleAgent={onToggleAgent} />
       </div>
 
       {/* Action */}
