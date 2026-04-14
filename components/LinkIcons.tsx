@@ -63,13 +63,13 @@ function Bubble({ link, anchor, onEnter, onLeave }: {
     <a href={link.url} target="_blank" rel="noreferrer" className={cls} style={style}
       onMouseEnter={onEnter} onMouseLeave={onLeave}>
       {inner}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--border)]" />
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
     </a>
   ) : (
     <button className={cls} style={style}
       onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={link.onClick}>
       {inner}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--border)]" />
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
     </button>
   );
 
