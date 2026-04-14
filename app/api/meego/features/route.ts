@@ -30,8 +30,9 @@ export async function GET(req: Request) {
   // Live fetch from Meego.
   try {
     const features = await fetchUserStories(projectKey);
-    // Write to GCS cache in background (don't block the response).
-    writeFeatureCache(features).catch(e => console.warn('[features] cache write failed:', e));
+    // Write to GCS cache before returning so per-feature syncs that follow
+    // don't race against the write and accidentally restore deleted features.
+    try { await writeFeatureCache(features); } catch (e) { console.warn('[features] cache write failed:', e); }
     return NextResponse.json({ features, cached: false });
   } catch (err) {
     console.error('Failed to fetch Meego features:', err);
