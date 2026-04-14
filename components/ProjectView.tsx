@@ -567,7 +567,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           <button
             onClick={syncAll}
             disabled={syncingAll || detailSyncTotal > 0}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--card-hover)] hover:bg-[#252a4a] text-gray-300 hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--card)] border border-[var(--border)] hover:bg-[var(--card-hover)] text-[var(--muted)] hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
           >
             {syncingAll || detailSyncTotal > 0
               ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
