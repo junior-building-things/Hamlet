@@ -31,10 +31,10 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): 
     links.push({ key: 'android-pkg', label: 'Android Package', icon: feature.packageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: '#ffffff', onClick: () => onPackageClick?.(false) });
   if (feature.iosPackageQrUrl)
     links.push({ key: 'ios-pkg', label: 'iOS Package', icon: feature.iosPackageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: '#ffffff', onClick: () => onPackageClick?.(true) });
-  if (feature.abReportUrl)
-    links.push({ key: 'ab', label: 'AB Report', icon: '/abreport.png', iconW: 14, iconH: 14, color: '#F59E0B', url: feature.abReportUrl });
   if (feature.libraUrl)
-    links.push({ key: 'libra', label: 'Libra', icon: '/libra.png', iconW: 14, iconH: 14, color: '#8B5CF6', url: feature.libraUrl });
+    links.push({ key: 'libra', label: 'Libra', icon: '/libra.png', iconW: 14, iconH: 14, color: '#0073F0', url: feature.libraUrl });
+  if (feature.abReportUrl)
+    links.push({ key: 'ab', label: 'AB Report', icon: '/abreport.png', iconW: 14, iconH: 14, color: '#108453', url: feature.abReportUrl });
   return links;
 }
 
