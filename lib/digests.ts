@@ -2226,7 +2226,12 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       // Override the finding's display if Delayed is active. The level
       // bumps to red so card sorting still places it at the top.
       if (activeDelay && activeDelay.runsLeftToShow > 0) {
-        finding.delay = { detail: activeDelay.detail };
+        // Append the detection date to the delay detail for the notes column.
+        const delayDate = new Date(activeDelay.detectedAtIso);
+        const dateSuffix = !isNaN(delayDate.getTime())
+          ? ` on ${delayDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' })}`
+          : '';
+        finding.delay = { detail: `${activeDelay.detail}${dateSuffix}` };
         finding.level = 'red';
       }
 
