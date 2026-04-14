@@ -615,10 +615,15 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     console.warn('[meego] avatar fetch failed:', e);
   }
 
+  // Skip expensive lookups (version, Figma, AB report, chat, Libra) for
+  // completed features — their links won't change and they don't need
+  // package QR codes or chat searches.
+  const isDone = overallStatusKey === 'end';
+
   // Fetch version from work item brief. Priority: launched > planned, lowest wins.
   // The MCP returns JSON now — extract version names from the work_item_fields array.
   let iosVersion = '';
-  try {
+  if (isDone) { /* skip version fetch for done features */ } else try {
     const versionFields = ['ios_actual_online_version', 'android_actual_online_version', 'field_08a9ca', 'field_c88970'];
     const versionRaw = await callMeegoMcp('get_workitem_brief', {
       url: meegoUrl,
@@ -687,7 +692,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Extract Figma URL from the PRD (best-effort)
   let figmaUrl = '';
-  if (prd) {
+  if (!isDone && prd) {
     try {
       figmaUrl = await extractFigmaUrlFromPrd(prd);
     } catch { /* ignore — Figma link is optional */ }
@@ -695,24 +700,24 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Libra URL may already be set from the JSON brief parsing above
   // (effect_analyze_link_t). If not, try the legacy markdown parse.
-  if (!libraUrl) {
+  if (!isDone && !libraUrl) {
     libraUrl = parseWorkItemField(raw, 'TikTok-T 实验链接');
   }
 
   // Search for AB report on Lark Drive (best-effort) — also extracts Libra URL as fallback
   let abReportUrl = '';
-  if (workItemName) {
+  if (!isDone && workItemName) {
     try {
       const abResult = await searchAbReport(workItemName, userAccessToken, prd);
       abReportUrl = abResult.abReportUrl;
       if (!libraUrl) libraUrl = abResult.libraUrl;
-      console.warn(`[sync] "${workItemName}": libraFromMeego=${libraUrl ? 'yes' : 'no'}, libraFromAB=${abResult.libraUrl ? 'yes' : 'no'}, abReport=${abReportUrl ? 'found' : 'empty'}`);
     } catch (e) {
       console.warn('[sync] AB report search error:', e);
     }
   }
 
-  // Add bot to the feature's group chat and find package QR code
+  // Add bot to the feature's group chat and find package QR code.
+  // Skip for done features — no need for chat/package/Libra lookups.
   // Only join groups for stories created in 2026+
 
   const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
@@ -733,7 +738,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let iosPackageQrUrl = '';
   let iosPackageDownloadUrl = '';
   let chatId = cachedChatId ?? '';
-  if (workItemName) {
+  if (!isDone && workItemName) {
     try {
       if (!chatId) {
         chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl, createdYear < 2026)) ?? '';
