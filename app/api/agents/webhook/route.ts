@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAgentToken } from '@/lib/agents';
-import { sendTextMessage } from '@/lib/lark';
+import {
+  sendTextMessage, getLarkBotToken, searchAbReport,
+  extractFigmaUrlFromPrd, searchLibraInChat, readDocContent,
+  joinFeatureChat,
+} from '@/lib/lark';
 import { readFeatureCache } from '@/lib/feature-cache';
+import { callMeegoMcp } from '@/lib/digests';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Feature } from '@/lib/types';
 
@@ -140,20 +145,25 @@ async function handleMessage(body: LarkEvent) {
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
   const chatType = message.chat_type === 'p2p' ? 'direct message' : 'group chat';
 
-  // ── Feature lookup: find relevant feature data for the question ──────────
+  // ── Feature lookup: 5-tier data resolution ──────────────────────────────
+  // 1. GCS cache (instant)
+  // 2. Meego MCP (live brief for missing fields)
+  // 3. Lark Drive search (AB reports, docs)
+  // 4. PRD doc content (Figma, design details)
+  // 5. Lark group chat (Libra, recent discussions)
   let featureContext = '';
   try {
     const cache = await readFeatureCache();
     if (cache && cache.features.length > 0) {
-      // Ask Gemini to identify which feature (if any) the user is asking about.
+      // Ask Gemini to identify which feature + what info is needed.
       const featureNames = cache.features.map(f => f.name).join('\n');
       const matchResult = await model.generateContent(
-        `Given this user message: "${userText}"\n\nWhich of these features is the user asking about? Return ONLY the exact feature name, or "NONE" if the question is not about a specific feature.\n\nFeatures:\n${featureNames}`
+        `Given this user message: "${userText}"\n\nTwo tasks:\n1. Which feature is the user asking about? Return the exact name from the list, or "NONE".\n2. What info are they looking for? Return a short keyword like "figma", "status", "libra", "team", "risk", "prd", "ab_report", "general", etc.\n\nReturn as: FEATURE_NAME|||INFO_TYPE\n\nFeatures:\n${featureNames}`
       );
-      const matchedName = matchResult.response.text().trim();
+      const matchRaw = matchResult.response.text().trim();
+      const [matchedName, infoType] = matchRaw.split('|||').map(s => s.trim());
 
       if (matchedName && matchedName !== 'NONE') {
-        // Fuzzy match — find the closest feature name
         const feature = cache.features.find(f =>
           f.name === matchedName ||
           f.name.toLowerCase().includes(matchedName.toLowerCase()) ||
@@ -161,13 +171,80 @@ async function handleMessage(body: LarkEvent) {
         );
 
         if (feature) {
-          featureContext = formatFeatureContext(feature);
-          console.log(`[webhook] matched feature: "${feature.name}"`);
+          console.log(`[webhook] matched feature: "${feature.name}", info: "${infoType}"`);
+
+          // Tier 1: start with cached data
+          const data: Record<string, string> = {};
+          Object.assign(data, formatFeatureFields(feature));
+
+          // Tier 2: Meego MCP — fetch live brief if key fields are missing
+          const needsMeego = !feature.status || !feature.priority ||
+            (infoType && /status|priority|owner|team|version/i.test(infoType) && !feature.iosVersion);
+          if (needsMeego && feature.meegoUrl) {
+            try {
+              const raw = await callMeegoMcp('get_workitem_brief', {
+                url: feature.meegoUrl,
+                fields: ['wiki', 'priority', 'field_08a9ca', 'field_c88970', 'ios_actual_online_version', 'android_actual_online_version'],
+              });
+              const brief = JSON.parse(raw) as {
+                work_item_attribute?: { work_item_name?: string; work_item_status?: { name?: string } };
+                work_item_fields?: Array<{ key?: string; name?: string; value?: unknown }>;
+              };
+              if (brief.work_item_attribute?.work_item_status?.name)
+                data['Status (live)'] = brief.work_item_attribute.work_item_status.name;
+              console.log('[webhook] Tier 2: enriched from Meego brief');
+            } catch { /* skip */ }
+          }
+
+          // Tier 3: Lark Drive search — for AB report if missing + requested
+          if (!data['AB Report'] && infoType && /ab|report|experiment/i.test(infoType)) {
+            try {
+              const abResult = await searchAbReport(feature.name, undefined, feature.prd);
+              if (abResult.abReportUrl) data['AB Report'] = abResult.abReportUrl;
+              if (abResult.libraUrl) data['Libra'] = abResult.libraUrl;
+              console.log('[webhook] Tier 3: searched Lark Drive for AB report');
+            } catch { /* skip */ }
+          }
+
+          // Tier 4: PRD doc content — for Figma if missing + requested
+          if (!data['Figma'] && infoType && /figma|design|ui/i.test(infoType) && feature.prd) {
+            try {
+              const figma = await extractFigmaUrlFromPrd(feature.prd);
+              if (figma) data['Figma'] = figma;
+              console.log('[webhook] Tier 4: extracted Figma from PRD');
+            } catch { /* skip */ }
+          }
+          // Also read PRD content for general design questions
+          if (infoType && /prd|design|spec|requirement|what.*building/i.test(infoType) && feature.prd) {
+            try {
+              const prdContent = await readDocContent(feature.prd);
+              if (prdContent && prdContent !== '(empty document)') {
+                data['PRD Content (excerpt)'] = prdContent.slice(0, 1500);
+                console.log('[webhook] Tier 4: read PRD content');
+              }
+            } catch { /* skip */ }
+          }
+
+          // Tier 5: Lark group chat — for Libra, recent discussions
+          if (!data['Libra'] && infoType && /libra|experiment|ab.*link/i.test(infoType)) {
+            try {
+              const chatId = feature.chatId || (feature.meegoUrl
+                ? (await joinFeatureChat(feature.name, undefined, feature.meegoUrl, true)) ?? ''
+                : '');
+              if (chatId) {
+                const libra = await searchLibraInChat(chatId);
+                if (libra) data['Libra'] = libra;
+                console.log('[webhook] Tier 5: searched chat for Libra');
+              }
+            } catch { /* skip */ }
+          }
+
+          featureContext = '\n\nHere is the data for feature "' + feature.name + '":\n' +
+            Object.entries(data).filter(([, v]) => v).map(([k, v]) => `  ${k}: ${v}`).join('\n');
         }
       }
 
-      // If no specific feature matched but the question is general (e.g.
-      // "how many features are in dev?"), provide a summary.
+      // General queries (no specific feature)
       if (!featureContext && /how many|list|all|summary|overview/i.test(userText)) {
         const statusCounts: Record<string, number> = {};
         for (const f of cache.features) {
@@ -213,39 +290,36 @@ Reply with ONLY your response text (no quotes, no explanation).`;
 }
 
 /**
- * Format a Feature into a context block that Gemini can use to answer
- * questions. Includes all available fields so Gemini can pick the
- * relevant ones based on the user's question.
+ * Extract all available fields from a Feature into a flat key-value map.
+ * Used as the starting point for the tiered lookup — higher tiers can
+ * add/overwrite fields if the cache doesn't have them.
  */
-function formatFeatureContext(f: Feature): string {
-  const lines: string[] = [
-    '',
-    `Here is the data for feature "${f.name}":`,
-  ];
-  if (f.status)          lines.push(`  Status: ${f.status}`);
-  if (f.priority)        lines.push(`  Priority: ${f.priority}`);
-  if (f.iosVersion)      lines.push(`  Version: ${f.iosVersion}`);
-  if (f.owner)           lines.push(`  Owner: ${f.owner}`);
-  if (f.pmOwner)         lines.push(`  PM: ${f.pmOwner}`);
-  if (f.techOwner)       lines.push(`  Tech Owner: ${f.techOwner}`);
-  if (f.iosOwner)        lines.push(`  iOS: ${f.iosOwner}`);
-  if (f.androidOwner)    lines.push(`  Android: ${f.androidOwner}`);
-  if (f.serverOwner)     lines.push(`  Server: ${f.serverOwner}`);
-  if (f.qaOwner)         lines.push(`  QA: ${f.qaOwner}`);
-  if (f.uiuxOwner)       lines.push(`  UX: ${f.uiuxOwner}`);
-  if (f.daOwner)         lines.push(`  DS: ${f.daOwner}`);
-  if (f.contentDesigner) lines.push(`  Content Designer: ${f.contentDesigner}`);
-  if (f.prd)             lines.push(`  PRD: ${f.prd}`);
-  if (f.figmaUrl)        lines.push(`  Figma: ${f.figmaUrl}`);
-  if (f.meegoUrl)        lines.push(`  Meego: ${f.meegoUrl}`);
-  if (f.complianceUrl)   lines.push(`  Compliance: ${f.complianceUrl}`);
-  if (f.abReportUrl)     lines.push(`  AB Report: ${f.abReportUrl}`);
-  if (f.libraUrl)        lines.push(`  Libra: ${f.libraUrl}`);
-  if (f.riskLevel)       lines.push(`  Risk: ${f.riskLevel === 'red' ? 'High' : f.riskLevel === 'yellow' ? 'Medium' : 'Low'}`);
-  if (f.riskNotes?.length) lines.push(`  Risk Notes: ${f.riskNotes.join(', ')}`);
-  if (f.quarterlyCycle)  lines.push(`  Quarterly Cycle: ${f.quarterlyCycle}`);
-  if (f.businessLine)    lines.push(`  Business Line: ${f.businessLine}`);
-  if (f.lastUpdated)     lines.push(`  Last Updated: ${f.lastUpdated}`);
-  if (f.versionHistory?.length) lines.push(`  Version History: ${f.versionHistory.join(' → ')}`);
-  return lines.join('\n');
+function formatFeatureFields(f: Feature): Record<string, string> {
+  const d: Record<string, string> = {};
+  if (f.status)          d['Status'] = f.status;
+  if (f.priority)        d['Priority'] = f.priority;
+  if (f.iosVersion)      d['Version'] = f.iosVersion;
+  if (f.owner)           d['Owner'] = f.owner;
+  if (f.pmOwner)         d['PM'] = f.pmOwner;
+  if (f.techOwner)       d['Tech Owner'] = f.techOwner;
+  if (f.iosOwner)        d['iOS'] = f.iosOwner;
+  if (f.androidOwner)    d['Android'] = f.androidOwner;
+  if (f.serverOwner)     d['Server'] = f.serverOwner;
+  if (f.qaOwner)         d['QA'] = f.qaOwner;
+  if (f.uiuxOwner)       d['UX'] = f.uiuxOwner;
+  if (f.daOwner)         d['DS'] = f.daOwner;
+  if (f.contentDesigner) d['Content Designer'] = f.contentDesigner;
+  if (f.prd)             d['PRD'] = f.prd;
+  if (f.figmaUrl)        d['Figma'] = f.figmaUrl;
+  if (f.meegoUrl)        d['Meego'] = f.meegoUrl;
+  if (f.complianceUrl)   d['Compliance'] = f.complianceUrl;
+  if (f.abReportUrl)     d['AB Report'] = f.abReportUrl;
+  if (f.libraUrl)        d['Libra'] = f.libraUrl;
+  if (f.riskLevel)       d['Risk'] = f.riskLevel === 'red' ? 'High' : f.riskLevel === 'yellow' ? 'Medium' : 'Low';
+  if (f.riskNotes?.length) d['Risk Notes'] = f.riskNotes.join(', ');
+  if (f.quarterlyCycle)  d['Quarterly Cycle'] = f.quarterlyCycle;
+  if (f.businessLine)    d['Business Line'] = f.businessLine;
+  if (f.lastUpdated)     d['Last Updated'] = f.lastUpdated;
+  if (f.versionHistory?.length) d['Version History'] = f.versionHistory.join(' → ');
+  return d;
 }
