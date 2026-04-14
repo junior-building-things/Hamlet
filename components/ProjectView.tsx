@@ -269,31 +269,48 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   useEffect(() => {
     async function init() {
-      // Try loading from server-side GCS cache first (instant, no Meego call).
-      let list: Feature[] | null = null;
-      let cacheAge = Infinity;
+      // Step 1: Show cached data instantly from GCS (enriched fields, risk, etc.)
+      let cached: Feature[] | null = null;
       try {
         const cacheRes = await fetch('/api/features/cache');
         if (cacheRes.ok) {
-          const cacheData = await cacheRes.json() as { features?: Feature[]; updatedAt?: string };
+          const cacheData = await cacheRes.json() as { features?: Feature[] };
           if (cacheData.features && cacheData.features.length > 0) {
-            list = cacheData.features;
-            setFeatures(list);
-            cacheAge = cacheData.updatedAt ? Date.now() - Date.parse(cacheData.updatedAt) : Infinity;
+            cached = cacheData.features;
+            setFeatures(cached);
           }
         }
-      } catch { /* fall through to live fetch */ }
+      } catch { /* fall through */ }
 
-      // If no cache or cache is stale, fetch live from Meego.
-      if (!list) {
-        list = await fetchFromMeego();
-      }
-
+      // Step 2: Always fetch the authoritative feature LIST from Meego in the
+      // background. This ensures deleted features don't reappear and new ones
+      // show up — the cache can have stale membership because the digest
+      // pipeline merges into it without removing features.
+      const live = await fetchFromMeego();
       setLoading(false);
 
-      // Sync details if we have features and cache is stale or missing.
-      if (list && cacheAge >= SYNC_COOLDOWN_MS) {
-        syncAllDetails(list);
+      if (live) {
+        // Merge: use the live list's feature set (authoritative), but carry
+        // forward enriched fields from the cache (risk, notes, avatars, etc.)
+        if (cached) {
+          const cacheById = new Map(cached.map(f => [f.id, f]));
+          setFeatures(live.map(f => {
+            const c = cacheById.get(f.id);
+            if (!c) return f;
+            return {
+              ...c,
+              ...f,
+              // Preserve enriched fields the live fetch doesn't have
+              riskLevel:   c.riskLevel,
+              riskNotes:   c.riskNotes,
+              figmaUrl:    f.figmaUrl    || c.figmaUrl,
+              abReportUrl: f.abReportUrl || c.abReportUrl,
+              libraUrl:    f.libraUrl    || c.libraUrl,
+              avatars:     c.avatars,
+              agents:      c.agents,
+            };
+          }));
+        }
       }
     }
 

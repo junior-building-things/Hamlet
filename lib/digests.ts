@@ -2012,12 +2012,20 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       }
     }
 
-    // Write updated feature list to GCS cache so the Hamlet UI sees fresh data.
-    // Preserve enriched fields from the previous cache (Figma, AB report, avatars,
-    // etc.), then override with fresh brief data (status, name, priority).
-    const updatedFeatures = features.map(f => {
-      const prev = prevCache?.features.find(p => (p.meegoIssueId ?? p.id) === f.workItemId);
-      return {
+    // MERGE into the existing GCS cache — update features the digest knows
+    // about, add new ones, but NEVER remove features. Only Sync All (the UI's
+    // GET /api/meego/features?force=1) is allowed to remove features, because
+    // the digest and UI discover different feature sets (digest uses Junior
+    // chats + watchlist, UI uses fetchUserStories). Replacing the cache here
+    // would drop features the digest doesn't discover and re-add ones the UI
+    // already removed.
+    const existingFeatures = prevCache?.features ?? [];
+    const existingById = new Map(existingFeatures.map(f => [f.meegoIssueId ?? f.id, f]));
+
+    // Update/add features from the digest's discovery set.
+    for (const f of features) {
+      const prev = existingById.get(f.workItemId);
+      existingById.set(f.workItemId, {
         ...(prev ?? {}),
         id: f.workItemId,
         meegoIssueId: f.workItemId,
@@ -2033,10 +2041,12 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         prd: f.prd ?? prev?.prd,
         iosVersion: f.iosVersion ?? prev?.iosVersion,
         versionHistory: trackVersionHistory(prev?.versionHistory, f.iosVersion),
-      } as import('./types').Feature;
-    });
-    await writeFeatureCache(updatedFeatures);
-    console.log(`[digests] GCS feature cache updated with ${updatedFeatures.length} features`);
+      } as import('./types').Feature);
+    }
+
+    const mergedFeatures = [...existingById.values()];
+    await writeFeatureCache(mergedFeatures);
+    console.log(`[digests] GCS feature cache merged: ${features.length} from digest, ${mergedFeatures.length} total (${mergedFeatures.length - features.length} preserved from UI)`);
   } catch (e) {
     console.warn('[digests] feature cache update / transition detection failed:', e);
   }
