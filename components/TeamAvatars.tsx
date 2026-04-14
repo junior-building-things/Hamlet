@@ -192,14 +192,14 @@ function useHoverTooltip() {
 
 // ─── Single avatar with hover tooltip ────────────────────────────────────────
 
-function RingAvatar({ poc, ringColor = '#13162a' }: { poc: Poc; ringColor?: string }) {
+function RingAvatar({ poc, ringColor }: { poc: Poc; ringColor?: string }) {
   const { open, pos, mounted, ref, onEnter, onLeave } = useHoverTooltip();
 
   return (
     <div
       ref={ref}
       className="rounded-full cursor-default"
-      style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
+      style={{ outline: `2px solid ${ringColor || 'var(--background)'}`, outlineOffset: '-1px' }}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -211,7 +211,7 @@ function RingAvatar({ poc, ringColor = '#13162a' }: { poc: Poc; ringColor?: stri
 
 // ─── "+N" overflow bubble with hover tooltip ──────────────────────────────────
 
-function OverflowBubble({ rest, ringColor = '#13162a', onAddClick }: {
+function OverflowBubble({ rest, ringColor, onAddClick }: {
   rest: Poc[]; ringColor?: string; onAddClick?: (pos: TooltipPos) => void;
 }) {
   const { open, pos, mounted, ref, onEnter, onLeave } = useHoverTooltip();
@@ -225,7 +225,7 @@ function OverflowBubble({ rest, ringColor = '#13162a', onAddClick }: {
     >
       <div
         className="w-6 h-6 rounded-full bg-[var(--card-hover)] flex items-center justify-center text-[9px] font-semibold text-gray-300 cursor-default select-none"
-        style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
+        style={{ outline: `2px solid ${ringColor || 'var(--background)'}`, outlineOffset: '-1px' }}
       >
         +{rest.length}
       </div>
@@ -236,13 +236,13 @@ function OverflowBubble({ rest, ringColor = '#13162a', onAddClick }: {
 
 // ─── "+" add agent circle ────────────────────────────────────────────────────
 
-function AddAgentCircle({ ringColor = '#13162a', onClick }: { ringColor?: string; onClick: () => void }) {
+function AddAgentCircle({ ringColor, onClick }: { ringColor?: string; onClick: () => void }) {
   return (
     <div style={{ marginLeft: '-5px', zIndex: 0 }}>
       <button
         onClick={onClick}
         className="w-6 h-6 rounded-full bg-[var(--card-hover)] flex items-center justify-center cursor-pointer hover:bg-[#252a4a] transition-colors"
-        style={{ outline: `2px solid ${ringColor}`, outlineOffset: '-1px' }}
+        style={{ outline: `2px solid ${ringColor || 'var(--background)'}`, outlineOffset: '-1px' }}
       >
         <Plus className="w-3 h-3 text-gray-400" />
       </button>
@@ -258,7 +258,7 @@ interface Props {
   onToggleAgent?: (featureId: string, agentKey: string) => void;
 }
 
-export function TeamAvatars({ feature, ringColor = '#13162a', onToggleAgent }: Props) {
+export function TeamAvatars({ feature, ringColor, onToggleAgent }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [pickerPos, setPickerPos]   = useState<TooltipPos>({ top: 0, left: 0 });
   const [mounted, setMounted]       = useState(false);
