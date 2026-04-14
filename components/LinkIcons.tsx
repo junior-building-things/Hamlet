@@ -37,82 +37,52 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): 
   return links;
 }
 
-const ICON_SIZE = 24;
-const OVERLAP   = 5;
-const SLOT_W    = ICON_SIZE - OVERLAP;
+// ─── Per-icon tooltip bubble ────────────────────────────────────────────────
 
-// ─── Tooltip showing all links ──────────────────────────────────────────────
-
-function LinksTooltip({ links, anchor, onEnter, onLeave }: {
-  links: LinkDef[];
+function Bubble({ link, anchor, onEnter, onLeave }: {
+  link: LinkDef;
   anchor: { top: number; left: number; width: number };
   onEnter: () => void;
   onLeave: () => void;
 }) {
-  const el = (
-    <div
-      className="fixed flex flex-col gap-1 px-3 py-2 rounded-lg bg-[var(--card)] border border-[var(--border)] shadow-xl"
-      style={{
-        top: anchor.top - 6,
-        left: anchor.left + anchor.width / 2,
-        transform: 'translate(-50%, -100%)',
-        zIndex: 9999,
-      }}
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-    >
-      {links.map(link => {
-        const icon = link.dynamicIcon ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] shrink-0" />
-        ) : (
-          <Image src={link.icon} alt={link.label} width={14} height={14} className="shrink-0" />
-        );
+  const inner = (
+    <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: link.color }}>
+      {link.label}
+    </span>
+  );
 
-        const inner = (
-          <>
-            {icon}
-            <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: link.color }}>
-              {link.label}
-            </span>
-          </>
-        );
+  const cls = "fixed flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] shadow-xl cursor-pointer hover:brightness-125 transition-colors";
+  const style = {
+    top:       anchor.top - 6,
+    left:      anchor.left + anchor.width / 2,
+    transform: 'translate(-50%, -100%)',
+    zIndex:    9999,
+  };
 
-        const cls = "flex items-center gap-2 px-1 py-0.5 rounded hover:bg-[#252845] transition-colors cursor-pointer";
-
-        return link.url ? (
-          <a key={link.key} href={link.url} target="_blank" rel="noreferrer" className={cls}>
-            {inner}
-          </a>
-        ) : (
-          <button key={link.key} className={cls} onClick={link.onClick}>
-            {inner}
-          </button>
-        );
-      })}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[#2e3460]" />
-    </div>
+  const el = link.url ? (
+    <a href={link.url} target="_blank" rel="noreferrer" className={cls} style={style}
+      onMouseEnter={onEnter} onMouseLeave={onLeave}>
+      {inner}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--border)]" />
+    </a>
+  ) : (
+    <button className={cls} style={style}
+      onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={link.onClick}>
+      {inner}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--border)]" />
+    </button>
   );
 
   return createPortal(el, document.body);
 }
 
-// ─── Public component ────────────────────────────────────────────────────────
+// ─── Single stacked icon chip with its own hover tooltip ────────────────────
 
-interface Props {
-  feature: Feature;
-  ringColor?: string;
-  onPackageClick?: (ios: boolean) => void;
-}
-
-export function LinkIcons({ feature, ringColor = '#13162a', onPackageClick }: Props) {
-  const links = buildLinks(feature, onPackageClick);
-  if (links.length === 0) return <span className="text-gray-600 text-xs">—</span>;
-
-  const [showTooltip, setShowTooltip] = useState(false);
+function LinkChip({ link, index, total }: { link: LinkDef; index: number; total: number }) {
+  const [showBubble, setShowBubble] = useState(false);
   const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0 });
   const [mounted, setMounted] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => { setMounted(true); }, []);
@@ -123,43 +93,63 @@ export function LinkIcons({ feature, ringColor = '#13162a', onPackageClick }: Pr
       const r = ref.current.getBoundingClientRect();
       setAnchor({ top: r.top, left: r.left, width: r.width });
     }
-    setShowTooltip(true);
+    setShowBubble(true);
   }, []);
 
   const scheduleHide = useCallback(() => {
-    hideTimer.current = setTimeout(() => setShowTooltip(false), 150);
+    hideTimer.current = setTimeout(() => setShowBubble(false), 100);
   }, []);
 
+  const iconEl = link.dynamicIcon ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] shrink-0" />
+  ) : (
+    <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 15)} height={Math.min(link.iconH, 15)} className="shrink-0" />
+  );
+
+  const chip = link.url ? (
+    <a ref={ref as React.Ref<HTMLAnchorElement>} href={link.url} target="_blank" rel="noreferrer"
+      className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--link-circle)] cursor-pointer hover:brightness-125 relative"
+      style={{ zIndex: showBubble ? 30 : total - index, marginLeft: index === 0 ? 0 : -4 }}
+      onMouseEnter={show} onMouseLeave={scheduleHide}>
+      {iconEl}
+    </a>
+  ) : (
+    <button ref={ref as React.Ref<HTMLButtonElement>}
+      className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--link-circle)] cursor-pointer hover:brightness-125 relative"
+      style={{ zIndex: showBubble ? 30 : total - index, marginLeft: index === 0 ? 0 : -4 }}
+      onMouseEnter={show} onMouseLeave={scheduleHide} onClick={link.onClick}>
+      {iconEl}
+    </button>
+  );
+
   return (
-    <div
-      ref={ref}
-      className="flex items-center cursor-pointer"
-      onMouseEnter={show}
-      onMouseLeave={scheduleHide}
-    >
-      {links.map((link, i) => {
-        const isLast = i === links.length - 1;
-        const iconEl = link.dynamicIcon ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] shrink-0" />
-        ) : (
-          <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 15)} height={Math.min(link.iconH, 15)} className="shrink-0" />
-        );
-
-        return (
-          <div
-            key={link.key}
-            className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--link-circle)] relative"
-            style={{ zIndex: links.length - i, marginLeft: i === 0 ? 0 : -4 }}
-          >
-            {iconEl}
-          </div>
-        );
-      })}
-
-      {showTooltip && mounted && (
-        <LinksTooltip links={links} anchor={anchor} onEnter={show} onLeave={scheduleHide} />
+    <>
+      {chip}
+      {showBubble && mounted && (
+        <Bubble link={link} anchor={anchor} onEnter={show} onLeave={scheduleHide} />
       )}
+    </>
+  );
+}
+
+// ─── Public component ────────────────────────────────────────────────────────
+
+interface Props {
+  feature: Feature;
+  ringColor?: string;
+  onPackageClick?: (ios: boolean) => void;
+}
+
+export function LinkIcons({ feature, onPackageClick }: Props) {
+  const links = buildLinks(feature, onPackageClick);
+  if (links.length === 0) return <span className="text-gray-600 text-xs">—</span>;
+
+  return (
+    <div className="flex items-center">
+      {links.map((link, i) => (
+        <LinkChip key={link.key} link={link} index={i} total={links.length} />
+      ))}
     </div>
   );
 }
