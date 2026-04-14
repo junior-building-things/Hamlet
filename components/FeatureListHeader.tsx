@@ -9,7 +9,6 @@ export function FeatureListHeader() {
       <span>Priority</span>
       <span className="pl-4">Links</span>
       <span className="pl-4">Team</span>
-      <span className="pl-4">Summary</span>
       <span className="pl-4">Action</span>
       <span></span>
     </div>

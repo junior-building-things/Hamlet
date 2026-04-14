@@ -118,11 +118,6 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <TeamAvatars feature={feature} ringColor="#13162a" onToggleAgent={onToggleAgent} />
       </div>
 
-      {/* Comment Summary */}
-      <span className="hidden sm:flex items-center py-3 pl-4 text-xs text-gray-400 max-w-[200px] truncate" title={feature.commentSummary}>
-        {feature.commentSummary || ''}
-      </span>
-
       {/* Action */}
       <div className="hidden sm:flex items-center pr-4 py-3 pl-4">
         {feature.canCompleteNode && onComplete && (
