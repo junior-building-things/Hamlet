@@ -33,10 +33,10 @@ function trackVersion(history: string[] | undefined, newVersion: string | undefi
 
 function priorityChipCls(key: string): string {
   switch (key) {
-    case 'P0': return 'bg-red-900/50 border border-red-700 text-red-400';
-    case 'P1': return 'bg-orange-900/50 border border-orange-700 text-orange-400';
-    case 'P2': return 'bg-blue-900/50 border border-blue-700 text-blue-400';
-    case 'P3': return 'bg-gray-800 border border-gray-700 text-gray-400';
+    case 'P0': return 'bg-red-500/15 border border-red-500/30 text-red-700';
+    case 'P1': return 'bg-orange-500/15 border border-orange-500/30 text-orange-700';
+    case 'P2': return 'bg-blue-500/15 border border-blue-500/30 text-blue-700';
+    case 'P3': return 'bg-gray-500/15 border border-gray-500/30 text-gray-600';
     default:   return 'bg-[var(--card-hover)] border border-[var(--border)] text-gray-400';
   }
 }
