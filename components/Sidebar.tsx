@@ -103,7 +103,7 @@ function NavItem({
       onClick={onClick}
       className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm transition-colors border ${
         active
-          ? 'bg-[var(--card)] border-[var(--border)] text-[var(--foreground)] font-medium shadow-sm'
+          ? 'bg-[var(--card-hover)] border-[var(--border)] text-[var(--foreground)] font-medium'
           : 'border-transparent text-gray-400 hover:text-[var(--foreground)] hover:bg-[var(--card-hover)]'
       }`}
     >
