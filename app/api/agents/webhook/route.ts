@@ -156,10 +156,12 @@ async function handleMessage(body: LarkEvent) {
     const cache = await readFeatureCache();
     if (cache && cache.features.length > 0) {
       // Ask Gemini to identify which feature + what info is needed.
-      // The prompt explicitly tells Gemini to do fuzzy/partial matching.
-      const featureNames = cache.features.map(f => f.name).join('\n');
+      // Include status so Gemini can prioritize ongoing features over done ones.
+      const featureList = cache.features
+        .map(f => `${f.name} [${f.status || 'Unknown'}]`)
+        .join('\n');
       const matchResult = await model.generateContent(
-        `Given this user message: "${userText}"\n\nTwo tasks:\n1. Which feature is the user most likely asking about? Match by partial name, keywords, or abbreviation — the user may omit words like "in", "the", "for" or use shorthand. Return the EXACT name from the list that best matches, or "NONE" only if truly no feature is related.\n2. What info are they looking for? Return a short keyword like "figma", "status", "libra", "team", "risk", "prd", "ab_report", "existence", "general", etc.\n\nReturn as: FEATURE_NAME|||INFO_TYPE\n\nFeatures:\n${featureNames}`
+        `Given this user message: "${userText}"\n\nTwo tasks:\n1. Which feature is the user most likely asking about? Match by partial name, keywords, or abbreviation — the user may omit words like "in", "the", "for" or use shorthand. IMPORTANT: If multiple features match, prefer ongoing/active features over completed ("Done") ones. Return the EXACT feature name (without the status in brackets) from the list that best matches, or "NONE" only if truly no feature is related.\n2. What info are they looking for? Return a short keyword like "figma", "status", "libra", "team", "risk", "prd", "ab_report", "existence", "general", etc.\n\nReturn as: FEATURE_NAME|||INFO_TYPE\n\nFeatures:\n${featureList}`
       );
       const matchRaw = matchResult.response.text().trim();
       const [matchedName, infoTypeParsed] = matchRaw.split('|||').map(s => s.trim());
@@ -177,13 +179,16 @@ async function handleMessage(body: LarkEvent) {
       // Fallback: if Gemini returned NONE or we couldn't match its response,
       // do a simple keyword search against feature names. This catches cases
       // like "ai self mix studio" matching "AI Self in Mix Studio".
+      // Ongoing features get a bonus over Done ones when scores are tied.
       if (!feature) {
         const words = userText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
         if (words.length > 0) {
           let bestScore = 0;
           for (const f of cache.features) {
             const nameLower = f.name.toLowerCase();
-            const score = words.filter(w => nameLower.includes(w)).length;
+            let score = words.filter(w => nameLower.includes(w)).length;
+            // Tiebreaker: prefer active features over Done
+            if (f.status !== 'Done' && f.status !== '已完成') score += 0.5;
             if (score > bestScore && score >= Math.min(2, words.length)) {
               bestScore = score;
               feature = f;
