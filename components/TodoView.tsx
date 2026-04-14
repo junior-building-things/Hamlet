@@ -43,9 +43,10 @@ export function TodoView({ features, setFeatures }: Props) {
   // Features still syncing (canCompleteNode not yet determined)
   const syncing = features.filter(f => f.canCompleteNode === undefined && f.meegoUrl);
 
-  // Bulk completion groups
-  const pmAcceptanceTodos   = todos.filter(f => f.status === 'PM Acceptance');
-  const uiuxAcceptanceTodos = todos.filter(f => f.status === 'UI/UX Acceptance');
+  // Bulk completion group — UAT consolidates PM Acceptance + UI/UX Acceptance
+  const uatTodos = todos.filter(f =>
+    f.status === 'UAT' || f.status === 'PM Acceptance' || f.status === 'UI/UX Acceptance'
+  );
 
   async function handleComplete(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
@@ -174,35 +175,20 @@ export function TodoView({ features, setFeatures }: Props) {
         </button>
       </div>
 
-      {/* Bulk completion cards — same vertical space as ProjectView's FilterBar */}
-      {(pmAcceptanceTodos.length > 0 || uiuxAcceptanceTodos.length > 0) ? (
+      {/* Bulk completion card */}
+      {uatTodos.length > 0 ? (
         <div className="px-6 py-3 mt-5 flex items-center gap-3 flex-wrap">
-          {pmAcceptanceTodos.length > 0 && (
-            <button
-              onClick={() => bulkComplete('PM Acceptance', pmAcceptanceTodos)}
-              disabled={!!bulkRunning}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-[var(--foreground)] text-xs font-semibold rounded-lg transition-colors"
-            >
-              {bulkRunning === 'PM Acceptance'
-                ? <Loader2 className="w-3 h-3 animate-spin" />
-                : <CheckCircle2 className="w-3 h-3" />}
-              Complete All PM Acceptance
-              <span className="text-blue-300 font-normal">{pmAcceptanceTodos.length}</span>
-            </button>
-          )}
-          {uiuxAcceptanceTodos.length > 0 && (
-            <button
-              onClick={() => bulkComplete('UI/UX Acceptance', uiuxAcceptanceTodos)}
-              disabled={!!bulkRunning}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-[var(--foreground)] text-xs font-semibold rounded-lg transition-colors"
-            >
-              {bulkRunning === 'UI/UX Acceptance'
-                ? <Loader2 className="w-3 h-3 animate-spin" />
-                : <CheckCircle2 className="w-3 h-3" />}
-              Complete All UI/UX Acceptance
-              <span className="text-blue-300 font-normal">{uiuxAcceptanceTodos.length}</span>
-            </button>
-          )}
+          <button
+            onClick={() => bulkComplete('UAT', uatTodos)}
+            disabled={!!bulkRunning}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+          >
+            {bulkRunning === 'UAT'
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : <CheckCircle2 className="w-3 h-3" />}
+            Complete All UAT
+            <span className="text-blue-300 font-normal">{uatTodos.length}</span>
+          </button>
         </div>
       ) : (
         <div className="mt-[52px]" />
