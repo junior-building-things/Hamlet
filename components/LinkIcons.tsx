@@ -149,7 +149,7 @@ export function LinkIcons({ feature, ringColor = '#13162a', onPackageClick }: Pr
         return (
           <div
             key={link.key}
-            className="flex items-center justify-center w-5 h-5 rounded-full bg-white relative"
+            className="flex items-center justify-center w-5 h-5 rounded-full bg-[#DCDCDC] relative"
             style={{ zIndex: links.length - i, marginLeft: i === 0 ? 0 : -4 }}
           >
             {iconEl}
