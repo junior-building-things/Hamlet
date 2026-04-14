@@ -149,8 +149,8 @@ export function LinkIcons({ feature, ringColor = '#13162a', onPackageClick }: Pr
         return (
           <div
             key={link.key}
-            className="flex items-center justify-center w-6 h-6 relative"
-            style={{ zIndex: links.length - i, width: isLast ? ICON_SIZE : SLOT_W }}
+            className="flex items-center justify-center w-6 h-6 rounded-full bg-[#13162a] border border-[#2e3460] relative"
+            style={{ zIndex: links.length - i, marginLeft: i === 0 ? 0 : -OVERLAP }}
           >
             {iconEl}
           </div>
