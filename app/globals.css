@@ -8,6 +8,7 @@
   --border: #2e3460;
   --muted: #9ca3af;
   --muted-dark: #6b7280;
+  --link-circle: #000000;
 }
 
 [data-theme="light"] {
@@ -18,6 +19,7 @@
   --border: #e0e2ea;
   --muted: #6b7280;
   --muted-dark: #9ca3af;
+  --link-circle: #DCDCDC;
 }
 
 body {

@@ -135,14 +135,11 @@ export function FilterBar({
         </button>
       </div>
 
-      {/* Theme toggle */}
-      <ThemeToggle />
-
       {/* Add Feature */}
       {!hideAddButton && (
         <button
           onClick={onAddFeature}
-          className="flex items-center gap-1.5 bg-white text-black text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors whitespace-nowrap ml-auto"
+          className="flex items-center gap-1.5 bg-[var(--foreground)] text-[var(--background)] text-sm font-semibold px-4 py-2 rounded-lg hover:opacity-80 transition-colors whitespace-nowrap ml-auto"
         >
           <Plus className="w-4 h-4" />
           Create Feature
@@ -152,7 +149,7 @@ export function FilterBar({
   );
 }
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   useEffect(() => {

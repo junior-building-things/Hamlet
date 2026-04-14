@@ -1,14 +1,14 @@
 'use client';
 
 const VERSION_COLORS = [
-  { bg: 'bg-cyan-900/50 border border-cyan-700',     text: 'text-cyan-400'    },
-  { bg: 'bg-violet-900/50 border border-violet-700',  text: 'text-violet-400'  },
-  { bg: 'bg-amber-900/50 border border-amber-700',    text: 'text-amber-400'   },
-  { bg: 'bg-emerald-900/50 border border-emerald-700', text: 'text-emerald-400' },
-  { bg: 'bg-rose-900/50 border border-rose-700',      text: 'text-rose-400'    },
-  { bg: 'bg-blue-900/50 border border-blue-700',      text: 'text-blue-400'    },
-  { bg: 'bg-orange-900/50 border border-orange-700',  text: 'text-orange-400'  },
-  { bg: 'bg-teal-900/50 border border-teal-700',      text: 'text-teal-400'    },
+  { bg: 'bg-cyan-500/15 border border-cyan-500/30',     text: 'text-cyan-700'    },
+  { bg: 'bg-violet-500/15 border border-violet-500/30',  text: 'text-violet-700'  },
+  { bg: 'bg-amber-500/15 border border-amber-500/30',    text: 'text-amber-700'   },
+  { bg: 'bg-emerald-500/15 border border-emerald-500/30', text: 'text-emerald-700' },
+  { bg: 'bg-rose-500/15 border border-rose-500/30',      text: 'text-rose-700'    },
+  { bg: 'bg-blue-500/15 border border-blue-500/30',      text: 'text-blue-700'    },
+  { bg: 'bg-orange-500/15 border border-orange-500/30',  text: 'text-orange-700'  },
+  { bg: 'bg-teal-500/15 border border-teal-500/30',      text: 'text-teal-700'    },
 ];
 
 function versionColor(version: string) {

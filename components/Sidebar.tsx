@@ -101,10 +101,10 @@ function NavItem({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm transition-colors ${
+      className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm transition-colors border ${
         active
-          ? 'bg-[var(--card-hover)] text-[var(--foreground)] font-medium'
-          : 'text-gray-400 hover:text-[var(--foreground)] hover:bg-[var(--card-hover)]'
+          ? 'bg-[var(--card)] border-[var(--border)] text-[var(--foreground)] font-medium shadow-sm'
+          : 'border-transparent text-gray-400 hover:text-[var(--foreground)] hover:bg-[var(--card-hover)]'
       }`}
     >
       {icon}

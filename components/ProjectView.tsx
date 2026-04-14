@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Feature, Priority } from '@/lib/types';
-import { FilterBar, GroupBy, SortBy, SortDir } from '@/components/FilterBar';
+import { FilterBar, GroupBy, SortBy, SortDir, ThemeToggle } from '@/components/FilterBar';
 import { FeatureCard } from '@/components/FeatureCard';
 import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
@@ -562,15 +562,18 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           </h1>
           <p className="text-sm text-gray-500 mt-1">An overview of your projects</p>
         </div>
-        <button
-          onClick={syncAll}
-          disabled={syncingAll || detailSyncTotal > 0}
-          className="flex items-center gap-2 px-4 py-2 bg-[var(--card-hover)] hover:bg-[#252a4a] text-gray-300 hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
-        >
-          {syncingAll || detailSyncTotal > 0
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
-            : <><RefreshCw className="w-3.5 h-3.5" /> Sync All</>}
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            onClick={syncAll}
+            disabled={syncingAll || detailSyncTotal > 0}
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--card-hover)] hover:bg-[#252a4a] text-gray-300 hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
+          >
+            {syncingAll || detailSyncTotal > 0
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
+              : <><RefreshCw className="w-3.5 h-3.5" /> Sync All</>}
+          </button>
+        </div>
       </div>
 
       <FilterBar
