@@ -24,11 +24,12 @@ interface Props {
 
 // ─── Inline editable text field ─────────────────────────────────────────────
 
-function EditableText({ value, onSave, className, placeholder }: {
+function EditableText({ value, onSave, className, placeholder, allowEmpty }: {
   value: string;
   onSave: (v: string) => void;
   className?: string;
   placeholder?: string;
+  allowEmpty?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -47,7 +48,7 @@ function EditableText({ value, onSave, className, placeholder }: {
   function commit() {
     setEditing(false);
     const trimmed = draft.trim();
-    if (trimmed && trimmed !== value) onSave(trimmed);
+    if (allowEmpty ? trimmed !== value : trimmed && trimmed !== value) onSave(trimmed);
     else setDraft(value); // revert
   }
 
@@ -224,6 +225,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
             onSave={v => onFieldUpdate(feature.id, { riskNotes: v.split(', ').map(s => s.trim()).filter(Boolean) })}
             className="text-xs text-[var(--muted)] truncate"
             placeholder="—"
+            allowEmpty
           />
         ) : (
           feature.riskNotes && feature.riskNotes.length > 0 && feature.riskLevel !== 'green' && (

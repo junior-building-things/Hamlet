@@ -370,7 +370,7 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       id,
       name: ext.name,
       description: '',
-      status: ext.status || 'Syncing…',
+      status: ext.status || 'Unknown',
       priority: ext.priority,
       owner: 'Thomas',
       tasks: [],

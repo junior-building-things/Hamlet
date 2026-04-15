@@ -147,6 +147,8 @@ export async function POST(req: NextRequest) {
         figmaUrl: result.figmaUrl,
         complianceUrl: result.complianceUrl,
         priority: result.priority ?? undefined,
+        canCompleteNode: result.canCompleteNode,
+        meegoNodeKey: result.meegoNodeKey,
         iosVersion: result.iosVersion,
         abReportUrl: result.abReportUrl,
         libraUrl: result.libraUrl,
