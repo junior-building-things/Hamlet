@@ -55,7 +55,7 @@ function EditableText({ value, onSave, className, placeholder }: {
     return (
       <input
         ref={inputRef}
-        className={className}
+        className={`${className} w-full min-w-0 bg-transparent border-none outline-none`}
         value={draft}
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
@@ -69,7 +69,7 @@ function EditableText({ value, onSave, className, placeholder }: {
   }
 
   return (
-    <div className="editable-cell" onClick={() => setEditing(true)}>
+    <div className="editable-cell w-full min-w-0" onClick={() => setEditing(true)}>
       <span className={className}>{value || placeholder}</span>
     </div>
   );
