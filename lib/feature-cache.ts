@@ -10,6 +10,7 @@ import { readJsonState, writeJsonState } from './gcs-state';
 import { Feature } from './types';
 
 const FEATURES_PATH = 'hamlet/features.json';
+const DELETED_IDS_PATH = 'hamlet/deleted-ids.json';
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 interface FeatureCache {
@@ -72,4 +73,33 @@ export async function updateFeatureInCache(
 export function isCacheFresh(cache: FeatureCache): boolean {
   const age = Date.now() - Date.parse(cache.updatedAt);
   return !isNaN(age) && age < CACHE_TTL_MS;
+}
+
+// ─── Deleted feature IDs ────────────────────────────────────────────────────
+
+/**
+ * Read the set of deleted feature IDs from GCS.
+ * These are features that were confirmed deleted in Meego and should
+ * be filtered out of any list_todo / MQL results.
+ */
+export async function readDeletedIds(): Promise<Set<string>> {
+  try {
+    const data = await readJsonState<{ ids: string[] }>(DELETED_IDS_PATH);
+    return new Set(data?.ids ?? []);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Add a feature ID to the persistent deleted-IDs list.
+ */
+export async function markFeatureDeleted(featureId: string): Promise<void> {
+  try {
+    const existing = await readDeletedIds();
+    existing.add(featureId);
+    await writeJsonState(DELETED_IDS_PATH, { ids: [...existing] });
+  } catch (e) {
+    console.warn('[feature-cache] markFeatureDeleted failed:', e);
+  }
 }

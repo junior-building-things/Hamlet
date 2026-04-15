@@ -4,7 +4,7 @@ import { batchFetchAvatars, refreshUserToken, searchLibraInChat, getLarkBotToken
 import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
 import { cookies } from 'next/headers';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
-import { updateFeatureInCache } from '@/lib/feature-cache';
+import { updateFeatureInCache, markFeatureDeleted } from '@/lib/feature-cache';
 
 // Cache refreshed tokens in memory to avoid refreshing on every sync call
 let cachedUserToken = '';
@@ -166,7 +166,9 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : 'Sync failed';
     // Detect deleted/not-found work items so the frontend can remove them
     if (msg.includes('not found') || msg.includes('not exist') || msg.includes('deleted')) {
+      const meegoId = meegoUrl.match(/\/detail\/(\d+)/)?.[1];
       console.warn(`[sync] work item appears deleted: ${meegoUrl}`);
+      if (meegoId) markFeatureDeleted(meegoId).catch(() => {});
       return NextResponse.json({ deleted: true });
     }
     console.error('Meego sync error:', err);

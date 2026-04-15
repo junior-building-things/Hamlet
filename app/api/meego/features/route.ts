@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchUserStories } from '@/lib/meego';
-import { readFeatureCache, writeFeatureCache, isCacheFresh } from '@/lib/feature-cache';
+import { readFeatureCache, writeFeatureCache, isCacheFresh, readDeletedIds } from '@/lib/feature-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +29,13 @@ export async function GET(req: Request) {
 
   // Live fetch from Meego.
   try {
-    const features = await fetchUserStories(projectKey);
+    const raw = await fetchUserStories(projectKey);
+    // Filter out features that were previously detected as deleted in Meego.
+    // list_todo and MQL can still return deleted work items.
+    const deletedIds = await readDeletedIds();
+    const features = deletedIds.size > 0
+      ? raw.filter(f => !deletedIds.has(f.id) && !deletedIds.has(f.meegoIssueId ?? ''))
+      : raw;
     // Write to GCS cache before returning so per-feature syncs that follow
     // don't race against the write and accidentally restore deleted features.
     try { await writeFeatureCache(features); } catch (e) { console.warn('[features] cache write failed:', e); }
