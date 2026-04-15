@@ -11,7 +11,7 @@ import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { AV } from '@/lib/avatars';
 
-const STORAGE_KEY             = 'hamlet_features_v1';
+// (localStorage feature cache removed — GCS cache is the source of truth)
 const STORAGE_GROUP_BY        = 'hamlet_group_by';
 const STORAGE_SORT_BY         = 'hamlet_sort_by';
 const STORAGE_SORT_DIR        = 'hamlet_sort_dir';
