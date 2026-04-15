@@ -152,8 +152,13 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ meegoUrl: f.meegoUrl, chatId: f.chatId }),
           });
-          if (!res.ok) return;
           const d = await res.json() as Record<string, unknown>;
+          // Remove deleted features from list and cache
+          if (d.deleted) {
+            setFeatures(prev => prev.filter(p => p.id !== f.id));
+            return;
+          }
+          if (!res.ok) return;
           // Merge avatars into both the global AV map and the feature's avatars field
           const newAvatars = (d.pocAvatars && typeof d.pocAvatars === 'object') ? d.pocAvatars as Record<string, string> : {};
           if (Object.keys(newAvatars).length > 0) Object.assign(AV, newAvatars);
@@ -315,8 +320,14 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ meegoUrl: feature.meegoUrl, chatId: feature.chatId }),
       });
-      if (!res.ok) throw new Error('Sync failed');
       const d = await res.json() as Record<string, unknown>;
+      if (d.deleted) {
+        setFeatures(prev => prev.filter(p => p.id !== feature.id));
+        toast.success(`"${feature.name}" removed (deleted in Meego)`);
+        setSyncingIds(prev => { const next = new Set(prev); next.delete(feature.id); return next; });
+        return;
+      }
+      if (!res.ok) throw new Error('Sync failed');
       const newAvatars2 = (d.pocAvatars && typeof d.pocAvatars === 'object') ? d.pocAvatars as Record<string, string> : {};
       if (Object.keys(newAvatars2).length > 0) Object.assign(AV, newAvatars2);
       setFeatures(prev => prev.map(p => p.id !== feature.id ? p : {

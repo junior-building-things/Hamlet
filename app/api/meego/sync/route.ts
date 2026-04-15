@@ -163,10 +163,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ...result, pocAvatars });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Sync failed';
+    // Detect deleted/not-found work items so the frontend can remove them
+    if (msg.includes('not found') || msg.includes('not exist') || msg.includes('deleted')) {
+      console.warn(`[sync] work item appears deleted: ${meegoUrl}`);
+      return NextResponse.json({ deleted: true });
+    }
     console.error('Meego sync error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Sync failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
