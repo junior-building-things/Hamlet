@@ -158,7 +158,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       {/* Desktop cells — direct subgrid children */}
 
       {/* Name (editable) */}
-      <div className="hidden sm:flex items-center pl-4 py-3 w-full min-w-0">
+      <div className="hidden sm:flex items-center pl-4 py-1.5 w-full min-w-0">
         {onFieldUpdate ? (
           <div className="flex items-center gap-2 w-full min-w-0">
             <EditableText
@@ -179,31 +179,31 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         )}
       </div>
 
-      <div className="hidden sm:flex py-3 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
+      <div className="hidden sm:flex py-1.5 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
         <StatusBadge status={feature.status} />
       </div>
 
-      <div className="hidden sm:flex items-center py-3 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
+      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
         <VersionBadge version={feature.iosVersion} versionHistory={feature.versionHistory} />
       </div>
 
-      <div className="hidden sm:flex py-3 cursor-pointer" onClick={() => onEdit(feature)}>
+      <div className="hidden sm:flex py-1.5 cursor-pointer" onClick={() => onEdit(feature)}>
         <PriorityBadge priority={feature.priority} />
       </div>
 
-      <div className="hidden sm:flex items-center py-3 pl-4 overflow-visible relative">
+      <div className="hidden sm:flex items-center py-1.5 pl-4 overflow-visible relative">
         <LinkIcons feature={feature} ringColor="var(--card)"
           onPackageClick={(ios) => { setShowPackage(true); if (ios) setShowIos(true); }}
           onLinkUpdate={onFieldUpdate ? handleLinkUpdate : undefined} />
       </div>
 
       {/* Team avatars */}
-      <div className="hidden sm:flex items-center py-3 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
+      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
         <TeamAvatars feature={feature} ringColor="var(--card)" onToggleAgent={onToggleAgent} />
       </div>
 
       {/* Risk */}
-      <div className="hidden sm:flex items-center py-3 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
+      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
         {feature.riskLevel && (
           <span className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap ${
             feature.riskLevel === 'red' ? 'text-red-600' :
@@ -217,7 +217,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       {/* Notes (editable) */}
-      <div className="hidden sm:flex items-center py-3 pl-4 max-w-[200px]">
+      <div className="hidden sm:flex items-center py-1.5 pl-4 max-w-[200px]">
         {onFieldUpdate ? (
           <EditableText
             value={(feature.riskNotes && feature.riskNotes.length > 0 && feature.riskLevel !== 'green') ? feature.riskNotes.join(', ') : ''}
@@ -235,7 +235,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       {/* Action */}
-      <div className="hidden sm:flex items-center pr-4 py-3 pl-4">
+      <div className="hidden sm:flex items-center pr-4 py-1.5 pl-4">
         {feature.canCompleteNode && onComplete && (
           <button
             onClick={(e) => { e.stopPropagation(); onComplete(feature); }}
@@ -251,7 +251,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       {/* Sync button */}
-      <div className="hidden sm:flex items-center pr-4 py-3">
+      <div className="hidden sm:flex items-center pr-4 py-1.5">
         {feature.meegoUrl && (
           <button
             onClick={(e) => { e.stopPropagation(); onSync(feature); }}

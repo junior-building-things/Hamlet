@@ -55,11 +55,11 @@ function groupChipCls(groupBy: GroupBy, key: string): string {
 function GroupHeader({ label, count, first, groupBy }: { label: string; count: number; first: boolean; groupBy: GroupBy }) {
   const chipCls = groupChipCls(groupBy, label === '—' ? '' : label);
   return (
-    <div className={`sm:col-span-full flex items-center gap-2.5 px-1 ${first ? 'mt-2' : 'mt-5'}`}>
+    <div className={`sm:col-span-full flex items-center gap-3 px-4 py-2 rounded-lg bg-[var(--card-hover)] border-l-3 border-[var(--border)] ${first ? 'mt-1' : 'mt-4'}`}>
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${chipCls}`}>
         {label || '—'}
       </span>
-      <span className="text-xs text-gray-600">{count}</span>
+      <span className="text-xs text-[var(--muted)]">{count} records</span>
     </div>
   );
 }
@@ -492,7 +492,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content] sm:gap-x-1.5 sm:gap-y-2';
+  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content] sm:gap-x-1.5 sm:gap-y-1';
 
   async function handleComplete(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
