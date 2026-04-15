@@ -221,8 +221,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             if (!old) return f;
             // New basic fields from MQL overwrite, but keep enriched fields from previous sync
             return { ...old, ...f,
-              // Preserve status from previous sync if MQL returns empty/Unknown
-              status:          (f.status && f.status !== 'Unknown' && f.status !== 'Syncing…') ? f.status : old.status,
+              // Always prefer existing status — MQL/list_todo returns node-level
+              // status (e.g. "UAT") which is less accurate than the overall status
+              // from syncFeatureStatus (e.g. "AB Testing").
+              status:          old.status || f.status,
               // Preserve enriched fields that MQL doesn't return (only overwrite if new value is non-empty)
               figmaUrl:        f.figmaUrl        || old.figmaUrl,
               abReportUrl:     f.abReportUrl     || old.abReportUrl,
