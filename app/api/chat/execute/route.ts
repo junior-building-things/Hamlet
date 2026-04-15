@@ -32,14 +32,16 @@ function parseNodes(raw: string): Array<{ key: string; name: string }> {
 }
 
 const NODE_TRANSLATIONS: Record<string, string> = {
-  '产品需求准备': 'Requirements Prep', '产品线内初评': 'Initial Review',
-  '技术评估&排优': 'Tech Assessment',  '需求详评':    'Detailed Review',
-  '需求评审':    'Requirements Review', '技术方案设计': 'Technical Design',
-  'iOS 开发':    'iOS Development',     'UI&UX验收':   'UI/UX Acceptance',
-  'Server上线':  'Server Launch',       'AB实验':      'AB Testing',
-  '结束':        'Done',               'PM验收':      'PM Acceptance',
-  'PM走查':      'PM Walkthrough',     '依赖判断':    'Dependency Check',
-  '合规评估':    'Compliance Review',
+  '产品需求准备': 'PRD/Design Prep',    '产品线内初评': 'Line Review',
+  '技术评估&排优': 'RD Allocation',     '需求详评':    'PRD Walkthrough',
+  '需求评审':    'PRD Walkthrough',     '技术方案设计': 'Tech Design',
+  'iOS 开发':    'Development',         'Android 开发': 'Development',
+  'Server 开发': 'Development',         'Server上线':  'Development',
+  'QA测试准备':  'QA',                  'QA测试':      'QA',
+  'QA功能测试':  'QA',                  'PM验收':      'UAT',
+  'PM走查':      'UAT',                 'UI&UX验收':   'UAT',
+  'AB实验':      'AB Testing',          '结束':        'Done',
+  '依赖判断':    'Dependency Check',    '合规评估':    'Compliance Review',
 };
 
 export const maxDuration = 30; // seconds — needed for AI generation + Lark API calls
