@@ -165,7 +165,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
             <EditableText
               value={feature.name}
               onSave={v => onFieldUpdate(feature.id, { name: v })}
-              className="text-[var(--foreground)] text-sm font-semibold truncate"
+              className="text-[var(--foreground)] text-sm font-medium truncate"
             />
             {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
           </div>
