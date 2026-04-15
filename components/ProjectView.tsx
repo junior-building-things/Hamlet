@@ -282,11 +282,11 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         }
       } catch { /* fall through */ }
 
-      // Step 2: Always fetch the authoritative feature LIST from Meego in the
-      // background. This ensures deleted features don't reappear and new ones
-      // show up — the cache can have stale membership because the digest
-      // pipeline merges into it without removing features.
-      const live = await fetchFromMeego();
+      // Step 2: Always fetch the authoritative feature LIST from Meego (force=true
+      // to bypass the GCS cache, which may contain deleted features). This ensures
+      // the feature set is authoritative — deleted features don't reappear and
+      // new ones show up.
+      const live = await fetchFromMeego(true);
       setLoading(false);
 
       if (live) {
