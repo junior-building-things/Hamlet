@@ -179,15 +179,15 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         )}
       </div>
 
-      <div className="hidden sm:flex py-3 pl-4">
+      <div className="hidden sm:flex py-3 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
         <StatusBadge status={feature.status} />
       </div>
 
-      <div className="hidden sm:flex items-center py-3 pl-4">
+      <div className="hidden sm:flex items-center py-3 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
         <VersionBadge version={feature.iosVersion} versionHistory={feature.versionHistory} />
       </div>
 
-      <div className="hidden sm:flex py-3">
+      <div className="hidden sm:flex py-3 cursor-pointer" onClick={() => onEdit(feature)}>
         <PriorityBadge priority={feature.priority} />
       </div>
 
@@ -198,12 +198,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       {/* Team avatars */}
-      <div className="hidden sm:flex items-center py-3 pl-4">
+      <div className="hidden sm:flex items-center py-3 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
         <TeamAvatars feature={feature} ringColor="var(--card)" onToggleAgent={onToggleAgent} />
       </div>
 
       {/* Risk */}
-      <div className="hidden sm:flex items-center py-3 pl-4">
+      <div className="hidden sm:flex items-center py-3 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
         {feature.riskLevel && (
           <span className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap ${
             feature.riskLevel === 'red' ? 'text-red-600' :
