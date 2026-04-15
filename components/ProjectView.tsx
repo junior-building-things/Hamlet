@@ -271,52 +271,26 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   useEffect(() => {
     async function init() {
-      // Step 1: Show cached data instantly from GCS (enriched fields, risk, etc.)
-      let cached: Feature[] | null = null;
+      // Load cached data from GCS — this is the single source of truth on
+      // page load. The cache is kept authoritative by Sync All (which
+      // replaces the full list) and the daily digest pipeline.
+      // No live Meego fetch on refresh — that would be slow and cause
+      // status flicker (MQL returns node-level status, not overall status).
       try {
         const cacheRes = await fetch('/api/features/cache');
         if (cacheRes.ok) {
           const cacheData = await cacheRes.json() as { features?: Feature[] };
           if (cacheData.features && cacheData.features.length > 0) {
-            cached = cacheData.features;
-            setFeatures(cached);
+            setFeatures(cacheData.features);
+            setLoading(false);
+            return;
           }
         }
       } catch { /* fall through */ }
 
-      // Step 2: Always fetch the authoritative feature LIST from Meego (force=true
-      // to bypass the GCS cache, which may contain deleted features). This ensures
-      // the feature set is authoritative — deleted features don't reappear and
-      // new ones show up.
-      const live = await fetchFromMeego(true);
+      // No cache available — do a live Meego fetch as fallback
+      await fetchFromMeego(true);
       setLoading(false);
-
-      if (live) {
-        // Merge: use the live list's feature set (authoritative), but carry
-        // forward enriched fields from the cache. The live fetch only has
-        // node-level status (e.g. "Development") not the overall Meego status
-        // (e.g. "AB Testing"), so prefer the cached status when available.
-        if (cached) {
-          const cacheById = new Map(cached.map(f => [f.id, f]));
-          setFeatures(live.map(f => {
-            const c = cacheById.get(f.id);
-            if (!c) return f;
-            return {
-              ...c,
-              // Only take live fields that the live fetch is authoritative for
-              name:            f.name,
-              priority:        f.priority,
-              prd:             f.prd             || c.prd,
-              complianceUrl:   f.complianceUrl   || c.complianceUrl,
-              meegoProjectKey: f.meegoProjectKey || c.meegoProjectKey,
-              meegoIssueId:    f.meegoIssueId    || c.meegoIssueId,
-              meegoNodeKey:    f.meegoNodeKey     || c.meegoNodeKey,
-              meegoUrl:        f.meegoUrl         || c.meegoUrl,
-              lastUpdated:     f.lastUpdated      || c.lastUpdated,
-            };
-          }));
-        }
-      }
     }
 
     if (features.length === 0) init();
