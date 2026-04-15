@@ -55,11 +55,11 @@ function groupChipCls(groupBy: GroupBy, key: string): string {
 function GroupHeader({ label, count, first, groupBy }: { label: string; count: number; first: boolean; groupBy: GroupBy }) {
   const chipCls = groupChipCls(groupBy, label === '—' ? '' : label);
   return (
-    <div className={`sm:col-span-full flex items-center gap-3 px-4 py-2 rounded-lg bg-[var(--card-hover)] border-l-3 border-[var(--border)] ${first ? 'mt-1' : 'mt-4'}`}>
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${chipCls}`}>
+    <div className={`sm:col-span-full flex items-center gap-3 pl-2 ${first ? 'pt-1 pb-1' : 'pt-5 pb-1'} border-b border-[var(--border)]`}>
+      <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold whitespace-nowrap ${chipCls}`}>
         {label || '—'}
       </span>
-      <span className="text-xs text-[var(--muted)]">{count} records</span>
+      <span className="text-xs text-[var(--muted)] font-medium">{count}</span>
     </div>
   );
 }
