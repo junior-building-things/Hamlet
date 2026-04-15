@@ -153,9 +153,14 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             body: JSON.stringify({ meegoUrl: f.meegoUrl, chatId: f.chatId }),
           });
           const d = await res.json() as Record<string, unknown>;
-          // Remove deleted features from list and cache
+          // Remove deleted features from list and GCS cache
           if (d.deleted) {
             setFeatures(prev => prev.filter(p => p.id !== f.id));
+            fetch('/api/features/cache', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ featureId: f.id }),
+            }).catch(() => {});
             return;
           }
           if (!res.ok) return;
@@ -323,6 +328,11 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       const d = await res.json() as Record<string, unknown>;
       if (d.deleted) {
         setFeatures(prev => prev.filter(p => p.id !== feature.id));
+        fetch('/api/features/cache', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ featureId: feature.id }),
+        }).catch(() => {});
         toast.success(`"${feature.name}" removed (deleted in Meego)`);
         setSyncingIds(prev => { const next = new Set(prev); next.delete(feature.id); return next; });
         return;
