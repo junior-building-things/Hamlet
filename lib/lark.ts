@@ -357,6 +357,27 @@ async function addCollaborator(fileToken: string, token: string): Promise<void> 
   );
 }
 
+// ─── Transfer doc ownership ─────────────────────────────────────────────────
+
+/**
+ * Transfer ownership of a Lark doc from the bot to the PM.
+ * Uses the docs:permission.member:transfer scope.
+ */
+async function transferOwnership(fileToken: string, token: string): Promise<void> {
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/drive/v1/permissions/${fileToken}/members/transfer_owner?type=docx&need_notification=false`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ member_type: 'email', member_id: OWNER_EMAIL }),
+    },
+  );
+  const data = await parseJson(res, 'transfer_owner') as { code: number; msg?: string };
+  if (data.code !== 0) {
+    console.warn(`[lark] ownership transfer failed (code ${data.code}): ${data.msg}`);
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -1181,10 +1202,9 @@ export async function copyPrdTemplate(
 
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-  // Doc updates (sequential) + collaborator add (parallel).
-  // Use the bot token for edits — the user token was only needed for the
-  // copy so the file is owned by the PM. The bot still needs access for
-  // the template-fill helpers, which addCollaborator grants.
+  // Doc updates (sequential) + collaborator/ownership (parallel).
+  // The bot creates the doc, fills in template fields, then transfers
+  // ownership to the PM so the file appears in their "My Documents".
   await Promise.all([
     (async () => {
       await updateInitialVersionDate(fileToken, today, botToken);
@@ -1197,7 +1217,15 @@ export async function copyPrdTemplate(
           .catch(e => console.warn('Fill "What are we building" failed:', e));
       }
     })(),
-    addCollaborator(fileToken, botToken),
+    (async () => {
+      // Add PM as collaborator first, then transfer ownership to them.
+      // The bot keeps edit access since the new owner can't revoke the app.
+      await addCollaborator(fileToken, botToken);
+      if (!options?.copyToken) {
+        // Only transfer if bot created the doc (no user copyToken)
+        await transferOwnership(fileToken, botToken);
+      }
+    })(),
   ]);
 
   return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;

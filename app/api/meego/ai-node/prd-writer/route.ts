@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { copyPrdTemplate, refreshUserToken } from '@/lib/lark';
+import { copyPrdTemplate } from '@/lib/lark';
 import { callMeegoMcp } from '@/lib/digests';
-import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -136,33 +135,16 @@ async function handlePrdCreation(workItemId: string): Promise<{ prdUrl?: string;
   const useHalfDay = tagStr.includes(HALF_DAY_LABEL);
   console.log(`[prd-writer] "${featureName}": tags="${tagStr}", template=${useHalfDay ? 'half-day' : 'regular'}`);
 
-  // Step 4: Get the user's access token so the copy is owned by the PM
-  // (lands in "My Document Library" instead of bot's "Shared With Me").
-  let userAccessToken: string | undefined;
-  try {
-    const state = await loadDigestState();
-    const refreshToken = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-    if (refreshToken) {
-      const result = await refreshUserToken(refreshToken);
-      if (result) {
-        userAccessToken = result.accessToken;
-        state.larkUserRefreshToken = result.refreshToken;
-        await saveDigestState(state);
-        console.log('[prd-writer] user token refreshed for Drive copy');
-      }
-    }
-  } catch (e) {
-    console.warn('[prd-writer] failed to get user token, copy will be owned by bot:', e);
-  }
-
-  // Step 5: Copy the PRD template.
+  // Step 4: Copy the PRD template using the bot token.
+  // copyPrdTemplate will transfer ownership to the PM after creation
+  // via docs:permission.member:transfer, so the file lands in the PM's
+  // "My Documents" without needing a user access token.
   const description = getFieldValue(fields, 'description');
   let prdUrl: string;
   try {
     prdUrl = await copyPrdTemplate(featureName, description || undefined, {
       useHalfDayPrd: useHalfDay,
       meegoUrl,
-      copyToken: userAccessToken,
     });
   } catch (e) {
     console.error(`[prd-writer] template copy failed for "${featureName}":`, e);
