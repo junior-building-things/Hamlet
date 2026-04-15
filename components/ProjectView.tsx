@@ -291,7 +291,9 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
       if (live) {
         // Merge: use the live list's feature set (authoritative), but carry
-        // forward enriched fields from the cache (risk, notes, avatars, etc.)
+        // forward enriched fields from the cache. The live fetch only has
+        // node-level status (e.g. "Development") not the overall Meego status
+        // (e.g. "AB Testing"), so prefer the cached status when available.
         if (cached) {
           const cacheById = new Map(cached.map(f => [f.id, f]));
           setFeatures(live.map(f => {
@@ -299,15 +301,16 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             if (!c) return f;
             return {
               ...c,
-              ...f,
-              // Preserve enriched fields the live fetch doesn't have
-              riskLevel:   c.riskLevel,
-              riskNotes:   c.riskNotes,
-              figmaUrl:    f.figmaUrl    || c.figmaUrl,
-              abReportUrl: f.abReportUrl || c.abReportUrl,
-              libraUrl:    f.libraUrl    || c.libraUrl,
-              avatars:     c.avatars,
-              agents:      c.agents,
+              // Only take live fields that the live fetch is authoritative for
+              name:            f.name,
+              priority:        f.priority,
+              prd:             f.prd             || c.prd,
+              complianceUrl:   f.complianceUrl   || c.complianceUrl,
+              meegoProjectKey: f.meegoProjectKey || c.meegoProjectKey,
+              meegoIssueId:    f.meegoIssueId    || c.meegoIssueId,
+              meegoNodeKey:    f.meegoNodeKey     || c.meegoNodeKey,
+              meegoUrl:        f.meegoUrl         || c.meegoUrl,
+              lastUpdated:     f.lastUpdated      || c.lastUpdated,
             };
           }));
         }
