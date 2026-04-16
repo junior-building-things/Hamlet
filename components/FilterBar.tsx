@@ -150,7 +150,7 @@ export function FilterBar({
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>('light');
 
   useEffect(() => {
     const stored = document.documentElement.getAttribute('data-theme') as 'dark' | 'light' | null;

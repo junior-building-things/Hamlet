@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // Inline script to set theme before paint to avoid flash.
   const themeScript = `
     (function() {
-      var t = localStorage.getItem('hamlet_theme') || 'dark';
+      var t = localStorage.getItem('hamlet_theme') || 'light';
       document.documentElement.setAttribute('data-theme', t);
     })();
   `;
