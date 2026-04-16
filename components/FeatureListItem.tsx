@@ -172,7 +172,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         ) : (
           <button
             onClick={() => onEdit(feature)}
-            className="flex items-center gap-2 w-full min-w-0 text-left text-[var(--foreground)] text-sm font-semibold hover:text-blue-300 transition-colors cursor-pointer"
+            className="flex items-center gap-2 w-full min-w-0 text-left text-[var(--foreground)] text-sm font-medium hover:text-blue-300 transition-colors cursor-pointer"
           >
             <span className="truncate">{feature.name}</span>
             {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
