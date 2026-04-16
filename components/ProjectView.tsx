@@ -485,11 +485,19 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       buckets.get(key)!.push(f);
     }
 
+    const STATUS_GROUP_ORDER: Record<string, number> = {
+      'AB Testing': 1, 'Merged': 2, 'QA Testing': 3, 'Development': 4,
+      'Tech Design': 5, 'PRD Walkthrough': 6, 'RD Allocation': 7,
+      'Dependency Check': 8, 'PRD/Design Prep': 9, 'Done': 10,
+    };
     const keys = [...buckets.keys()].sort((a, b) => {
       if (!a) return 1;   // empty/unknown always last
       if (!b) return -1;
       if (groupBy === 'priority') {
         return (PRIORITY_ORDER[a] ?? 99) - (PRIORITY_ORDER[b] ?? 99);
+      }
+      if (groupBy === 'status') {
+        return (STATUS_GROUP_ORDER[a] ?? 99) - (STATUS_GROUP_ORDER[b] ?? 99);
       }
       return a.localeCompare(b);
     });
