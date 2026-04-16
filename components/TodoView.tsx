@@ -1,26 +1,34 @@
 'use client';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { FeatureListHeader } from './FeatureListHeader';
 import { FeatureListItem } from './FeatureListItem';
 import { FeatureModal } from './FeatureModal';
+import { ThemeToggle } from './FilterBar';
+import { statusStyle } from './StatusBadge';
 import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { AV } from '@/lib/avatars';
 
+const STATUS_GROUP_ORDER: Record<string, number> = {
+  'AB Testing': 1, 'Merged': 2, 'QA Testing': 3, 'Development': 4,
+  'Tech Design': 5, 'PRD Walkthrough': 6, 'RD Allocation': 7,
+  'Dependency Check': 8, 'PRD/Design Prep': 9, 'Done': 10,
+};
+
 function statusChipCls(key: string): string {
-  const s = key.toLowerCase();
-  if (s.includes('上线') || s.includes('launch') || s.includes('灰度') || s.includes('已发布') || s.includes('已完成') || s.includes('验收'))
-    return 'bg-[#0d2b1f] border border-emerald-900 text-emerald-400';
-  if (s.includes('ab') || s.includes('测试') || s.includes('testing'))
-    return 'bg-[var(--card-hover)] border border-yellow-900/50 text-yellow-300';
-  if (s.includes('开发') || s.includes('dev') || s.includes('coding') || s.includes('impl'))
-    return 'bg-[#1a2535] border border-blue-900/50 text-blue-300';
-  if (s.includes('设计') || s.includes('design') || s.includes('走查'))
-    return 'bg-[var(--card-hover)] border border-blue-900/50 text-blue-300';
-  if (s.includes('hold') || s.includes('暂停') || s.includes('搁置'))
-    return 'bg-[#221a10] border border-amber-900 text-amber-400';
-  return 'bg-[var(--card-hover)] border border-[var(--border)] text-gray-300';
+  return statusStyle(key);
+}
+
+function GroupHeader({ label, count, first }: { label: string; count: number; first: boolean }) {
+  return (
+    <div className={`sm:col-span-full flex items-center gap-2.5 px-1 ${first ? 'mt-2' : 'mt-5'}`}>
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${statusChipCls(label)}`}>
+        {label || '—'}
+      </span>
+      <span className="text-xs text-gray-600">{count}</span>
+    </div>
+  );
 }
 
 interface Props {
@@ -31,9 +39,9 @@ interface Props {
 export function TodoView({ features, setFeatures }: Props) {
   const [completingId,  setCompletingId]  = useState<string | null>(null);
   const [completed,     setCompleted]     = useState<Set<string>>(new Set());
-  const [bulkRunning,   setBulkRunning]   = useState<string | null>(null);
+  const [bulkRunning,   setBulkRunning]   = useState(false);
   const [syncingAll,    setSyncingAll]    = useState(false);
-  const [syncingId,     setSyncingId]     = useState<string | null>(null);
+  const [syncingIds,    setSyncingIds]    = useState<Set<string>>(new Set());
   const [editingFeature, setEditing]      = useState<Feature | undefined>();
   const [modalMode,     setModalMode]     = useState<'edit' | null>(null);
 
@@ -42,11 +50,6 @@ export function TodoView({ features, setFeatures }: Props) {
 
   // Features still syncing (canCompleteNode not yet determined)
   const syncing = features.filter(f => f.canCompleteNode === undefined && f.meegoUrl);
-
-  // Bulk completion group — UAT consolidates PM Acceptance + UI/UX Acceptance
-  const uatTodos = todos.filter(f =>
-    f.status === 'UAT' || f.status === 'PM Acceptance' || f.status === 'UI/UX Acceptance'
-  );
 
   async function handleComplete(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
@@ -100,26 +103,24 @@ export function TodoView({ features, setFeatures }: Props) {
     }
   }
 
-  async function bulkComplete(nodeType: string, items: Feature[]) {
-    if (items.length === 0 || bulkRunning) return;
-    setBulkRunning(nodeType);
+  async function completeAll() {
+    if (todos.length === 0 || bulkRunning) return;
+    setBulkRunning(true);
     let count = 0;
-    for (const feature of items) {
+    for (const feature of todos) {
       try {
         await handleComplete(feature);
         count++;
-      } catch {
-        // individual errors handled by handleComplete
-      }
+      } catch { /* individual errors handled by handleComplete */ }
     }
-    setBulkRunning(null);
-    toast.success(`Completed ${count}/${items.length} ${nodeType} nodes`);
+    setBulkRunning(false);
+    toast.success(`Completed ${count}/${todos.length} nodes`);
   }
 
   // ── Sync ──────────────────────────────────────────────────────────────────
   const syncOne = useCallback(async (feature: Feature) => {
     if (!feature.meegoUrl) return;
-    setSyncingId(feature.id);
+    setSyncingIds(prev => new Set(prev).add(feature.id));
     try {
       const res = await fetch('/api/meego/sync', {
         method: 'POST',
@@ -134,7 +135,7 @@ export function TodoView({ features, setFeatures }: Props) {
         lastUpdated: p.lastUpdated || (d.lastUpdated as string) || '',
       }));
     } catch { /* ignore */ }
-    finally { setSyncingId(null); }
+    finally { setSyncingIds(prev => { const next = new Set(prev); next.delete(feature.id); return next; }); }
   }, [setFeatures]);
 
   async function syncAll() {
@@ -151,50 +152,65 @@ export function TodoView({ features, setFeatures }: Props) {
     setModalMode('edit');
   }
 
-  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_max-content_max-content_max-content_max-content_max-content_max-content_max-content_max-content_max-content] sm:gap-x-1.5 sm:gap-y-2';
+  // ── Group by status with custom ordering ──────────────────────────────────
+  const groups = useMemo(() => {
+    const buckets = new Map<string, Feature[]>();
+    for (const f of todos) {
+      const key = f.status || '';
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key)!.push(f);
+    }
+    const keys = [...buckets.keys()].sort((a, b) => {
+      if (!a) return 1;
+      if (!b) return -1;
+      return (STATUS_GROUP_ORDER[a] ?? 99) - (STATUS_GROUP_ORDER[b] ?? 99);
+    });
+    return keys.map(key => ({ key, label: key || '—', items: buckets.get(key)! }));
+  }, [todos]);
+
+  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content] sm:gap-x-1.5 sm:gap-y-1';
 
   return (
     <div className="min-h-screen">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-6 pt-7 pb-2">
+      <div className="px-6 pt-7 pb-2 flex items-center justify-between">
         <div>
           <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
             To Dos
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Nodes waiting for your action</p>
+          <p className="text-sm text-gray-500 mt-1">Projects pending your action</p>
         </div>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            onClick={syncAll}
+            disabled={syncingAll}
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--card)] border border-[var(--border)] hover:bg-[var(--card-hover)] text-[var(--muted)] hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
+          >
+            {syncingAll
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
+              : <><RefreshCw className="w-3.5 h-3.5" /> Sync All</>}
+          </button>
+        </div>
+      </div>
+
+      {/* Action bar — same height as FilterBar (py-2 + content) */}
+      <div className="flex items-center gap-2 px-6 mt-5 flex-wrap">
         <button
-          onClick={syncAll}
-          disabled={syncingAll}
-          className="flex items-center gap-2 px-4 py-2 bg-[var(--card-hover)] hover:bg-[#252a4a] text-gray-300 hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
+          onClick={completeAll}
+          disabled={todos.length === 0 || bulkRunning}
+          className="flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
         >
-          {syncingAll
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
-            : <><RefreshCw className="w-3.5 h-3.5" /> Sync All</>}
+          {bulkRunning
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <CheckCircle2 className="w-3.5 h-3.5" />}
+          Complete All
+          {todos.length > 0 && <span className="text-blue-200 font-normal">{todos.length}</span>}
         </button>
       </div>
 
-      {/* Bulk completion card */}
-      {uatTodos.length > 0 ? (
-        <div className="px-6 py-3 mt-5 flex items-center gap-3 flex-wrap">
-          <button
-            onClick={() => bulkComplete('UAT', uatTodos)}
-            disabled={!!bulkRunning}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
-          >
-            {bulkRunning === 'UAT'
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : <CheckCircle2 className="w-3 h-3" />}
-            Complete All UAT
-            <span className="text-blue-300 font-normal">{uatTodos.length}</span>
-          </button>
-        </div>
-      ) : (
-        <div className="mt-[52px]" />
-      )}
-
-      <div className="px-6 pb-16">
+      <div className="px-6 pb-16 mt-4">
         {/* Still loading sync data */}
         {todos.length === 0 && syncing.length > 0 && (
           <div className="flex items-center gap-2 text-gray-500 py-12 justify-center">
@@ -221,42 +237,27 @@ export function TodoView({ features, setFeatures }: Props) {
         )}
 
         {/* Todo list — grouped by status */}
-        {todos.length > 0 && (() => {
-          const grouped = new Map<string, Feature[]>();
-          for (const f of todos) {
-            const key = f.status || '—';
-            if (!grouped.has(key)) grouped.set(key, []);
-            grouped.get(key)!.push(f);
-          }
-          const groups = Array.from(grouped.entries());
-
-          return (
-            <div className={listGridCls}>
-              <FeatureListHeader />
-              {groups.map(([status, items], gi) => (
-                <React.Fragment key={status}>
-                  <div className={`sm:col-span-full flex items-center gap-2.5 px-1 ${gi === 0 ? 'mt-2' : 'mt-5'}`}>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${statusChipCls(status)}`}>
-                      {status}
-                    </span>
-                    <span className="text-xs text-gray-600">{items.length}</span>
-                  </div>
-                  {items.map(f => (
-                    <FeatureListItem
-                      key={f.id}
-                      feature={f}
-                      syncing={syncingId === f.id}
-                      onEdit={openDetail}
-                      onSync={syncOne}
-                      completing={completingId === f.id}
-                      onComplete={handleComplete}
-                    />
-                  ))}
-                </React.Fragment>
-              ))}
-            </div>
-          );
-        })()}
+        {todos.length > 0 && (
+          <div className={listGridCls}>
+            <FeatureListHeader />
+            {groups.map((group, gi) => (
+              <React.Fragment key={group.key}>
+                <GroupHeader label={group.label} count={group.items.length} first={gi === 0} />
+                {group.items.map(f => (
+                  <FeatureListItem
+                    key={f.id}
+                    feature={f}
+                    syncing={syncingIds.has(f.id)}
+                    onEdit={openDetail}
+                    onSync={syncOne}
+                    completing={completingId === f.id}
+                    onComplete={handleComplete}
+                  />
+                ))}
+              </React.Fragment>
+            ))}
+          </div>
+        )}
 
         {/* Recently completed (this session) */}
         {completed.size > 0 && (
