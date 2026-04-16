@@ -128,10 +128,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     // Higher index = more progressed. Done features go to the end since
     // they skip expensive lookups anyway.
     const STATUS_ORDER: Record<string, number> = {
-      'PRD/Design Prep': 1, 'Line Review': 2, 'Dependency Check': 3,
-      'RD Allocation': 4, 'PRD Walkthrough': 5, 'Tech Design': 6,
-      'Development': 7, 'QA Testing': 8, 'Merged': 9, 'AB Testing': 10,
-      'Done': 0, // last
+      'AB Testing': 1, 'Merged': 2, 'QA Testing': 3, 'Development': 4,
+      'Tech Design': 5, 'PRD Walkthrough': 6, 'RD Allocation': 7,
+      'Dependency Check': 8, 'PRD/Design Prep': 9,
+      'Done': 10,
     };
     withUrl.sort((a, b) => {
       const oa = STATUS_ORDER[a.status] ?? 5;
@@ -406,10 +406,17 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   // ── Filter ─────────────────────────────────────────────────────────────────
 
-  const uniqueStatuses = useMemo(
-    () => [...new Set(features.map(f => f.status).filter(Boolean))].sort(),
-    [features],
-  );
+  const uniqueStatuses = useMemo(() => {
+    const STATUS_DROPDOWN_ORDER = [
+      'AB Testing', 'Merged', 'QA Testing', 'Development', 'Tech Design',
+      'PRD Walkthrough', 'RD Allocation', 'Dependency Check',
+      'PRD/Design Prep', 'Done',
+    ];
+    const present = new Set(features.map(f => f.status).filter(Boolean));
+    const ordered = STATUS_DROPDOWN_ORDER.filter(s => present.has(s));
+    const extras = [...present].filter(s => !STATUS_DROPDOWN_ORDER.includes(s)).sort();
+    return [...ordered, ...extras];
+  }, [features]);
 
   const filtered = useMemo(() => {
     const statusSet   = new Set(statusFilter);
