@@ -45,8 +45,13 @@ export function TodoView({ features, setFeatures }: Props) {
   const [editingFeature, setEditing]      = useState<Feature | undefined>();
   const [modalMode,     setModalMode]     = useState<'edit' | null>(null);
 
-  // Features where the user is the assignee on an active node
-  const todos = features.filter(f => f.canCompleteNode === true && !completed.has(f.id));
+  // Features where the user is the assignee on an active node (excluding completed ones)
+  const todos = features.filter(f =>
+    f.canCompleteNode === true &&
+    !completed.has(f.id) &&
+    f.status !== 'Done' &&
+    f.status !== '结束'
+  );
 
   // Features still syncing (canCompleteNode not yet determined)
   const syncing = features.filter(f => f.canCompleteNode === undefined && f.meegoUrl);
