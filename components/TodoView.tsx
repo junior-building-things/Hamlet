@@ -176,10 +176,10 @@ export function TodoView({ features, setFeatures }: Props) {
   const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content] sm:gap-x-1.5 sm:gap-y-1';
 
   return (
-    <div className="min-h-screen">
+    <div className="h-screen flex flex-col overflow-hidden">
 
-      {/* Header */}
-      <div className="px-6 pt-7 pb-2 flex items-center justify-between">
+      {/* Header (sticky) */}
+      <div className="shrink-0 px-6 pt-7 pb-2 flex items-center justify-between">
         <div>
           <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
             To Dos
@@ -200,8 +200,8 @@ export function TodoView({ features, setFeatures }: Props) {
         </div>
       </div>
 
-      {/* Action bar — same height as FilterBar (py-2 + content) */}
-      <div className="flex items-center gap-2 px-6 mt-5 flex-wrap">
+      {/* Action bar (sticky) */}
+      <div className="shrink-0 flex items-center gap-2 px-6 mt-5 flex-wrap">
         <button
           onClick={completeAll}
           disabled={todos.length === 0 || bulkRunning}
@@ -215,7 +215,7 @@ export function TodoView({ features, setFeatures }: Props) {
         </button>
       </div>
 
-      <div className="px-6 pb-16 mt-4">
+      <div className="flex-1 overflow-y-auto px-6 pb-16 mt-4">
         {/* Still loading sync data */}
         {todos.length === 0 && syncing.length > 0 && (
           <div className="flex items-center gap-2 text-gray-500 py-12 justify-center">

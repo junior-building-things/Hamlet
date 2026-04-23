@@ -613,10 +613,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="h-screen flex flex-col overflow-hidden">
 
-      {/* Toolbar */}
-      <div className="px-6 pt-7 pb-2 flex items-center justify-between">
+      {/* Toolbar (sticky) */}
+      <div className="shrink-0 px-6 pt-7 pb-2 flex items-center justify-between">
         <div>
           <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
             Project View
@@ -637,18 +637,20 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         </div>
       </div>
 
-      <FilterBar
-        search={search} statusFilter={statusFilter} statuses={uniqueStatuses}
-        priorityFilter={priorityFilter} view={view}
-        onSearchChange={setSearch} onStatusChange={setStatusFilter}
-        onPriorityChange={setPriority} onViewChange={setView}
-        onAddFeature={() => {}} hideAddButton
-        groupBy={groupBy}  onGroupByChange={setGroupBy}
-        sortBy={sortBy}    onSortByChange={setSortBy}
-        sortDir={sortDir}  onSortDirToggle={toggleSortDir}
-      />
+      <div className="shrink-0">
+        <FilterBar
+          search={search} statusFilter={statusFilter} statuses={uniqueStatuses}
+          priorityFilter={priorityFilter} view={view}
+          onSearchChange={setSearch} onStatusChange={setStatusFilter}
+          onPriorityChange={setPriority} onViewChange={setView}
+          onAddFeature={() => {}} hideAddButton
+          groupBy={groupBy}  onGroupByChange={setGroupBy}
+          sortBy={sortBy}    onSortByChange={setSortBy}
+          sortDir={sortDir}  onSortDirToggle={toggleSortDir}
+        />
+      </div>
 
-      <div className="px-6 pb-16 mt-4">
+      <div className="flex-1 overflow-y-auto px-6 pb-16 mt-4">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
