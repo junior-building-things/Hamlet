@@ -507,7 +507,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content] sm:gap-x-1.5 sm:gap-y-1';
+  const gridCols = 'sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content]';
+  const listGridCls = `flex flex-col gap-2 sm:grid ${gridCols} sm:gap-x-1.5 sm:gap-y-1`;
 
   async function handleComplete(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
@@ -650,7 +651,14 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-16 mt-4">
+      {/* Column headers (sticky) */}
+      {!loading && !fetchError && filtered.length > 0 && view === 'list' && (
+        <div className="shrink-0 px-6">
+          <FeatureListHeader gridCols={gridCols} standalone />
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto px-6 pb-16">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
@@ -669,7 +677,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
               className="text-xs text-blue-400 hover:text-blue-300 underline">Clear filters</button>
           </div>
         ) : view === 'grid' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
             {sorted.map(f => (
               <FeatureCard key={f.id} feature={f} syncing={syncingIds.has(f.id)}
                 onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne} />
@@ -678,7 +686,6 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         ) : groups ? (
           // ── Grouped list view ──────────────────────────────────────────────
           <div className={listGridCls}>
-            <FeatureListHeader />
             {/* Render pinned feature above all groups */}
             {pinnedId && (() => {
               const pinned = features.find(f => f.id === pinnedId);
@@ -694,7 +701,6 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         ) : (
           // ── Plain list view ────────────────────────────────────────────────
           <div className={listGridCls}>
-            <FeatureListHeader />
             {renderListRows(sorted)}
           </div>
         )}
