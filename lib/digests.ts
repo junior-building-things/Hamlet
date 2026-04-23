@@ -1643,11 +1643,15 @@ export async function collectUnansweredForFeature(
   // Log mention details for debugging
   const withMentions = messages.filter(m => m.mentions && m.mentions.length > 0);
   console.log(`[digests] Q&A "${feature.name}": ${messages.length} msgs (${threadReplies.length} thread replies, ${withMentions.length} with mentions), ownerOpenId=${ownerOpenId}`);
-  if (withMentions.length > 0) {
-    for (const m of withMentions.slice(0, 3)) {
-      const mentionIds = (m.mentions ?? []).map(mn => mn.id?.open_id ?? '?').join(',');
-      console.log(`[digests]   mention msg ${m.message_id}: sender=${m.sender?.sender_id?.open_id}, mentionIds=${mentionIds}, parent=${m.parent_id || 'none'}, root=${m.root_id || 'none'}`);
-    }
+  for (const m of withMentions.slice(0, 5)) {
+    const mentionIds = (m.mentions ?? []).map(mn => `${mn.name}=${mn.id?.open_id ?? '?'}`).join(', ');
+    const ts = new Date(Number(m.create_time ?? 0) * 1000).toISOString();
+    console.log(`[digests]   mention: ${m.msg_type} ${ts} sender=${m.sender?.sender_id?.open_id} mentions=[${mentionIds}] parent=${m.parent_id || 'none'} root=${m.root_id || 'none'}`);
+  }
+  for (const m of threadReplies.slice(0, 5)) {
+    const mentionIds = (m.mentions ?? []).map(mn => `${mn.name}=${mn.id?.open_id ?? '?'}`).join(', ');
+    const ts = new Date(Number(m.create_time ?? 0) * 1000).toISOString();
+    console.log(`[digests]   thread: ${m.msg_type} ${ts} mentions=[${mentionIds}] parent=${m.parent_id || 'none'}`);
   }
   if (messages.length === 0) return null;
 
