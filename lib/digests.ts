@@ -2092,10 +2092,23 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   const PRD_SNAPSHOTS_PATH = 'hamlet/prd-snapshots.json';
   const prdChanges: Array<{ name: string; prdUrl: string; meegoUrl: string; summary: string }> = [];
   try {
-    const { readDocContent } = await import('./lark');
+    const { readDocContent, grantBotEditAccess } = await import('./lark');
     const { readJsonState, writeJsonState } = await import('./gcs-state');
     const snapshots: Record<string, string> = await readJsonState<Record<string, string>>(PRD_SNAPSHOTS_PATH).catch(() => ({})) ?? {};
     const today = new Date().toISOString().split('T')[0];
+
+    // Get user access token (for granting bot access to PRDs on permission errors)
+    let userAccessTokenForPrd: string | undefined;
+    try {
+      const userRefreshToken = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
+      if (userRefreshToken) {
+        const result = await refreshUserToken(userRefreshToken);
+        if (result) {
+          userAccessTokenForPrd = result.accessToken;
+          state.larkUserRefreshToken = result.refreshToken;
+        }
+      }
+    } catch { /* ignore */ }
     let prdScanned = 0;
     let prdChanged = 0;
 
@@ -2130,7 +2143,22 @@ ${currentText.slice(0, 4000)}`;
           try {
             await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Junior' }]);
           } catch (e) {
-            console.warn(`[digests] append PRD changelog failed for "${f.name}":`, e);
+            const msg = e instanceof Error ? e.message : String(e);
+            // Retry: if forbidden, grant bot access via user token then retry
+            if ((msg.includes('forBidden') || msg.includes('1770032') || msg.includes('forbidden')) && userAccessTokenForPrd) {
+              console.log(`[digests] PRD forbidden for "${f.name}" — granting bot access via user token`);
+              const granted = await grantBotEditAccess(f.prd, userAccessTokenForPrd);
+              if (granted) {
+                try {
+                  await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Junior' }]);
+                  console.log(`[digests] PRD changelog written after access grant for "${f.name}"`);
+                } catch (retryErr) {
+                  console.warn(`[digests] append PRD changelog retry failed for "${f.name}":`, retryErr);
+                }
+              }
+            } else {
+              console.warn(`[digests] append PRD changelog failed for "${f.name}":`, e);
+            }
           }
           prdChanges.push({ name: f.name, prdUrl: f.prd, meegoUrl: f.meegoUrl, summary });
         }
@@ -2536,16 +2564,21 @@ ${currentText.slice(0, 4000)}`;
   }
 
   // Step 9: Send PRD Changes digest (only if there are changes) — interactive
-  // card to the same PM group chat.
+  // card from Junior bot (main Lark app) to the PM group chat.
   let prdChangesSent = false;
-  if (rioToken && prdChanges.length > 0) {
+  if (prdChanges.length > 0) {
     const card = buildPrdChangesDigestCard(prdChanges);
     const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
     console.log('[digests] PRD changes digest:\n' + preview);
-    const id = await sendInteractiveCardToChat(
-      targetChatId, card.title, card.template, card.sections, rioToken,
-    );
-    prdChangesSent = id !== null;
+    try {
+      const juniorToken = await getLarkBotToken();
+      const id = await sendInteractiveCardToChat(
+        targetChatId, card.title, card.template, card.sections, juniorToken,
+      );
+      prdChangesSent = id !== null;
+    } catch (e) {
+      console.warn('[digests] PRD changes digest send failed:', e);
+    }
   } else {
     console.log('[digests] no PRD changes — skipping PRD changes digest');
   }

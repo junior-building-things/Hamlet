@@ -371,6 +371,37 @@ async function addCollaborator(fileToken: string, token: string): Promise<void> 
   );
 }
 
+/**
+ * Grant the bot edit access to a doc using the user's access token.
+ * Used when the bot needs to modify a PRD it wasn't originally a collaborator on.
+ * Returns true if the grant succeeded.
+ */
+export async function grantBotEditAccess(
+  prdUrl: string,
+  userAccessToken: string,
+): Promise<boolean> {
+  const botOpenId = getBotOpenId();
+  if (!botOpenId) return false;
+  try {
+    const fileToken = await resolveDocId(prdUrl);
+    const res = await fetch(
+      `${LARK_BASE_URL}/open-apis/drive/v1/permissions/${fileToken}/members?type=docx&need_notification=false`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${userAccessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member_type: 'openid', member_id: botOpenId, perm: 'edit', type: 'user' }),
+      },
+    );
+    const data = await parseJson(res, 'grant_bot_access') as { code: number; msg?: string };
+    if (data.code === 0) return true;
+    console.warn(`[lark] grantBotEditAccess failed (code ${data.code}): ${data.msg}`);
+    return false;
+  } catch (e) {
+    console.warn('[lark] grantBotEditAccess error:', e);
+    return false;
+  }
+}
+
 // ─── Transfer doc ownership ─────────────────────────────────────────────────
 
 /**
@@ -997,8 +1028,7 @@ export async function appendPrdChangeLog(
       );
       const insertData = await parseJson(insertRes, 'insert_table_row') as { code: number; msg?: string };
       if (insertData.code !== 0) {
-        console.warn(`[lark] insert_table_row failed (code ${insertData.code}): ${insertData.msg}`);
-        continue;
+        throw new Error(`insert_table_row failed (code ${insertData.code}): ${insertData.msg}`);
       }
 
       // Step 2: Re-fetch blocks and find NEW cells (IDs that didn't exist before)
