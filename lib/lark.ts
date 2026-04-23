@@ -1731,8 +1731,10 @@ export interface ChatMessage {
  * Read chat messages since a given timestamp. Returns newest-first.
  */
 export async function readChatMessages(
-  chatId: string, sinceMs: number, token: string, pageSize = 50,
+  chatId: string, sinceMs: number, token: string,
+  options?: { pageSize?: number; includeThreadReplies?: boolean },
 ): Promise<ChatMessage[]> {
+  const pageSize = options?.pageSize ?? 50;
   const messages: ChatMessage[] = [];
   let pageToken = '';
 
@@ -1761,6 +1763,35 @@ export async function readChatMessages(
     messages.push(...(data.data?.items ?? []));
     if (!data.data?.has_more || !data.data?.page_token) break;
     pageToken = data.data.page_token;
+  }
+
+  // Fetch thread replies for top-level messages so @mentions in threads
+  // are included. Cap at 20 thread fetches per chat to limit API calls.
+  if (options?.includeThreadReplies && messages.length > 0) {
+    const topLevel = messages.filter(m => !m.parent_id && !m.root_id);
+    const MAX_THREAD_FETCHES = 20;
+    let fetched = 0;
+    for (const msg of topLevel) {
+      if (fetched >= MAX_THREAD_FETCHES) break;
+      try {
+        const rRes = await fetch(
+          `${LARK_BASE_URL}/open-apis/im/v1/messages/${msg.message_id}/replies?page_size=50`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        const rData = await parseJson(rRes, 'thread_replies') as {
+          code: number; data?: { items?: ChatMessage[] };
+        };
+        if (rData.code === 0 && rData.data?.items) {
+          // Filter replies within the time window
+          const sinceSec = Math.floor(sinceMs / 1000);
+          const replies = rData.data.items.filter(
+            r => Number(r.create_time ?? 0) >= sinceSec,
+          );
+          messages.push(...replies);
+        }
+        fetched++;
+      } catch { /* skip thread */ }
+    }
   }
 
   return messages;

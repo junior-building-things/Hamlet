@@ -1634,7 +1634,7 @@ export async function collectUnansweredForFeature(
 
   let messages: ChatMessage[] = [];
   try {
-    messages = await readChatMessages(chatId, sinceMs, token);
+    messages = await readChatMessages(chatId, sinceMs, token, { includeThreadReplies: true });
   } catch (e) {
     console.warn(`[digests] failed to read messages for ${feature.name}:`, e);
     return null;
