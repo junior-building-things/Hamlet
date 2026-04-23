@@ -878,8 +878,13 @@ export async function getDocLastModifier(docUrl: string): Promise<string> {
     code: number;
     data?: { metas?: Array<{ latest_modify_user?: { display_name?: string; en_name?: string } }> };
   };
-  if (data.code !== 0) return '';
-  const user = data.data?.metas?.[0]?.latest_modify_user;
+  if (data.code !== 0) {
+    console.warn(`[lark] drive_meta failed (code ${data.code}): ${JSON.stringify(data).slice(0, 200)}`);
+    return '';
+  }
+  const meta = data.data?.metas?.[0];
+  const user = meta?.latest_modify_user;
+  console.log(`[lark] drive_meta result: ${JSON.stringify(meta).slice(0, 200)}`);
   return user?.en_name || user?.display_name || '';
 }
 
