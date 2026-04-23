@@ -1582,7 +1582,7 @@ export async function buildRiskDigestCard(findings: RiskFinding[]): Promise<{
 /**
  * Q&A scan window — last 24 h of messages, matching the chat-risk window.
  */
-const UNANSWERED_WINDOW_MS = 24 * 60 * 60 * 1000;
+const UNANSWERED_WINDOW_MS = 5 * 24 * 60 * 60 * 1000; // TEMP: 5 days for testing
 
 /** Hard cap on questions per feature in the card so a busy chat doesn't blow up the message. */
 const MAX_QUESTIONS_PER_FEATURE = 5;
