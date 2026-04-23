@@ -856,9 +856,40 @@ export async function editDocSection(docUrl: string, sectionHeading: string, new
  *
  * Format: "[YYYY-MM-DD] description"
  */
+/**
+ * Get the last modifier's name for a Lark document.
+ * Uses the Drive file meta API to find who last edited the doc.
+ */
+export async function getDocLastModifier(docUrl: string): Promise<string> {
+  const docId = await resolveDocId(docUrl);
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/drive/v1/metas/batch_query`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        request_docs: [{ doc_token: docId, doc_type: 'docx' }],
+        with_url: false,
+      }),
+    },
+  );
+  const data = await parseJson(res, 'drive_meta') as {
+    code: number;
+    data?: { metas?: Array<{ latest_modify_user?: { display_name?: string; en_name?: string } }> };
+  };
+  if (data.code !== 0) return '';
+  const user = data.data?.metas?.[0]?.latest_modify_user;
+  return user?.en_name || user?.display_name || '';
+}
+
+function formatChangeLogEntry(e: { date: string; detail: string; by?: string }): string {
+  return e.by ? `[${e.date}] ${e.detail} — ${e.by}` : `[${e.date}] ${e.detail}`;
+}
+
 export async function appendPrdChangeLog(
   prdUrl: string,
-  entries: Array<{ date: string; detail: string }>,
+  entries: Array<{ date: string; detail: string; by?: string }>,
 ): Promise<void> {
   if (entries.length === 0) return;
 
@@ -887,13 +918,13 @@ export async function appendPrdChangeLog(
 
   if (headingIndex === -1) {
     // No Change Log section — create it at the end of the doc
-    const content = entries.map(e => `[${e.date}] ${e.detail}`).join('\n');
+    const content = entries.map(formatChangeLogEntry).join('\n');
     const body = {
       children: [
         { block_type: 4, heading2: { elements: [{ text_run: { content: 'Change Log' } }] } },
         ...entries.map(e => ({
           block_type: 2,
-          text: { elements: [{ text_run: { content: `[${e.date}] ${e.detail}` } }] },
+          text: { elements: [{ text_run: { content: formatChangeLogEntry(e) } }] },
         })),
       ],
     };
@@ -913,7 +944,7 @@ export async function appendPrdChangeLog(
   const body = {
     children: entries.map(e => ({
       block_type: 2,
-      text: { elements: [{ text_run: { content: `[${e.date}] ${e.detail}` } }] },
+      text: { elements: [{ text_run: { content: formatChangeLogEntry(e) } }] },
     })),
     index: headingIndex + 1,
   };

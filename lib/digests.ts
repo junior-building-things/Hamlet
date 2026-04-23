@@ -16,6 +16,7 @@ import {
   CardHeaderTemplate,
   PM_GROUP_CHAT_ID,
   appendPrdChangeLog,
+  getDocLastModifier,
 } from './lark';
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
@@ -2088,8 +2089,11 @@ NEW VERSION:
 ${currentText.slice(0, 4000)}`;
             const result = await model.generateContent(prompt);
             const summary = result.response.text()?.trim() ?? 'PRD content updated';
-            console.log(`[digests] PRD changed for "${f.name}": ${summary}`);
-            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary }]);
+            // Look up who last modified the doc
+            let modifiedBy = '';
+            try { modifiedBy = await getDocLastModifier(f.prd); } catch { /* ignore */ }
+            console.log(`[digests] PRD changed for "${f.name}": ${summary} (by ${modifiedBy || 'unknown'})`);
+            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: modifiedBy || undefined }]);
           } catch (e) {
             console.warn(`[digests] Gemini PRD diff failed for "${f.name}":`, e);
             await appendPrdChangeLog(f.prd, [{ date: today, detail: 'PRD content updated' }])
