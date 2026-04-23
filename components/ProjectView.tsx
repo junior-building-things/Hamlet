@@ -586,7 +586,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     if (!prev) return;
 
     // Track manually edited fields so sync won't overwrite them
-    const editedKeys = Object.keys(updates).filter(k => k !== 'riskNotes');
+    // Only protect link fields from sync overwrites — name and complianceUrl
+    // are Meego-authoritative and should always sync.
+    const PROTECTED_FIELDS = new Set(['prd', 'figmaUrl', 'abReportUrl', 'libraUrl']);
+    const editedKeys = Object.keys(updates).filter(k => PROTECTED_FIELDS.has(k));
     // Optimistic update
     setFeatures(fs => fs.map(f => {
       if (f.id !== featureId) return f;
