@@ -897,68 +897,168 @@ export async function appendPrdChangeLog(
   const token = await getAccessToken();
   const blocks = await getDocBlocks(docId, token);
 
+  // Build parent map to find table blocks
+  const parentOf = new Map<string, string>();
+  for (const b of blocks) {
+    for (const childId of b.children ?? []) parentOf.set(childId, b.block_id);
+  }
+  const byId = new Map(blocks.map(b => [b.block_id, b]));
+
+  // Find the Change Log table by looking for a table that contains cells
+  // with text matching "change log", "changelog", "date", or "日期"
+  const CHANGE_LOG_KEYWORDS = ['change log', 'changelog', 'version history', 'date//日期'];
+  let tableBlockId = '';
+  let tableRowCount = 0;
+  for (const b of blocks) {
+    if (!b.table_cell) continue;
+    const cellText = blockText(b).toLowerCase();
+    if (!cellText) {
+      // Check child blocks for text (table cells nest paragraphs)
+      for (const childId of b.children ?? []) {
+        const child = byId.get(childId);
+        if (child) {
+          const childTextStr = blockText(child).toLowerCase();
+          if (CHANGE_LOG_KEYWORDS.some(kw => childTextStr.includes(kw))) {
+            tableBlockId = parentOf.get(b.block_id) ?? '';
+            break;
+          }
+        }
+      }
+    }
+    if (CHANGE_LOG_KEYWORDS.some(kw => cellText.includes(kw))) {
+      tableBlockId = parentOf.get(b.block_id) ?? '';
+    }
+    if (tableBlockId) break;
+  }
+
+  if (tableBlockId) {
+    // Found the table — count rows and add new ones
+    const tableBlock = byId.get(tableBlockId);
+    const tableProps = tableBlock?.table as { property?: { row_size?: number; column_size?: number } } | undefined;
+    tableRowCount = tableProps?.property?.row_size ?? 0;
+
+    for (const entry of entries) {
+      // Insert a new row at the end of the table
+      const insertRes = await fetch(
+        `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${tableBlockId}/children?document_revision_id=-1`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            children: [{
+              block_type: 31, // table_cell
+              table_cell: {},
+            }],
+            index: -1, // append at end
+          }),
+        },
+      );
+      const insertData = await parseJson(insertRes, 'insert_table_row') as { code: number; msg?: string };
+
+      if (insertData.code !== 0) {
+        // Fallback: use insert_table_row API
+        const rowRes = await fetch(
+          `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${tableBlockId}/insert_table_row?document_revision_id=-1`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ row_index: tableRowCount }),
+          },
+        );
+        const rowData = await parseJson(rowRes, 'insert_table_row_v2') as { code: number; msg?: string };
+        if (rowData.code !== 0) {
+          console.warn(`[lark] insert_table_row failed: ${rowData.code} ${rowData.msg}`);
+          continue;
+        }
+
+        // Re-fetch blocks to get the new row's cell IDs
+        const newBlocks = await getDocBlocks(docId, token);
+        const newByParent = new Map<string, LarkBlock[]>();
+        for (const nb of newBlocks) {
+          if (nb.table_cell) {
+            const pid = '';
+            for (const nb2 of newBlocks) {
+              if (nb2.children?.includes(nb.block_id)) {
+                (newByParent.get(nb2.block_id) ?? []).push(nb);
+                if (!newByParent.has(nb2.block_id)) newByParent.set(nb2.block_id, [nb]);
+                break;
+              }
+            }
+          }
+        }
+
+        // Find cells in the new row (last row)
+        const newCells = newBlocks
+          .filter(nb => nb.table_cell && nb.table_cell.row_index === tableRowCount)
+          .sort((a, b) => (a.table_cell?.col_index ?? 0) - (b.table_cell?.col_index ?? 0));
+
+        // Fill cells: col0=date, col1=description, col2=by
+        const cellTexts = [entry.date, entry.detail, entry.by ?? '@Junior'];
+        for (let col = 0; col < Math.min(newCells.length, cellTexts.length); col++) {
+          const cell = newCells[col];
+          // Find the paragraph inside the cell
+          let paraId = '';
+          for (const childId of cell.children ?? []) {
+            const child = newBlocks.find(nb => nb.block_id === childId);
+            if (child?.block_type === 2) { paraId = child.block_id; break; }
+          }
+          if (paraId) {
+            await batchUpdateBlocks(docId, [{
+              block_id: paraId,
+              update_text_elements: { elements: [{ text_run: { content: cellTexts[col], text_element_style: {} } }] },
+            }], token);
+          }
+        }
+        tableRowCount++;
+      }
+    }
+    return;
+  }
+
+  // No table found — fall back to adding text paragraphs after a heading
   const pageBlock = blocks.find(b => b.block_type === 1);
   if (!pageBlock?.children) throw new Error('Empty document');
-
-  const byId = new Map(blocks.map(b => [b.block_id, b]));
   const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
 
-  // Find the "Change Log" heading (case-insensitive)
-  const CHANGE_LOG_ALIASES = ['change log', 'changelog', 'version history'];
+  const HEADING_ALIASES = ['change log', 'changelog', 'version history'];
   let headingIndex = -1;
   for (let i = 0; i < topLevel.length; i++) {
     if (HEADING_BLOCK_TYPES.has(topLevel[i].block_type)) {
       const text = blockText(topLevel[i]).toLowerCase();
-      if (CHANGE_LOG_ALIASES.some(alias => text.includes(alias))) {
-        headingIndex = i;
-        break;
-      }
+      if (HEADING_ALIASES.some(alias => text.includes(alias))) { headingIndex = i; break; }
     }
   }
 
+  const newBlocks = entries.map(e => ({
+    block_type: 2,
+    text: { elements: [{ text_run: { content: formatChangeLogEntry(e) } }] },
+  }));
+
   if (headingIndex === -1) {
-    // No Change Log section — create it at the end of the doc
-    const content = entries.map(formatChangeLogEntry).join('\n');
-    const body = {
-      children: [
-        { block_type: 4, heading2: { elements: [{ text_run: { content: 'Change Log' } }] } },
-        ...entries.map(e => ({
-          block_type: 2,
-          text: { elements: [{ text_run: { content: formatChangeLogEntry(e) } }] },
-        })),
-      ],
-    };
+    // Create section at end
     await fetch(
       `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?document_revision_id=-1`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          children: [
+            { block_type: 4, heading2: { elements: [{ text_run: { content: 'Change Log' } }] } },
+            ...newBlocks,
+          ],
+        }),
       },
     );
-    return;
+  } else {
+    await fetch(
+      `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?document_revision_id=-1`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ children: newBlocks, index: headingIndex + 1 }),
+      },
+    );
   }
-
-  // Insert new paragraphs right after the heading (position = headingIndex + 1)
-  // so newest entries appear at the top of the section.
-  const body = {
-    children: entries.map(e => ({
-      block_type: 2,
-      text: { elements: [{ text_run: { content: formatChangeLogEntry(e) } }] },
-    })),
-    index: headingIndex + 1,
-  };
-
-  const res = await fetch(
-    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?document_revision_id=-1`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-  );
-  const data = await parseJson(res, 'append_changelog') as { code: number; msg?: string };
-  if (data.code !== 0) throw new Error(`Lark append changelog error ${data.code}: ${data.msg}`);
 }
 
 
