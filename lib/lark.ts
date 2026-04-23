@@ -878,14 +878,29 @@ export async function getDocLastModifier(docUrl: string): Promise<string> {
     code: number;
     data?: { metas?: Array<{ latest_modify_user?: { display_name?: string; en_name?: string } }> };
   };
-  if (data.code !== 0) {
-    console.warn(`[lark] drive_meta failed (code ${data.code}): ${JSON.stringify(data).slice(0, 200)}`);
-    return '';
-  }
+  if (data.code !== 0) return '';
   const meta = data.data?.metas?.[0];
-  const user = meta?.latest_modify_user;
-  console.log(`[lark] drive_meta result: ${JSON.stringify(meta).slice(0, 200)}`);
-  return user?.en_name || user?.display_name || '';
+  // latest_modify_user can be a string (open_id) or an object with name fields
+  const rawUser = meta?.latest_modify_user;
+  if (!rawUser) return '';
+  if (typeof rawUser === 'object') return rawUser.en_name || rawUser.display_name || '';
+
+  // It's an open_id string — resolve to a name via contact API
+  const userId = rawUser as unknown as string;
+  try {
+    const userRes = await fetch(
+      `${LARK_BASE_URL}/open-apis/contact/v3/users/${userId}?user_id_type=open_id`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const userData = await parseJson(userRes, 'get_user') as {
+      code: number;
+      data?: { user?: { en_name?: string; name?: string } };
+    };
+    if (userData.code === 0) {
+      return userData.data?.user?.en_name || userData.data?.user?.name || '';
+    }
+  } catch { /* ignore */ }
+  return '';
 }
 
 function formatChangeLogEntry(e: { date: string; detail: string; by?: string }): string {
