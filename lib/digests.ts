@@ -15,6 +15,7 @@ import {
   CardSection,
   CardHeaderTemplate,
   PM_GROUP_CHAT_ID,
+  appendPrdChangeLog,
 } from './lark';
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
@@ -1988,6 +1989,12 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // from each brief, AND detect status transitions that need notifications.
   // Currently notifies when a feature enters 待线内评审 (Line Review).
   const LINE_REVIEW_STATUS = '待线内评审';
+  const STATUS_CN_TO_EN: Record<string, string> = {
+    '开始': 'PRD/Design Prep', '待线内评审': 'Line Review', '线内评审完成': 'Dependency Check',
+    '待合规评估': 'Compliance Review', '待评估&排优': 'RD Allocation', '待需求详评': 'PRD Walkthrough',
+    '技术方案设计中': 'Tech Design', '开发中': 'Development', '测试中': 'QA Testing',
+    '实验中': 'AB Testing', '已上车': 'Merged', '已完成': 'Done',
+  };
   try {
     const prevCache = await readFeatureCache();
     const prevStatusMap = new Map<string, string>();
@@ -1997,9 +2004,11 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       }
     }
 
-    // Detect transitions to Line Review and send notification cards.
+    // Detect status transitions, send Line Review notification, and log to PRD Change Log.
+    const today = new Date().toISOString().split('T')[0];
     for (const f of features) {
       const prevStatus = prevStatusMap.get(f.workItemId);
+      const newStatus = STATUS_CN_TO_EN[f.overallStatusName] ?? f.overallStatusName;
       if (f.overallStatusName === LINE_REVIEW_STATUS && prevStatus && prevStatus !== 'Line Review') {
         console.log(`[digests] status transition: "${f.name}" ${prevStatus} → Line Review`);
         sendFeatureCard({
@@ -2010,6 +2019,14 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           headerTitle: 'PRD Ready ✅',
           headerTemplate: 'green',
         }).catch(e => console.warn(`[digests] Line Review card send failed for "${f.name}":`, e));
+      }
+      // Task 2: Log any status change to PRD Change Log
+      if (prevStatus && newStatus && prevStatus !== newStatus && f.prd) {
+        console.log(`[digests] PRD changelog: "${f.name}" status ${prevStatus} → ${newStatus}`);
+        appendPrdChangeLog(f.prd, [{
+          date: today,
+          detail: `Status: ${prevStatus} → ${newStatus}`,
+        }]).catch(e => console.warn(`[digests] PRD changelog status update failed for "${f.name}":`, e));
       }
     }
 
@@ -2205,6 +2222,13 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
             runsLeftToShow: 2,
           };
           console.log(`[digests] delay detected for "${feature.name}": ${latest.detail}`);
+          // Task 2: Auto-update PRD Change Log with the field change
+          if (feature.prd) {
+            appendPrdChangeLog(feature.prd, [{
+              date: new Date().toISOString().split('T')[0],
+              detail: latest.detail,
+            }]).catch(e => console.warn(`[digests] PRD changelog update failed for "${feature.name}":`, e));
+          }
         } else if (priorDelay && priorDelay.runsLeftToShow > 1) {
           // No new change, but a prior delay still has runs left — carry it.
           activeDelay = {

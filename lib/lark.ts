@@ -850,6 +850,87 @@ export async function editDocSection(docUrl: string, sectionHeading: string, new
 }
 
 /**
+ * Append an entry to the PRD's Change Log section. Creates the section
+ * if it doesn't exist. Each entry is a bullet-style paragraph prepended
+ * after the section heading (newest first).
+ *
+ * Format: "[YYYY-MM-DD] description"
+ */
+export async function appendPrdChangeLog(
+  prdUrl: string,
+  entries: Array<{ date: string; detail: string }>,
+): Promise<void> {
+  if (entries.length === 0) return;
+
+  const docId = await resolveDocId(prdUrl);
+  const token = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) throw new Error('Empty document');
+
+  const byId = new Map(blocks.map(b => [b.block_id, b]));
+  const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
+
+  // Find the "Change Log" heading (case-insensitive)
+  const CHANGE_LOG_ALIASES = ['change log', 'changelog', 'version history'];
+  let headingIndex = -1;
+  for (let i = 0; i < topLevel.length; i++) {
+    if (HEADING_BLOCK_TYPES.has(topLevel[i].block_type)) {
+      const text = blockText(topLevel[i]).toLowerCase();
+      if (CHANGE_LOG_ALIASES.some(alias => text.includes(alias))) {
+        headingIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (headingIndex === -1) {
+    // No Change Log section — create it at the end of the doc
+    const content = entries.map(e => `[${e.date}] ${e.detail}`).join('\n');
+    const body = {
+      children: [
+        { block_type: 4, heading2: { elements: [{ text_run: { content: 'Change Log' } }] } },
+        ...entries.map(e => ({
+          block_type: 2,
+          text: { elements: [{ text_run: { content: `[${e.date}] ${e.detail}` } }] },
+        })),
+      ],
+    };
+    await fetch(
+      `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?document_revision_id=-1`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    return;
+  }
+
+  // Insert new paragraphs right after the heading (position = headingIndex + 1)
+  // so newest entries appear at the top of the section.
+  const body = {
+    children: entries.map(e => ({
+      block_type: 2,
+      text: { elements: [{ text_run: { content: `[${e.date}] ${e.detail}` } }] },
+    })),
+    index: headingIndex + 1,
+  };
+
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?document_revision_id=-1`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  const data = await parseJson(res, 'append_changelog') as { code: number; msg?: string };
+  if (data.code !== 0) throw new Error(`Lark append changelog error ${data.code}: ${data.msg}`);
+}
+
+/**
  * Rename a section heading in a Lark doc.
  */
 export async function renameDocSection(docUrl: string, oldHeading: string, newHeading: string): Promise<void> {
