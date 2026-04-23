@@ -904,21 +904,34 @@ export async function appendPrdChangeLog(
   }
   const byId = new Map(blocks.map(b => [b.block_id, b]));
 
-  // Find the Change Log table by looking for cells with keywords in row 0
-  const KEYWORDS = ['change log', 'changelog', 'version history', 'date', '日期', '描述'];
+  // Find the Change Log table by looking for header row cells with matching keywords.
+  // The table may be under any heading — search all table cells in row 0.
+  const KEYWORDS = ['change log', 'changelog', 'version history', 'date//日期', '修改人', 'date//日期'];
   let tableBlockId = '';
+
+  // Collect all text from a block and its descendants
+  function allText(blockId: string): string {
+    const b = byId.get(blockId);
+    if (!b) return '';
+    const parts = [blockText(b)];
+    for (const childId of b.children ?? []) parts.push(allText(childId));
+    return parts.join(' ').toLowerCase();
+  }
+
   for (const b of blocks) {
     if (!b.table_cell || b.table_cell.row_index !== 0) continue;
-    // Check cell text and child text
-    const texts: string[] = [blockText(b).toLowerCase()];
-    for (const childId of b.children ?? []) {
-      const child = byId.get(childId);
-      if (child) texts.push(blockText(child).toLowerCase());
-    }
-    if (texts.some(t => KEYWORDS.some(kw => t.includes(kw)))) {
-      tableBlockId = parentOf.get(b.block_id) ?? '';
+    const cellText = allText(b.block_id);
+    if (KEYWORDS.some(kw => cellText.includes(kw))) {
+      // Walk up to find the table block (parent of the cell)
+      let parentId = parentOf.get(b.block_id);
+      // table_cell → table (may be one or two levels up)
+      while (parentId) {
+        const parent = byId.get(parentId);
+        if (parent?.table) { tableBlockId = parentId; break; }
+        parentId = parentOf.get(parentId);
+      }
       if (tableBlockId) {
-        console.log(`[lark] found Change Log table: ${tableBlockId}`);
+        console.log(`[lark] found Change Log table: ${tableBlockId} (matched: "${cellText.trim().slice(0, 40)}")`);
         break;
       }
     }
