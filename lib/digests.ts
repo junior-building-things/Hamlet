@@ -1989,12 +1989,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // from each brief, AND detect status transitions that need notifications.
   // Currently notifies when a feature enters 待线内评审 (Line Review).
   const LINE_REVIEW_STATUS = '待线内评审';
-  const STATUS_CN_TO_EN: Record<string, string> = {
-    '开始': 'PRD/Design Prep', '待线内评审': 'Line Review', '线内评审完成': 'Dependency Check',
-    '待合规评估': 'Compliance Review', '待评估&排优': 'RD Allocation', '待需求详评': 'PRD Walkthrough',
-    '技术方案设计中': 'Tech Design', '开发中': 'Development', '测试中': 'QA Testing',
-    '实验中': 'AB Testing', '已上车': 'Merged', '已完成': 'Done',
-  };
   try {
     const prevCache = await readFeatureCache();
     const prevStatusMap = new Map<string, string>();
@@ -2004,11 +1998,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       }
     }
 
-    // Detect status transitions, send Line Review notification, and log to PRD Change Log.
-    const today = new Date().toISOString().split('T')[0];
+    // Detect transitions to Line Review and send notification cards.
     for (const f of features) {
       const prevStatus = prevStatusMap.get(f.workItemId);
-      const newStatus = STATUS_CN_TO_EN[f.overallStatusName] ?? f.overallStatusName;
       if (f.overallStatusName === LINE_REVIEW_STATUS && prevStatus && prevStatus !== 'Line Review') {
         console.log(`[digests] status transition: "${f.name}" ${prevStatus} → Line Review`);
         sendFeatureCard({
@@ -2019,14 +2011,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           headerTitle: 'PRD Ready ✅',
           headerTemplate: 'green',
         }).catch(e => console.warn(`[digests] Line Review card send failed for "${f.name}":`, e));
-      }
-      // Task 2: Log any status change to PRD Change Log
-      if (prevStatus && newStatus && prevStatus !== newStatus && f.prd) {
-        console.log(`[digests] PRD changelog: "${f.name}" status ${prevStatus} → ${newStatus}`);
-        appendPrdChangeLog(f.prd, [{
-          date: today,
-          detail: `Status: ${prevStatus} → ${newStatus}`,
-        }]).catch(e => console.warn(`[digests] PRD changelog status update failed for "${f.name}":`, e));
       }
     }
 
@@ -2067,6 +2051,63 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     console.log(`[digests] GCS feature cache merged: ${features.length} from digest, ${mergedFeatures.length} total (${mergedFeatures.length - features.length} preserved from UI)`);
   } catch (e) {
     console.warn('[digests] feature cache update / transition detection failed:', e);
+  }
+
+  // Step 2c: PRD Change Log auto-update — scan each feature's PRD for
+  // content changes since the last run. If the text differs, use Gemini
+  // to summarize what changed and append it to the Change Log section.
+  const PRD_SNAPSHOTS_PATH = 'hamlet/prd-snapshots.json';
+  try {
+    const { readDocText } = await import('./lark');
+    const { readJsonState, writeJsonState } = await import('./gcs-state');
+    const snapshots: Record<string, string> = await readJsonState<Record<string, string>>(PRD_SNAPSHOTS_PATH).catch(() => ({})) ?? {};
+    const today = new Date().toISOString().split('T')[0];
+    let prdScanned = 0;
+    let prdChanged = 0;
+
+    for (const f of features) {
+      if (!f.prd || f.overallStatusKey === 'end') continue;
+      prdScanned++;
+      try {
+        const currentText = await readDocText(f.prd);
+        if (!currentText) continue;
+        const prevText = snapshots[f.workItemId];
+
+        if (prevText && prevText !== currentText) {
+          // PRD content changed — use Gemini to summarize the diff
+          prdChanged++;
+          try {
+            const prdGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
+            const model = prdGenAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
+            const prompt = `A PRD (Product Requirements Document) was edited. Compare the old and new versions and write a 1-sentence summary of what changed. Focus on CONTENT changes (new sections, removed requirements, updated logic), not formatting. If it's just minor wording tweaks, say "Minor wording edits". Reply with ONLY the summary, no prefix.
+
+OLD VERSION:
+${prevText.slice(0, 4000)}
+
+NEW VERSION:
+${currentText.slice(0, 4000)}`;
+            const result = await model.generateContent(prompt);
+            const summary = result.response.text()?.trim() ?? 'PRD content updated';
+            console.log(`[digests] PRD changed for "${f.name}": ${summary}`);
+            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary }]);
+          } catch (e) {
+            console.warn(`[digests] Gemini PRD diff failed for "${f.name}":`, e);
+            await appendPrdChangeLog(f.prd, [{ date: today, detail: 'PRD content updated' }])
+              .catch(() => {});
+          }
+        }
+
+        // Update snapshot (always, even on first run)
+        snapshots[f.workItemId] = currentText;
+      } catch (e) {
+        console.warn(`[digests] PRD scan failed for "${f.name}":`, e);
+      }
+    }
+
+    await writeJsonState(PRD_SNAPSHOTS_PATH, snapshots);
+    console.log(`[digests] PRD scan: ${prdScanned} scanned, ${prdChanged} changed`);
+  } catch (e) {
+    console.warn('[digests] PRD change log scan failed:', e);
   }
 
   // Log distribution of active node IDs across all features (how many times
@@ -2222,13 +2263,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
             runsLeftToShow: 2,
           };
           console.log(`[digests] delay detected for "${feature.name}": ${latest.detail}`);
-          // Task 2: Auto-update PRD Change Log with the field change
-          if (feature.prd) {
-            appendPrdChangeLog(feature.prd, [{
-              date: new Date().toISOString().split('T')[0],
-              detail: latest.detail,
-            }]).catch(e => console.warn(`[digests] PRD changelog update failed for "${feature.name}":`, e));
-          }
         } else if (priorDelay && priorDelay.runsLeftToShow > 1) {
           // No new change, but a prior delay still has runs left — carry it.
           activeDelay = {

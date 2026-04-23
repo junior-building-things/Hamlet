@@ -931,6 +931,38 @@ export async function appendPrdChangeLog(
 }
 
 /**
+ * Read the full text content of a Lark doc. Returns all block text
+ * concatenated with newlines, preserving headings and paragraphs.
+ * Used for diffing PRD content between runs.
+ */
+export async function readDocText(docUrl: string): Promise<string> {
+  const docId = await resolveDocId(docUrl);
+  const token = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) return '';
+
+  const byId = new Map(blocks.map(b => [b.block_id, b]));
+
+  // Recursively extract text from a block and its children
+  function extractText(blockId: string): string {
+    const block = byId.get(blockId);
+    if (!block) return '';
+    const lines: string[] = [];
+    const text = blockText(block);
+    if (text) lines.push(text);
+    for (const childId of block.children ?? []) {
+      const childText = extractText(childId);
+      if (childText) lines.push(childText);
+    }
+    return lines.join('\n');
+  }
+
+  return pageBlock.children.map(id => extractText(id)).filter(Boolean).join('\n');
+}
+
+/**
  * Rename a section heading in a Lark doc.
  */
 export async function renameDocSection(docUrl: string, oldHeading: string, newHeading: string): Promise<void> {
