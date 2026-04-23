@@ -1639,6 +1639,8 @@ export async function collectUnansweredForFeature(
     console.warn(`[digests] failed to read messages for ${feature.name}:`, e);
     return null;
   }
+  const threadReplies = messages.filter(m => m.parent_id || m.root_id);
+  console.log(`[digests] Q&A "${feature.name}": ${messages.length} msgs (${threadReplies.length} thread replies), ownerOpenId=${ownerOpenId}`);
   if (messages.length === 0) return null;
 
   // Filter to messages where Thomas is in the @mentions list. Any sender,
@@ -1647,6 +1649,7 @@ export async function collectUnansweredForFeature(
     if (!m.mentions || m.mentions.length === 0) return false;
     return m.mentions.some(mention => mention.id?.open_id === ownerOpenId);
   });
+  console.log(`[digests] Q&A "${feature.name}": ${mentionMsgs.length} msgs mentioning owner`);
   if (mentionMsgs.length === 0) return null;
 
   // Drop the ones that have a reply.
