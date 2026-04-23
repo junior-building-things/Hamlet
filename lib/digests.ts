@@ -216,6 +216,7 @@ export interface DigestRunResult {
   featuresChecked: number;
   riskSent: boolean;
   unansweredSent: boolean;
+  prdChangesSent: boolean;
   riskFindings: RiskFinding[];
   unansweredFindings: UnansweredFinding[];
 }
@@ -1767,6 +1768,38 @@ export function formatUnansweredDigest(findings: UnansweredFinding[]): string {
   return lines.join('\n').trim();
 }
 
+// ─── Task 2: PRD Changes digest card ────────────────────────────────────────
+
+export function buildPrdChangesDigestCard(
+  changes: Array<{ name: string; prdUrl: string; meegoUrl: string; summary: string }>,
+): { title: string; template: CardHeaderTemplate; sections: CardSection[] } {
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
+  });
+  const title = `📝 Daily PRD Changes — ${today}`;
+  const template: CardHeaderTemplate = 'blue';
+  const sections: CardSection[] = [];
+
+  if (changes.length === 0) {
+    sections.push({ content: 'No PRD changes in the last 24 hours.' });
+    return { title, template, sections };
+  }
+
+  sections.push({
+    content: `**${changes.length} PRD${changes.length === 1 ? '' : 's'} updated**`,
+  });
+
+  for (const c of changes) {
+    const linkParts = [`[Meego](${c.meegoUrl})`, `[PRD](${c.prdUrl})`];
+    const lines: string[] = [];
+    lines.push(`**${escapeMd(c.name)}** (${linkParts.join(', ')})`);
+    lines.push(`  • ${escapeMd(c.summary)}`);
+    sections.push({ content: lines.join('\n') });
+  }
+
+  return { title, template, sections };
+}
+
 // ─── Task 3: Auto-fetch project links ───────────────────────────────────────
 
 /**
@@ -2057,6 +2090,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // content changes since the last run. If the text differs, use Gemini
   // to summarize what changed and append it to the Change Log section.
   const PRD_SNAPSHOTS_PATH = 'hamlet/prd-snapshots.json';
+  const prdChanges: Array<{ name: string; prdUrl: string; meegoUrl: string; summary: string }> = [];
   try {
     const { readDocContent } = await import('./lark');
     const { readJsonState, writeJsonState } = await import('./gcs-state');
@@ -2076,6 +2110,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         if (prevText && prevText !== currentText) {
           // PRD content changed — use Gemini to summarize the diff
           prdChanged++;
+          let summary = 'PRD content updated';
           try {
             const prdGenAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '');
             const model = prdGenAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
@@ -2087,14 +2122,17 @@ ${prevText.slice(0, 4000)}
 NEW VERSION:
 ${currentText.slice(0, 4000)}`;
             const result = await model.generateContent(prompt);
-            const summary = result.response.text()?.trim() ?? 'PRD content updated';
+            summary = result.response.text()?.trim() ?? 'PRD content updated';
             console.log(`[digests] PRD changed for "${f.name}": ${summary}`);
-            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Junior' }]);
           } catch (e) {
             console.warn(`[digests] Gemini PRD diff failed for "${f.name}":`, e);
-            await appendPrdChangeLog(f.prd, [{ date: today, detail: 'PRD content updated' }])
-              .catch(() => {});
           }
+          try {
+            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Junior' }]);
+          } catch (e) {
+            console.warn(`[digests] append PRD changelog failed for "${f.name}":`, e);
+          }
+          prdChanges.push({ name: f.name, prdUrl: f.prd, meegoUrl: f.meegoUrl, summary });
         }
 
         // Update snapshot (always, even on first run)
@@ -2497,10 +2535,26 @@ ${currentText.slice(0, 4000)}`;
     console.log('[digests] no unanswered questions — skipping Q&A digest');
   }
 
+  // Step 9: Send PRD Changes digest (only if there are changes) — interactive
+  // card to the same PM group chat.
+  let prdChangesSent = false;
+  if (rioToken && prdChanges.length > 0) {
+    const card = buildPrdChangesDigestCard(prdChanges);
+    const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
+    console.log('[digests] PRD changes digest:\n' + preview);
+    const id = await sendInteractiveCardToChat(
+      targetChatId, card.title, card.template, card.sections, rioToken,
+    );
+    prdChangesSent = id !== null;
+  } else {
+    console.log('[digests] no PRD changes — skipping PRD changes digest');
+  }
+
   return {
     featuresChecked: inDev.length,
     riskSent,
     unansweredSent,
+    prdChangesSent,
     riskFindings,
     unansweredFindings,
   };
