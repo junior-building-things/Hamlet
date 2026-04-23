@@ -922,12 +922,13 @@ export async function appendPrdChangeLog(
   const tableCells = blocks.filter(b => b.table_cell);
   const tables = blocks.filter(b => b.table);
   console.log(`[lark] appendPrdChangeLog: ${blocks.length} blocks, ${tables.length} tables, ${tableCells.length} table_cells`);
-  // Log all row-0 cells to see header text
-  const row0Cells = tableCells.filter(tc => tc.table_cell?.row_index === 0);
-  for (const tc of row0Cells) {
-    const parent = parentOf.get(tc.block_id);
-    const grandparent = parent ? parentOf.get(parent) : undefined;
-    console.log(`[lark]   row0 cell col=${tc.table_cell?.col_index} parent=${parent} gp=${grandparent} text="${allText(tc.block_id).trim().slice(0, 60)}"`);
+  // Debug: log first few table cells with their raw properties
+  for (const tc of tableCells.slice(0, 5)) {
+    console.log(`[lark]   cell id=${tc.block_id} table_cell=${JSON.stringify(tc.table_cell)} text="${allText(tc.block_id).trim().slice(0, 50)}" parent=${parentOf.get(tc.block_id)}`);
+  }
+  // Also check if any block has 'table' property
+  for (const tb of tables) {
+    console.log(`[lark]   table id=${tb.block_id} props=${JSON.stringify(tb.table).slice(0, 100)}`);
   }
 
   for (const b of blocks) {
