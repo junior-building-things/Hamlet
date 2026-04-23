@@ -36,9 +36,27 @@ export async function GET(req: Request) {
     const features = deletedIds.size > 0
       ? raw.filter(f => !deletedIds.has(f.id) && !deletedIds.has(f.meegoIssueId ?? ''))
       : raw;
-    // Write to GCS cache before returning so per-feature syncs that follow
-    // don't race against the write and accidentally restore deleted features.
-    try { await writeFeatureCache(features); } catch (e) { console.warn('[features] cache write failed:', e); }
+    // Merge with existing cache to preserve manually edited fields.
+    // manualEdits[] tracks which fields the user edited in the UI — those
+    // values must survive cache replacement.
+    try {
+      const prevCache = await readFeatureCache();
+      if (prevCache) {
+        const prevById = new Map(prevCache.features.map(f => [f.meegoIssueId ?? f.id, f]));
+        for (let i = 0; i < features.length; i++) {
+          const prev = prevById.get(features[i].meegoIssueId ?? features[i].id);
+          if (prev?.manualEdits && prev.manualEdits.length > 0) {
+            // Carry forward manualEdits and the manually edited field values
+            const merged = { ...features[i], manualEdits: prev.manualEdits };
+            for (const key of prev.manualEdits) {
+              if (key in prev) (merged as unknown as Record<string, unknown>)[key] = (prev as unknown as Record<string, unknown>)[key];
+            }
+            features[i] = merged;
+          }
+        }
+      }
+      await writeFeatureCache(features);
+    } catch (e) { console.warn('[features] cache write failed:', e); }
     return NextResponse.json({ features, cached: false });
   } catch (err) {
     console.error('Failed to fetch Meego features:', err);

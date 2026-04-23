@@ -237,16 +237,20 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           return data.features!.map(f => {
             const old = existing.get(f.id);
             if (!old) return f;
+            const me = new Set(old.manualEdits ?? []);
+            // pick: use new value unless field was manually edited
+            const pick = (key: string, synced: unknown, fallback: unknown) =>
+              me.has(key) ? fallback : (synced || fallback);
             // New basic fields from MQL overwrite, but keep enriched fields from previous sync
             return { ...old, ...f,
               // Always prefer existing status — MQL/list_todo returns node-level
               // status (e.g. "UAT") which is less accurate than the overall status
               // from syncFeatureStatus (e.g. "AB Testing").
               status:          old.status || f.status,
-              // Preserve enriched fields that MQL doesn't return (only overwrite if new value is non-empty)
-              figmaUrl:        f.figmaUrl        || old.figmaUrl,
-              abReportUrl:     f.abReportUrl     || old.abReportUrl,
-              libraUrl:        f.libraUrl        || old.libraUrl,
+              // Preserve enriched fields; protect manually edited ones
+              figmaUrl:        (pick('figmaUrl', f.figmaUrl, old.figmaUrl) as string),
+              abReportUrl:     (pick('abReportUrl', f.abReportUrl, old.abReportUrl) as string),
+              libraUrl:        (pick('libraUrl', f.libraUrl, old.libraUrl) as string),
               packageQrUrl:    f.packageQrUrl    || old.packageQrUrl,
               packageDownloadUrl: f.packageDownloadUrl || old.packageDownloadUrl,
               iosPackageQrUrl: f.iosPackageQrUrl || old.iosPackageQrUrl,
@@ -270,6 +274,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
               canCompleteNode: f.canCompleteNode   ?? old.canCompleteNode,
               avatars:         old.avatars,
               agents:          old.agents,
+              manualEdits:     old.manualEdits,
               lastUpdated:     f.lastUpdated       || old.lastUpdated,
             };
           });
