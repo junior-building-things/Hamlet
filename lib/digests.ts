@@ -2093,7 +2093,7 @@ ${currentText.slice(0, 4000)}`;
             let modifiedBy = '';
             try { modifiedBy = await getDocLastModifier(f.prd); } catch { /* ignore */ }
             console.log(`[digests] PRD changed for "${f.name}": ${summary} (by ${modifiedBy || 'unknown'})`);
-            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: modifiedBy || undefined }]);
+            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: modifiedBy || '@Junior' }]);
           } catch (e) {
             console.warn(`[digests] Gemini PRD diff failed for "${f.name}":`, e);
             await appendPrdChangeLog(f.prd, [{ date: today, detail: 'PRD content updated' }])
