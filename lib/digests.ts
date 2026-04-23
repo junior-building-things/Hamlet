@@ -2058,7 +2058,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // to summarize what changed and append it to the Change Log section.
   const PRD_SNAPSHOTS_PATH = 'hamlet/prd-snapshots.json';
   try {
-    const { readDocText } = await import('./lark');
+    const { readDocContent } = await import('./lark');
     const { readJsonState, writeJsonState } = await import('./gcs-state');
     const snapshots: Record<string, string> = await readJsonState<Record<string, string>>(PRD_SNAPSHOTS_PATH).catch(() => ({})) ?? {};
     const today = new Date().toISOString().split('T')[0];
@@ -2069,7 +2069,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       if (!f.prd || f.overallStatusKey === 'end') continue;
       prdScanned++;
       try {
-        const currentText = await readDocText(f.prd);
+        const currentText = await readDocContent(f.prd);
         if (!currentText) continue;
         const prevText = snapshots[f.workItemId];
 
