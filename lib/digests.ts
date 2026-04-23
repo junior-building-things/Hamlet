@@ -2095,7 +2095,8 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     const { readDocContent, grantBotEditAccess } = await import('./lark');
     const { readJsonState, writeJsonState } = await import('./gcs-state');
     const snapshots: Record<string, string> = await readJsonState<Record<string, string>>(PRD_SNAPSHOTS_PATH).catch(() => ({})) ?? {};
-    const today = new Date().toISOString().split('T')[0];
+    // Use Singapore time (SGT = UTC+8) for the change log date
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Singapore' }); // YYYY-MM-DD
 
     // Get user access token (for granting bot access to PRDs on permission errors)
     let userAccessTokenForPrd: string | undefined;
