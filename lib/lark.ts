@@ -50,6 +50,16 @@ export async function getLarkBotToken(): Promise<string> {
   return getAccessToken();
 }
 
+// ─── Bot identity ───────────────────────────────────────────────────────────
+
+/**
+ * Get the bot's own open_id from the LARK_BOT_OPEN_ID env var.
+ * Used for @-mentioning the bot in doc cells.
+ */
+export function getBotOpenId(): string {
+  return process.env.LARK_BOT_OPEN_ID ?? '';
+}
+
 // ─── Root folder cache ────────────────────────────────────────────────────────
 
 let cachedRootFolder    = '';
@@ -166,9 +176,13 @@ async function getDocBlocks(docId: string, token: string): Promise<LarkBlock[]> 
   return data.data?.items ?? [];
 }
 
+type UpdateTextElement =
+  | { text_run: { content: string; text_element_style: Record<string, unknown> } }
+  | { mention_user: { user_id: string; text_element_style: Record<string, unknown> } };
+
 type UpdateRequest = {
   block_id: string;
-  update_text_elements: { elements: { text_run: { content: string; text_element_style: Record<string, unknown> } }[] };
+  update_text_elements: { elements: UpdateTextElement[] };
 };
 
 async function batchUpdateBlocks(docId: string, requests: UpdateRequest[], token: string): Promise<void> {
@@ -997,9 +1011,14 @@ export async function appendPrdChangeLog(
 
       console.log(`[lark] inserted row: ${newCells.length} new cells (expected ${colCount})`);
 
-      // Step 3: Fill cells — col0=date, col1=description, col2=by
-      const cellTexts = [entry.date, entry.detail, entry.by ?? '@Junior'];
-      for (let col = 0; col < Math.min(newCells.length, cellTexts.length); col++) {
+      // Step 3: Fill cells — col0=date, col1=description, col2=by (as @mention)
+      const botOpenId = getBotOpenId();
+      const cells: Array<{ text: string; mention?: string }> = [
+        { text: entry.date },
+        { text: entry.detail },
+        { text: entry.by ?? '@Junior', mention: botOpenId },
+      ];
+      for (let col = 0; col < Math.min(newCells.length, cells.length); col++) {
         // Find the paragraph block inside the cell
         let paraId = '';
         for (const childId of newCells[col].children ?? []) {
@@ -1007,9 +1026,13 @@ export async function appendPrdChangeLog(
           if (child?.block_type === 2) { paraId = child.block_id; break; }
         }
         if (paraId) {
+          const cell = cells[col];
+          const elements: UpdateTextElement[] = cell.mention
+            ? [{ mention_user: { user_id: cell.mention, text_element_style: {} } }]
+            : [{ text_run: { content: cell.text, text_element_style: {} } }];
           await batchUpdateBlocks(docId, [{
             block_id: paraId,
-            update_text_elements: { elements: [{ text_run: { content: cellTexts[col], text_element_style: {} } }] },
+            update_text_elements: { elements },
           }], token);
         }
       }
