@@ -1765,13 +1765,47 @@ export async function readChatMessages(
     pageToken = data.data.page_token;
   }
 
-  // Fetch thread replies for top-level messages so @mentions in threads
-  // are included. Cap at 20 thread fetches per chat to limit API calls.
-  if (options?.includeThreadReplies && messages.length > 0) {
-    const topLevel = messages.filter(m => !m.parent_id && !m.root_id);
+  // Fetch thread replies so @mentions in threads are included. The list
+  // messages API only returns top-level messages. Thread parents can be
+  // much older than the scan window but have recent replies, so we also
+  // fetch older messages (up to 30 days) to discover thread parents, then
+  // fetch their replies and keep only those within the scan window.
+  if (options?.includeThreadReplies) {
+    // Extend the fetch to 30 days to find older thread parents
+    const extendedSinceMs = sinceMs - 30 * 24 * 60 * 60 * 1000;
+    let extPageToken = '';
+    const olderMessages: ChatMessage[] = [];
+    // Fetch up to 2 pages of older messages
+    for (let page = 0; page < 2; page++) {
+      const extParams = new URLSearchParams({
+        container_id_type: 'chat',
+        container_id: chatId,
+        start_time: String(Math.floor(extendedSinceMs / 1000)),
+        end_time: String(Math.floor(sinceMs / 1000)),
+        sort_type: 'ByCreateTimeDesc',
+        page_size: String(pageSize),
+      });
+      if (extPageToken) extParams.set('page_token', extPageToken);
+      try {
+        const extRes = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/messages?${extParams}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const extData = await parseJson(extRes, 'read_older_messages') as {
+          code: number; data?: { items?: ChatMessage[]; has_more?: boolean; page_token?: string };
+        };
+        if (extData.code !== 0) break;
+        olderMessages.push(...(extData.data?.items ?? []));
+        if (!extData.data?.has_more || !extData.data?.page_token) break;
+        extPageToken = extData.data.page_token;
+      } catch { break; }
+    }
+
+    // Combine all top-level messages (recent + older) for thread reply fetching
+    const allTopLevel = [...messages, ...olderMessages].filter(m => !m.parent_id && !m.root_id);
     const MAX_THREAD_FETCHES = 20;
     let fetched = 0;
-    for (const msg of topLevel) {
+    const sinceSec = Math.floor(sinceMs / 1000);
+    for (const msg of allTopLevel) {
       if (fetched >= MAX_THREAD_FETCHES) break;
       try {
         const rRes = await fetch(
@@ -1782,12 +1816,11 @@ export async function readChatMessages(
           code: number; data?: { items?: ChatMessage[] };
         };
         if (rData.code === 0 && rData.data?.items) {
-          // Filter replies within the time window
-          const sinceSec = Math.floor(sinceMs / 1000);
+          // Only keep replies within the scan window
           const replies = rData.data.items.filter(
             r => Number(r.create_time ?? 0) >= sinceSec,
           );
-          messages.push(...replies);
+          if (replies.length > 0) messages.push(...replies);
         }
         fetched++;
       } catch { /* skip thread */ }
