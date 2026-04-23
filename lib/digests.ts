@@ -1640,7 +1640,15 @@ export async function collectUnansweredForFeature(
     return null;
   }
   const threadReplies = messages.filter(m => m.parent_id || m.root_id);
-  console.log(`[digests] Q&A "${feature.name}": ${messages.length} msgs (${threadReplies.length} thread replies), ownerOpenId=${ownerOpenId}`);
+  // Log mention details for debugging
+  const withMentions = messages.filter(m => m.mentions && m.mentions.length > 0);
+  console.log(`[digests] Q&A "${feature.name}": ${messages.length} msgs (${threadReplies.length} thread replies, ${withMentions.length} with mentions), ownerOpenId=${ownerOpenId}`);
+  if (withMentions.length > 0) {
+    for (const m of withMentions.slice(0, 3)) {
+      const mentionIds = (m.mentions ?? []).map(mn => mn.id?.open_id ?? '?').join(',');
+      console.log(`[digests]   mention msg ${m.message_id}: sender=${m.sender?.sender_id?.open_id}, mentionIds=${mentionIds}, parent=${m.parent_id || 'none'}, root=${m.root_id || 'none'}`);
+    }
+  }
   if (messages.length === 0) return null;
 
   // Filter to messages where Thomas is in the @mentions list. Any sender,
