@@ -681,7 +681,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
       {/* Column headers (sticky) */}
       {!loading && !fetchError && filtered.length > 0 && view === 'list' && (
-        <div className="shrink-0 px-6">
+        <div className="shrink-0 px-6 mt-4">
           <FeatureListHeader gridCols={gridCols} standalone />
         </div>
       )}
