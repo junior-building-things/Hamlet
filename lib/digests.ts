@@ -1582,7 +1582,7 @@ export async function buildRiskDigestCard(findings: RiskFinding[]): Promise<{
 /**
  * Q&A scan window — last 24 h of messages, matching the chat-risk window.
  */
-const UNANSWERED_WINDOW_MS = 5 * 24 * 60 * 60 * 1000; // TEMP: 5 days for testing
+const UNANSWERED_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** Hard cap on questions per feature in the card so a busy chat doesn't blow up the message. */
 const MAX_QUESTIONS_PER_FEATURE = 5;
@@ -1638,20 +1638,6 @@ export async function collectUnansweredForFeature(
   } catch (e) {
     console.warn(`[digests] failed to read messages for ${feature.name}:`, e);
     return null;
-  }
-  const threadReplies = messages.filter(m => m.parent_id || m.root_id);
-  // Log mention details for debugging
-  const withMentions = messages.filter(m => m.mentions && m.mentions.length > 0);
-  console.log(`[digests] Q&A "${feature.name}": ${messages.length} msgs (${threadReplies.length} thread replies, ${withMentions.length} with mentions), ownerOpenId=${ownerOpenId}`);
-  for (const m of withMentions.slice(0, 5)) {
-    const mentionIds = (m.mentions ?? []).map(mn => `${mn.name}=${mn.id?.open_id ?? '?'}`).join(', ');
-    const ts = new Date(Number(m.create_time ?? 0) * 1000).toISOString();
-    console.log(`[digests]   mention: ${m.msg_type} ${ts} sender=${m.sender?.sender_id?.open_id} mentions=[${mentionIds}] parent=${m.parent_id || 'none'} root=${m.root_id || 'none'}`);
-  }
-  for (const m of threadReplies.slice(0, 5)) {
-    const mentionIds = (m.mentions ?? []).map(mn => `${mn.name}=${mn.id?.open_id ?? '?'}`).join(', ');
-    const ts = new Date(Number(m.create_time ?? 0) * 1000).toISOString();
-    console.log(`[digests]   thread: ${m.msg_type} ${ts} mentions=[${mentionIds}] parent=${m.parent_id || 'none'}`);
   }
   if (messages.length === 0) return null;
 
