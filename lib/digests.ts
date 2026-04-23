@@ -2078,7 +2078,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           // PRD content changed — use Gemini to summarize the diff
           prdChanged++;
           try {
-            const prdGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
+            const prdGenAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '');
             const model = prdGenAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
             const prompt = `A PRD (Product Requirements Document) was edited. Compare the old and new versions and write a 1-sentence summary of what changed. Focus on CONTENT changes (new sections, removed requirements, updated logic), not formatting. If it's just minor wording tweaks, say "Minor wording edits". Reply with ONLY the summary, no prefix.
 
