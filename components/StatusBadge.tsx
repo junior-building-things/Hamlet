@@ -7,6 +7,7 @@ const STATUS_COLORS: Record<string, string> = {
   'PRD/Design Prep': 'bg-purple-600 text-white',
   'Line Review':     'bg-pink-600 text-white',
   'Dependency Check':'bg-rose-600 text-white',
+  'Compliance Review':'bg-rose-400 text-white',
   'RD Allocation':   'bg-orange-500 text-white',
   'PRD Walkthrough': 'bg-amber-500 text-black',
   'Tech Design':     'bg-cyan-600 text-white',
