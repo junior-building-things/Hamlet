@@ -218,7 +218,7 @@ interface ExtendedFields { priority: Priority; prd: string; complianceUrl: strin
 // Fetch all PM-owned TikTok stories via MQL — returns every story regardless of todo status
 async function fetchAllOwnedStories(): Promise<Map<string, ExtendedFields>> {
   const map = new Map<string, ExtendedFields>();
-  const MQL = "SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at` FROM `TikTok`.`需求` WHERE `__PM` INCLUDES current_login_user()";
+  const MQL = "SELECT `work_item_id`, `name`, `priority`, `wiki`, `field_due3fb`, `updated_at` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()";
   const GROUP_ID = '1';
   let sessionId: string | undefined;
   let page = 1;
@@ -306,10 +306,10 @@ interface MeegoTodoResponse {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
-  // Fetch todo items and all PM-owned stories in parallel.
-  // MQL returns ALL stories where user is PM (regardless of todo status).
-  // list_todo provides accurate active node info for items with pending actions.
-  const [todoItems, allOwned] = await Promise.all([
+  // Fetch todo items, MQL-owned stories, and Junior chats (for co-PM features) in parallel.
+  // MQL `__PM = current_login_user()` only matches sole PM.
+  // Junior chats catch co-PM features because Junior is in those group chats.
+  const [todoItems, allOwned, juniorChats] = await Promise.all([
     (async () => {
       const items: MeegoTodoItem[] = [];
       let page = 1;
@@ -331,6 +331,18 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       console.error('[meego] fetchAllOwnedStories failed:', err);
       return new Map<string, ExtendedFields>();
     }),
+    // Read Junior chats cache from GCS for co-PM feature discovery
+    (async () => {
+      try {
+        const { readJsonState } = await import('./gcs-state');
+        const state = await readJsonState<{
+          juniorChatsCache?: { chats: Array<{ chatId: string; chatName: string; meegoId: string }> };
+        }>('digests/chat-risks.json');
+        return state?.juniorChatsCache?.chats ?? [];
+      } catch {
+        return [];
+      }
+    })(),
   ]);
 
   // Build features from todo items (these have accurate node info)
@@ -362,10 +374,11 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
     });
   }
 
-  // Add stories from MQL that weren't in the todo list (skip deleted/completed with no active node)
+  // Add stories from MQL that weren't in the todo list
+  const allIds = new Set(todoIds);
   for (const [id, ext] of allOwned) {
-    if (todoIds.has(id)) continue;
-    // Status will be resolved by per-feature syncFeatureStatus; "Unknown" filtered on frontend
+    if (allIds.has(id)) continue;
+    allIds.add(id);
     features.push({
       id,
       name: ext.name,
@@ -384,6 +397,32 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
       meegoUrl: `https://meego.larkoffice.com/${projectKey}/story/detail/${id}`,
     });
   }
+
+  // Add co-PM features from Junior chats that weren't found by MQL or list_todo.
+  // Junior is in the feature group chats, so these are features where the user
+  // is a co-PM (multi-PM field that MQL `= current_login_user()` misses).
+  let coPmAdded = 0;
+  for (const chat of juniorChats) {
+    if (!chat.meegoId || allIds.has(chat.meegoId)) continue;
+    allIds.add(chat.meegoId);
+    coPmAdded++;
+    features.push({
+      id: chat.meegoId,
+      name: chat.chatName.replace(/\s*-\s*\[需求同步群\]$/, ''),
+      description: '',
+      status: 'Unknown',
+      priority: 'P1',
+      owner: 'Thomas',
+      tasks: [],
+      lastUpdated: '',
+      meegoProjectKey: projectKey,
+      meegoIssueId: chat.meegoId,
+      meegoNodeKey: '',
+      meegoUrl: `https://meego.larkoffice.com/${projectKey}/story/detail/${chat.meegoId}`,
+      chatId: chat.chatId,
+    });
+  }
+  if (coPmAdded > 0) console.log(`[meego] added ${coPmAdded} co-PM features from Junior chats`);
 
   return features;
 }

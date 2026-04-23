@@ -1087,7 +1087,7 @@ async function fetchAllPmOwnedIds(
     list?: Array<{ count?: number }>;
     data?: Record<string, Array<{ moql_field_list?: Array<{ key: string; value: { long_value?: number; varchar_value?: string; string_value?: string } }> }>>;
   }
-  const MQL = "SELECT `work_item_id`, `name` FROM `TikTok`.`需求` WHERE `__PM` INCLUDES current_login_user()";
+  const MQL = "SELECT `work_item_id`, `name` FROM `TikTok`.`需求` WHERE `__PM` = current_login_user()";
   let mqlAdded = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
