@@ -932,7 +932,7 @@ export async function appendPrdChangeLog(
   }
 
   for (const b of blocks) {
-    if (!b.table_cell || b.table_cell.row_index !== 0) continue;
+    if (!b.table_cell) continue;
     const cellText = allText(b.block_id);
     if (KEYWORDS.some(kw => cellText.includes(kw))) {
       // Walk up to find the table block (parent of the cell)
@@ -951,12 +951,15 @@ export async function appendPrdChangeLog(
   }
 
   if (tableBlockId) {
+    // Collect existing cell IDs before insertion
+    const existingCellIds = new Set(blocks.filter(b => b.table_cell).map(b => b.block_id));
     const tableBlock = byId.get(tableBlockId);
-    const tableProps = tableBlock?.table as { property?: { row_size?: number } } | undefined;
+    const tableProps = tableBlock?.table as { property?: { row_size?: number; column_size?: number } } | undefined;
+    const colCount = tableProps?.property?.column_size ?? 3;
     let rowCount = tableProps?.property?.row_size ?? 0;
 
     for (const entry of entries) {
-      // Step 1: Insert a new row via batch_update with insert_table_row
+      // Step 1: Insert a new row via batch_update
       const insertRes = await fetch(
         `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/batch_update`,
         {
@@ -977,11 +980,15 @@ export async function appendPrdChangeLog(
         continue;
       }
 
-      // Step 2: Re-fetch blocks to find the new row's cells
+      // Step 2: Re-fetch blocks and find NEW cells (IDs that didn't exist before)
       const freshBlocks = await getDocBlocks(docId, token);
-      const newCells = freshBlocks
-        .filter(nb => nb.table_cell && nb.table_cell.row_index === rowCount)
-        .sort((a, b) => (a.table_cell?.col_index ?? 0) - (b.table_cell?.col_index ?? 0));
+      const newCells = freshBlocks.filter(nb =>
+        nb.table_cell && !existingCellIds.has(nb.block_id),
+      );
+      // Add new cell IDs to the set for subsequent iterations
+      for (const nc of newCells) existingCellIds.add(nc.block_id);
+
+      console.log(`[lark] inserted row: ${newCells.length} new cells (expected ${colCount})`);
 
       // Step 3: Fill cells — col0=date, col1=description, col2=by
       const cellTexts = [entry.date, entry.detail, entry.by ?? '@Junior'];
