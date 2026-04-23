@@ -56,4 +56,6 @@ export interface Feature {
   // Daily risk assessment data (populated by the digest cron)
   riskLevel?: 'red' | 'yellow' | 'green';
   riskNotes?: string[];
+  // Fields manually edited in the UI — protected from sync overwrites
+  manualEdits?: string[];
 }

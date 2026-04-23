@@ -167,42 +167,50 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           // Merge avatars into both the global AV map and the feature's avatars field
           const newAvatars = (d.pocAvatars && typeof d.pocAvatars === 'object') ? d.pocAvatars as Record<string, string> : {};
           if (Object.keys(newAvatars).length > 0) Object.assign(AV, newAvatars);
-          setFeatures(prev => prev.map(p => p.id !== f.id ? p : {
-            ...p,
-            status:          ((d.status as string) && d.status !== 'Unknown' && d.status !== 'Syncing…') ? (d.status as string) : p.status,
-            name:            (d.name             as string) || p.name,
-            owner:           (d.owner            as string) || p.owner,
-            meegoNodeKey:    (d.meegoNodeKey     as string) || p.meegoNodeKey,
-            prd:             (d.prd              as string) || p.prd,
-            figmaUrl:        (d.figmaUrl         as string) || p.figmaUrl,
-            complianceUrl:   (d.complianceUrl    as string) || p.complianceUrl,
-            priority:        ((d.priority as Priority) ?? p.priority),
-            canCompleteNode: d.canCompleteNode   as boolean,
-            quarterlyCycle:  (d.quarterlyCycle   as string) || p.quarterlyCycle,
-            businessLine:    (d.businessLine     as string) || p.businessLine,
-            socialComponent: (d.socialComponent  as string) || p.socialComponent,
-            pmOwner:         (d.pmOwner          as string) || p.pmOwner,
-            tpmOwner:        (d.tpmOwner         as string) || p.tpmOwner,
-            techOwner:       (d.techOwner        as string) || p.techOwner,
-            iosOwner:        (d.iosOwner         as string) || p.iosOwner,
-            androidOwner:    (d.androidOwner     as string) || p.androidOwner,
-            serverOwner:     (d.serverOwner      as string) || p.serverOwner,
-            qaOwner:         (d.qaOwner          as string) || p.qaOwner,
-            daOwner:         (d.daOwner          as string) || p.daOwner,
-            uiuxOwner:       (d.uiuxOwner        as string) || p.uiuxOwner,
-            contentDesigner: (d.contentDesigner  as string) || p.contentDesigner,
-            iosVersion:      (d.iosVersion       as string) || p.iosVersion,
-            versionHistory:  trackVersion(p.versionHistory, (d.iosVersion as string) || p.iosVersion),
-            abReportUrl:     (d.abReportUrl      as string) || p.abReportUrl,
-            libraUrl:        (d.libraUrl         as string) || p.libraUrl,
-            packageQrUrl:    (d.packageQrUrl     as string) || p.packageQrUrl,
-            packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
-            iosPackageQrUrl: (d.iosPackageQrUrl  as string) || p.iosPackageQrUrl,
-            iosPackageDownloadUrl: (d.iosPackageDownloadUrl as string) || p.iosPackageDownloadUrl,
-            chatId:          (d.chatId           as string) || p.chatId,
-            avatars:         { ...p.avatars, ...newAvatars },
-            agents:          p.agents,
-            lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
+          setFeatures(prev => prev.map(p => {
+            if (p.id !== f.id) return p;
+            const me = new Set(p.manualEdits ?? []);
+            // pick: use synced value unless field was manually edited
+            const pick = (key: string, synced: unknown, fallback: unknown) =>
+              me.has(key) ? fallback : (synced || fallback);
+            return {
+              ...p,
+              status:          ((d.status as string) && d.status !== 'Unknown' && d.status !== 'Syncing…') ? (d.status as string) : p.status,
+              name:            (pick('name', d.name, p.name) as string),
+              owner:           (d.owner            as string) || p.owner,
+              meegoNodeKey:    (d.meegoNodeKey     as string) || p.meegoNodeKey,
+              prd:             (pick('prd', d.prd, p.prd) as string),
+              figmaUrl:        (pick('figmaUrl', d.figmaUrl, p.figmaUrl) as string),
+              complianceUrl:   (pick('complianceUrl', d.complianceUrl, p.complianceUrl) as string),
+              priority:        ((d.priority as Priority) ?? p.priority),
+              canCompleteNode: d.canCompleteNode   as boolean,
+              quarterlyCycle:  (d.quarterlyCycle   as string) || p.quarterlyCycle,
+              businessLine:    (d.businessLine     as string) || p.businessLine,
+              socialComponent: (d.socialComponent  as string) || p.socialComponent,
+              pmOwner:         (d.pmOwner          as string) || p.pmOwner,
+              tpmOwner:        (d.tpmOwner         as string) || p.tpmOwner,
+              techOwner:       (d.techOwner        as string) || p.techOwner,
+              iosOwner:        (d.iosOwner         as string) || p.iosOwner,
+              androidOwner:    (d.androidOwner     as string) || p.androidOwner,
+              serverOwner:     (d.serverOwner      as string) || p.serverOwner,
+              qaOwner:         (d.qaOwner          as string) || p.qaOwner,
+              daOwner:         (d.daOwner          as string) || p.daOwner,
+              uiuxOwner:       (d.uiuxOwner        as string) || p.uiuxOwner,
+              contentDesigner: (d.contentDesigner  as string) || p.contentDesigner,
+              iosVersion:      (d.iosVersion       as string) || p.iosVersion,
+              versionHistory:  trackVersion(p.versionHistory, (d.iosVersion as string) || p.iosVersion),
+              abReportUrl:     (pick('abReportUrl', d.abReportUrl, p.abReportUrl) as string),
+              libraUrl:        (pick('libraUrl', d.libraUrl, p.libraUrl) as string),
+              packageQrUrl:    (d.packageQrUrl     as string) || p.packageQrUrl,
+              packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
+              iosPackageQrUrl: (d.iosPackageQrUrl  as string) || p.iosPackageQrUrl,
+              iosPackageDownloadUrl: (d.iosPackageDownloadUrl as string) || p.iosPackageDownloadUrl,
+              chatId:          (d.chatId           as string) || p.chatId,
+              avatars:         { ...p.avatars, ...newAvatars },
+              agents:          p.agents,
+              manualEdits:     p.manualEdits,
+              lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
+            };
           }));
         } catch { /* ignore per-card errors */ }
         setSyncingIds(prev => { const next = new Set(prev); next.delete(f.id); return next; });
@@ -340,15 +348,20 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       if (!res.ok) throw new Error('Sync failed');
       const newAvatars2 = (d.pocAvatars && typeof d.pocAvatars === 'object') ? d.pocAvatars as Record<string, string> : {};
       if (Object.keys(newAvatars2).length > 0) Object.assign(AV, newAvatars2);
-      setFeatures(prev => prev.map(p => p.id !== feature.id ? p : {
+      setFeatures(prev => prev.map(p => {
+        if (p.id !== feature.id) return p;
+        const me = new Set(p.manualEdits ?? []);
+        const pick = (key: string, synced: unknown, fallback: unknown) =>
+          me.has(key) ? fallback : (synced || fallback);
+        return {
         ...p,
         status:          ((d.status as string) && d.status !== 'Unknown' && d.status !== 'Syncing…') ? (d.status as string) : p.status,
-        name:            (d.name            as string) || p.name,
+        name:            (pick('name', d.name, p.name) as string),
         owner:           (d.owner           as string) || p.owner,
         meegoNodeKey:    (d.meegoNodeKey    as string) || p.meegoNodeKey,
-        prd:             (d.prd             as string) || p.prd,
-        figmaUrl:        (d.figmaUrl        as string) || p.figmaUrl,
-        complianceUrl:   (d.complianceUrl   as string) || p.complianceUrl,
+        prd:             (pick('prd', d.prd, p.prd) as string),
+        figmaUrl:        (pick('figmaUrl', d.figmaUrl, p.figmaUrl) as string),
+        complianceUrl:   (pick('complianceUrl', d.complianceUrl, p.complianceUrl) as string),
         priority:        ((d.priority as Priority) ?? p.priority),
         canCompleteNode: d.canCompleteNode  as boolean,
         quarterlyCycle:  (d.quarterlyCycle  as string) || p.quarterlyCycle,
@@ -366,15 +379,16 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         contentDesigner: (d.contentDesigner as string) || p.contentDesigner,
         iosVersion:      (d.iosVersion     as string) || p.iosVersion,
         versionHistory:  trackVersion(p.versionHistory, (d.iosVersion as string) || p.iosVersion),
-        abReportUrl:     (d.abReportUrl    as string) || p.abReportUrl,
-        libraUrl:        (d.libraUrl      as string) || p.libraUrl,
+        abReportUrl:     (pick('abReportUrl', d.abReportUrl, p.abReportUrl) as string),
+        libraUrl:        (pick('libraUrl', d.libraUrl, p.libraUrl) as string),
         packageQrUrl:    (d.packageQrUrl  as string) || p.packageQrUrl,
         packageDownloadUrl: (d.packageDownloadUrl as string) || p.packageDownloadUrl,
         chatId:          (d.chatId        as string) || p.chatId,
         avatars:         { ...p.avatars, ...newAvatars2 },
         agents:          p.agents,
+        manualEdits:     p.manualEdits,
         lastUpdated:     p.lastUpdated || (d.lastUpdated as string) || '',
-      }));
+      };  }));
     } catch { /* ignore */ }
     finally { setSyncingIds(prev => { const next = new Set(prev); next.delete(feature.id); return next; }); }
   }, [setFeatures]);
@@ -571,8 +585,15 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     const prev = features.find(f => f.id === featureId);
     if (!prev) return;
 
+    // Track manually edited fields so sync won't overwrite them
+    const editedKeys = Object.keys(updates).filter(k => k !== 'riskNotes');
     // Optimistic update
-    setFeatures(fs => fs.map(f => f.id !== featureId ? f : { ...f, ...updates }));
+    setFeatures(fs => fs.map(f => {
+      if (f.id !== featureId) return f;
+      const existing = new Set(f.manualEdits ?? []);
+      for (const k of editedKeys) existing.add(k);
+      return { ...f, ...updates, manualEdits: [...existing] };
+    }));
 
     try {
       await fetch('/api/meego/update', {
@@ -582,7 +603,11 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           projectKey: prev.meegoProjectKey,
           workItemId: prev.meegoIssueId,
           featureId,
-          fields: { ...updates, ...(updates.name && prev.prd ? { prd: prev.prd } : {}) },
+          fields: {
+            ...updates,
+            ...(updates.name && prev.prd ? { prd: prev.prd } : {}),
+            manualEdits: [...new Set([...(prev.manualEdits ?? []), ...editedKeys])],
+          },
         }),
       }).then(r => {
         if (!r.ok) throw new Error('Update failed');
