@@ -117,6 +117,70 @@ function EditableText({ value, onSave, className, placeholder, allowEmpty, showT
   );
 }
 
+// ─── Risk badge with reasons tooltip ────────────────────────────────────────
+
+function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void }) {
+  const [showTip, setShowTip] = useState(false);
+  const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0 });
+  const [mounted, setMounted] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const reasons = feature.riskNotes && feature.riskNotes.length > 0 ? feature.riskNotes : [];
+  const showTooltip = reasons.length > 0 && feature.riskLevel !== 'green';
+
+  function handleEnter() {
+    if (!showTooltip || !ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    setAnchor({ top: r.top, left: r.left, width: r.width });
+    setShowTip(true);
+  }
+  function handleLeave() { setShowTip(false); }
+
+  if (!feature.riskLevel) return null;
+
+  return (
+    <>
+      <span
+        ref={ref}
+        onClick={onClick}
+        onMouseEnter={handleEnter}
+        onMouseLeave={handleLeave}
+        className={`inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
+          feature.riskLevel === 'red' ? 'text-red-600' :
+          feature.riskLevel === 'yellow' ? 'text-amber-600' :
+          'text-emerald-600'
+        }`}
+      >
+        <span>{feature.riskLevel === 'red' ? '🔴' : feature.riskLevel === 'yellow' ? '🟡' : '🟢'}</span>
+        <span>{feature.riskLevel === 'red' ? 'High' : feature.riskLevel === 'yellow' ? 'Medium' : 'Low'}</span>
+      </span>
+      {showTip && mounted && createPortal(
+        <div
+          className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 text-xs text-[var(--foreground)] max-w-[400px] pointer-events-none"
+          style={{
+            top: anchor.top - 8,
+            left: anchor.left + anchor.width / 2,
+            transform: 'translate(-50%, -100%)',
+            zIndex: 9999,
+          }}
+        >
+          {reasons.length === 1 ? (
+            <span>{reasons[0]}</span>
+          ) : (
+            <ul className="list-disc list-inside space-y-0.5">
+              {reasons.map((r, i) => <li key={i}>{r}</li>)}
+            </ul>
+          )}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate }: Props) {
@@ -244,38 +308,9 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <TeamAvatars feature={feature} ringColor="var(--card)" onToggleAgent={onToggleAgent} />
       </div>
 
-      {/* Risk */}
-      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
-        {feature.riskLevel && (
-          <span className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap ${
-            feature.riskLevel === 'red' ? 'text-red-600' :
-            feature.riskLevel === 'yellow' ? 'text-amber-600' :
-            'text-emerald-600'
-          }`}>
-            {feature.riskLevel === 'red' ? '🔴' : feature.riskLevel === 'yellow' ? '🟡' : '🟢'}
-            {feature.riskLevel === 'red' ? 'High' : feature.riskLevel === 'yellow' ? 'Medium' : 'Low'}
-          </span>
-        )}
-      </div>
-
-      {/* Notes (editable) */}
-      <div className="hidden sm:flex items-center py-1.5 pl-4 max-w-[200px]">
-        {onFieldUpdate ? (
-          <EditableText
-            value={(feature.riskNotes && feature.riskNotes.length > 0 && feature.riskLevel !== 'green') ? feature.riskNotes.join(', ') : ''}
-            onSave={v => onFieldUpdate(feature.id, { riskNotes: v.split(', ').map(s => s.trim()).filter(Boolean) })}
-            className="text-xs text-[var(--muted)] truncate"
-            placeholder="—"
-            allowEmpty
-            showTooltipIfTruncated
-          />
-        ) : (
-          feature.riskNotes && feature.riskNotes.length > 0 && feature.riskLevel !== 'green' && (
-            <span className="text-xs text-[var(--muted)] truncate" title={feature.riskNotes.join(', ')}>
-              {feature.riskNotes.join(', ')}
-            </span>
-          )
-        )}
+      {/* Risk (with reasons tooltip on hover) */}
+      <div className="hidden sm:flex items-center py-1.5 pl-4">
+        <RiskBadge feature={feature} onClick={() => onEdit(feature)} />
       </div>
 
       {/* Action */}
