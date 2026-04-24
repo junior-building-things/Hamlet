@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat } from '@/lib/lark';
+import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat, refreshUserToken } from '@/lib/lark';
+import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -95,8 +96,22 @@ export async function POST(req: NextRequest) {
           content: `PM made an update to the PRD [${escapeMd(featureName)}](${prdUrl}):\n- **${escapeMd(summary)}**${mentionsLine}`,
         },
       ];
-      // Ensure the bot is a member of the chat before sending
-      await addBotToChat(chatId);
+      // Ensure the bot is a member of the chat before sending.
+      // If bot isn't in chat, fall back to adding via the user's access token.
+      let userAccessToken: string | undefined;
+      try {
+        const state = await loadDigestState();
+        const refresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
+        if (refresh) {
+          const result = await refreshUserToken(refresh);
+          if (result) {
+            userAccessToken = result.accessToken;
+            state.larkUserRefreshToken = result.refreshToken;
+            await saveDigestState(state);
+          }
+        }
+      } catch { /* ignore */ }
+      await addBotToChat(chatId, userAccessToken);
       const msgId = await sendInteractiveCardToChat(chatId, cardTitle, 'blue', sections, token);
       if (!msgId) {
         return NextResponse.json({

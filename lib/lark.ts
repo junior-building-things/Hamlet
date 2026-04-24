@@ -2330,14 +2330,17 @@ export async function sendInteractiveCardToChat(
 
 /**
  * Add the bot to a Lark chat by chatId. Idempotent — returns true if
- * the bot is already a member (code 230001) or was successfully added.
+ * the bot is already a member or was successfully added.
+ * Tries bot self-join first; falls back to user token when the bot
+ * isn't in the chat (error 232011 "Operator can NOT be out of the chat").
  */
-export async function addBotToChat(chatId: string): Promise<boolean> {
+export async function addBotToChat(chatId: string, userAccessToken?: string): Promise<boolean> {
   const botToken = await getAccessToken();
   const appId = process.env.LARK_APP_ID;
   if (!appId) return false;
 
-  const res = await fetch(
+  // Attempt 1: bot self-join
+  const selfRes = await fetch(
     `${LARK_BASE_URL}/open-apis/im/v1/chats/${chatId}/members?member_id_type=app_id`,
     {
       method: 'POST',
@@ -2345,9 +2348,28 @@ export async function addBotToChat(chatId: string): Promise<boolean> {
       body: JSON.stringify({ id_list: [appId] }),
     },
   );
-  const data = await parseJson(res, 'add_bot_to_chat') as { code: number; msg?: string };
-  if (data.code === 0 || data.code === 230001) return true;
-  console.warn(`[lark] addBotToChat failed (code ${data.code}): ${data.msg}`);
+  const selfData = await parseJson(selfRes, 'add_bot_self') as { code: number; msg?: string };
+  if (selfData.code === 0 || selfData.code === 230001) return true;
+
+  // Attempt 2: add via user token
+  if (userAccessToken) {
+    const userRes = await fetch(
+      `${LARK_BASE_URL}/open-apis/im/v1/chats/${chatId}/members?member_id_type=app_id`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${userAccessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_list: [appId] }),
+      },
+    );
+    const userData = await parseJson(userRes, 'add_bot_user') as { code: number; msg?: string };
+    if (userData.code === 0 || userData.code === 230001) {
+      console.log(`[lark] bot added to chat via user token: ${chatId}`);
+      return true;
+    }
+    console.warn(`[lark] addBotToChat (user token) failed (code ${userData.code}): ${userData.msg}`);
+  }
+
+  console.warn(`[lark] addBotToChat failed (code ${selfData.code}): ${selfData.msg}`);
   return false;
 }
 
