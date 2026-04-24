@@ -1,11 +1,8 @@
 'use client';
 
-export function FeatureListHeader({ gridCols, standalone }: { gridCols?: string; standalone?: boolean }) {
-  const cls = standalone
-    ? `hidden sm:grid ${gridCols} py-2 text-xs text-gray-500 font-medium border-b border-[var(--border)] gap-x-1.5`
-    : 'hidden sm:grid sm:col-span-full sm:[grid-template-columns:subgrid] py-2 text-xs text-gray-500 font-medium border-b border-[var(--border)]';
+export function FeatureListHeader() {
   return (
-    <div className={cls}>
+    <div className="hidden sm:grid sm:col-span-full sm:[grid-template-columns:subgrid] py-2 text-xs text-[var(--muted)] font-medium border-b border-[var(--border)] sticky top-0 bg-[var(--background)] z-10">
       <span className="pl-4">Feature</span>
       <span className="pl-4">Status</span>
       <span className="pl-4">Version</span>

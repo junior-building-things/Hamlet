@@ -684,14 +684,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         />
       </div>
 
-      {/* Column headers (sticky) */}
-      {!loading && !fetchError && filtered.length > 0 && view === 'list' && (
-        <div className="shrink-0 px-6 mt-4">
-          <FeatureListHeader gridCols={gridCols} standalone />
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto px-6 pb-16">
+      <div className="flex-1 overflow-y-auto px-6 pb-16 mt-4">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
@@ -719,6 +712,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         ) : groups ? (
           // ── Grouped list view ──────────────────────────────────────────────
           <div className={listGridCls}>
+            <FeatureListHeader />
             {/* Render pinned feature above all groups */}
             {pinnedId && (() => {
               const pinned = features.find(f => f.id === pinnedId);
@@ -734,6 +728,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         ) : (
           // ── Plain list view ────────────────────────────────────────────────
           <div className={listGridCls}>
+            <FeatureListHeader />
             {renderListRows(sorted)}
           </div>
         )}
