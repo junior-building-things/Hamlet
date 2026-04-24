@@ -2284,7 +2284,10 @@ ${currentText.slice(0, 4000)}`;
   // Step 3: Filter to in-dev features — iOS / Android / Server dev in progress.
   // Mobile dev (state_41/42) takes priority; pure server-only features
   // (state_43 with no mobile dev active) get the server-pipeline treatment.
-  const inDev = features.filter(f => isInDev(f.allNodeIds));
+  // Filter to in-dev / QA / UAT features, but exclude features whose overall
+  // status is 'end' (completed). Meego sometimes leaves UAT/PM_acceptance nodes
+  // marked as active even after a feature is completed.
+  const inDev = features.filter(f => isInDev(f.allNodeIds) && f.overallStatusKey !== 'end');
   for (const f of inDev) f.pipelineKind = classifyPipelineKind(f.allNodeIds);
   const mobileCount = inDev.filter(f => f.pipelineKind === 'mobile').length;
   const serverCount = inDev.filter(f => f.pipelineKind === 'server').length;
