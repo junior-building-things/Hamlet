@@ -73,31 +73,13 @@ export async function POST(req: NextRequest) {
     try {
       const token = await getLarkBotToken();
 
-      // Resolve POC emails → open_ids → build @mention tags (deduped by id).
-      // Lark card lark_md format: <at id=ou_xxx></at>
+      // Build @mention tags by email (Lark card lark_md supports <at email=xxx>)
       console.log(`[card-action] pocEmails: ${JSON.stringify(pocEmails)}`);
       let mentionsLine = '';
       if (pocEmails.length > 0) {
-        // Direct API call for better error visibility
-        const larkBase = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
-        const res = await fetch(
-          `${larkBase}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`,
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ emails: pocEmails }),
-          },
-        );
-        const data = await res.json() as {
-          code: number; msg?: string;
-          data?: { user_list?: Array<{ email?: string; user_id?: string }> };
-        };
-        console.log(`[card-action] batch_get_id code=${data.code} msg=${data.msg} list=${JSON.stringify(data.data?.user_list)}`);
-        const openIds: string[] = [];
-        for (const u of data.data?.user_list ?? []) {
-          if (u.user_id && !openIds.includes(u.user_id)) openIds.push(u.user_id);
-        }
-        const mentions = openIds.map(openId => `<at id=${openId}></at>`).join(' ');
+        // Dedupe by email (case-insensitive)
+        const uniqueEmails = [...new Set(pocEmails.map(e => e.toLowerCase()))];
+        const mentions = uniqueEmails.map(email => `<at email=${email}></at>`).join(' ');
         if (mentions) mentionsLine = `\n\nPlease take note ${mentions}`;
       }
       console.log(`[card-action] mentionsLine: "${mentionsLine}"`);
