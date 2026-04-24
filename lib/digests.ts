@@ -1233,26 +1233,21 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
         levels.push('yellow');
       }
     }
-  } else if (feature.pipelineKind === 'server') {
-    if (feature.serverPlannedLaunchDate) {
-      const launchDate = new Date(feature.serverPlannedLaunchDate);
-      if (!isNaN(launchDate.getTime())) {
-        const days = businessDaysUntil(launchDate);
-        if (days <= 2) {
-          reasons.push('QA not started, planned launch date within 2 days');
-          levels.push('red');
-        } else if (days <= 5) {
-          reasons.push('QA not started, planned launch date within 5 days');
-          levels.push('yellow');
-        }
+  } else if (feature.pipelineKind === 'server' && feature.serverPlannedLaunchDate) {
+    const launchDate = new Date(feature.serverPlannedLaunchDate);
+    if (!isNaN(launchDate.getTime())) {
+      const days = businessDaysUntil(launchDate);
+      if (days <= 2) {
+        reasons.push('QA not started, planned launch date within 2 days');
+        levels.push('red');
+      } else if (days <= 5) {
+        reasons.push('QA not started, planned launch date within 5 days');
+        levels.push('yellow');
       }
-    } else {
-      // No planned launch date on the work item — surface as a yellow risk
-      // so the PM nudges the server team to fill it in.
-      reasons.push('Server planned launch date not set');
-      levels.push('yellow');
     }
   }
+  // Server features without a planned launch date: no deadline warning —
+  // they default to green (Low risk) unless other signals flag them.
 
   // Stale check — no Meego updates in 7+ days
   const daysStale = feature.lastUpdatedIso ? daysSinceIsoDate(feature.lastUpdatedIso) : null;
@@ -2620,19 +2615,40 @@ ${currentText.slice(0, 4000)}`;
     const featureCache = await readFeatureCache();
     if (featureCache) {
       const riskByWorkItemId = new Map(riskFindings.map(r => [r.feature.workItemId, r]));
+      const featureByWorkItemId = new Map(features.map(f => [f.workItemId, f]));
       let updated = 0;
       for (const cached of featureCache.features) {
         const fId = cached.meegoIssueId ?? cached.id;
         const finding = riskByWorkItemId.get(fId);
+        const meegoFeature = featureByWorkItemId.get(fId);
+        const statusName = meegoFeature?.overallStatusName ?? '';
+
+        // Features in AB Testing should have NO risk level shown.
+        if (statusName === '实验中') {
+          cached.riskLevel = undefined;
+          cached.riskNotes = undefined;
+          updated++;
+          continue;
+        }
+
         if (finding) {
           cached.riskLevel = finding.level;
           const notes: string[] = [...finding.reasons];
           if (finding.delay) notes.unshift(finding.delay.detail);
           cached.riskNotes = notes.length > 0 ? notes : undefined;
           updated++;
+          continue;
         }
-        // Features not in riskFindings (not in dev) keep their previous risk data
-        // or have none — don't clear, since they might be in QA/AB with a prior risk.
+
+        // Tech Design / Development features not in riskFindings (e.g. no
+        // version or launch date) default to green (Low risk).
+        if (statusName === '技术方案设计中' || statusName === '开发中') {
+          cached.riskLevel = 'green';
+          cached.riskNotes = undefined;
+          updated++;
+        }
+        // Other statuses (QA, Merged, Done, etc.) not in riskFindings keep
+        // their previous risk data.
       }
       await writeFeatureCache(featureCache.features);
       console.log(`[digests] risk data written to feature cache for ${updated} features`);
