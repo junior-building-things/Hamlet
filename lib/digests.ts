@@ -2220,12 +2220,16 @@ ${currentText.slice(0, 4000)}`;
             }
           }
 
+          // Resolve chatId from Junior chats cache (workItemId → chatId)
+          const chatId = f.chatId
+            || juniorChats.find(jc => jc.meegoId === f.workItemId)?.chatId
+            || '';
           prdChanges.push({
             name: f.name,
             prdUrl: f.prd,
             meegoUrl: f.meegoUrl,
             summary,
-            chatId: f.chatId,
+            chatId,
             workItemId: f.workItemId,
             pocEmails,
           });
