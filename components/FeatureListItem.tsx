@@ -100,7 +100,7 @@ function EditableText({ value, onSave, className, placeholder, allowEmpty, showT
       </div>
       {showTip && mounted && value && createPortal(
         <div
-          className="fixed bg-[var(--background)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 text-xs text-[var(--foreground)] max-w-[400px] pointer-events-none"
+          className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 text-xs text-[var(--foreground)] max-w-[400px] pointer-events-none"
           style={{
             top: tipAnchor.top - 8,
             left: tipAnchor.left + tipAnchor.width / 2,
@@ -109,7 +109,7 @@ function EditableText({ value, onSave, className, placeholder, allowEmpty, showT
           }}
         >
           {value}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--background)]" />
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
         </div>,
         document.body,
       )}

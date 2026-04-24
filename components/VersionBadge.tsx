@@ -55,7 +55,7 @@ export function VersionBadge({ version, versionHistory }: { version?: string; ve
       </span>
       {trail && showTooltip && mounted && createPortal(
         <div
-          className="fixed px-2.5 py-1.5 bg-[var(--background)] border border-[var(--border)] rounded-lg shadow-xl text-[11px] text-[var(--foreground)] whitespace-nowrap pointer-events-none"
+          className="fixed px-2.5 py-1.5 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-xl text-[11px] text-[var(--foreground)] whitespace-nowrap pointer-events-none"
           style={{
             top: anchor.top - 6,
             left: anchor.left + anchor.width / 2,
@@ -64,7 +64,7 @@ export function VersionBadge({ version, versionHistory }: { version?: string; ve
           }}
         >
           {trail}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--background)]" />
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
         </div>,
         document.body,
       )}

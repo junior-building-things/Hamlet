@@ -60,7 +60,7 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
   if (!mounted) return null;
   return createPortal(
     <div
-      className="fixed bg-[var(--background)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 min-w-[160px]"
+      className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 min-w-[160px]"
       style={{
         top:       pos.top - 8,
         left:      pos.left,
@@ -74,7 +74,7 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
       <div
         className="absolute top-full left-1/2 -translate-x-1/2
                    border-l-[5px] border-r-[5px] border-t-[5px]
-                   border-l-transparent border-r-transparent border-t-[var(--background)]"
+                   border-l-transparent border-r-transparent border-t-[var(--card)]"
       />
       <div className="flex flex-col gap-1.5">
         {pocs.map(poc => (
@@ -128,7 +128,7 @@ function AgentPicker({ pos, mounted, assignedAgents, onToggle, onClose }: {
   return createPortal(
     <div
       ref={ref}
-      className="fixed bg-[var(--background)] border border-[var(--border)] rounded-xl shadow-2xl py-1.5 px-1.5 min-w-[180px]"
+      className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-1.5 px-1.5 min-w-[180px]"
       style={{
         top:       pos.top - 8,
         left:      pos.left,
@@ -139,7 +139,7 @@ function AgentPicker({ pos, mounted, assignedAgents, onToggle, onClose }: {
       <div
         className="absolute top-full left-1/2 -translate-x-1/2
                    border-l-[5px] border-r-[5px] border-t-[5px]
-                   border-l-transparent border-r-transparent border-t-[var(--background)]"
+                   border-l-transparent border-r-transparent border-t-[var(--card)]"
       />
       {AVAILABLE_AGENTS.map(agent => {
         const assigned = assignedAgents.includes(agent.key);

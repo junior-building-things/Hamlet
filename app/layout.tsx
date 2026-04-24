@@ -13,10 +13,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Inline script to set theme before paint to avoid flash.
+  // Always default to light on page load; toggle persists only within the session.
   const themeScript = `
     (function() {
-      var t = localStorage.getItem('hamlet_theme') || 'light';
-      document.documentElement.setAttribute('data-theme', t);
+      document.documentElement.setAttribute('data-theme', 'light');
     })();
   `;
 
