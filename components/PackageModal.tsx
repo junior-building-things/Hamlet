@@ -102,7 +102,7 @@ export function PackageModal({ androidQrUrl, androidDownloadUrl, iosQrUrl, iosDo
               className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
             >
               <ExternalLink className="w-4 h-4 shrink-0" />
-              <span className="truncate max-w-[280px]">Download link</span>
+              <span className="truncate max-w-[280px]">Open Bits</span>
             </a>
           )}
         </div>
