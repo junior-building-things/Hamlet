@@ -250,8 +250,22 @@ const SERVER_DEV_NODE_IDS = new Set<string>([
   'state_43',           // legacy template
   'server_development', // newer template used by some teams
 ]);
+// QA and UAT nodes — included in the risk digest too. These features have
+// passed dev but still have deadlines (code freeze, launch) and risks.
+// Default pipelineKind is 'mobile' since most features targeting these
+// stages are mobile.
+const QA_UAT_NODE_IDS = new Set<string>([
+  'qa_test_preparation', // QA测试准备
+  'state_34',            // 自动化测试
+  'UAT_UIUX',            // UI&UX验收
+  'PM_acceptance',       // PM验收
+]);
 
-const DEV_NODE_IDS = new Set<string>([...MOBILE_DEV_NODE_IDS, ...SERVER_DEV_NODE_IDS]);
+const DEV_NODE_IDS = new Set<string>([
+  ...MOBILE_DEV_NODE_IDS,
+  ...SERVER_DEV_NODE_IDS,
+  ...QA_UAT_NODE_IDS,
+]);
 
 function isInDev(allActiveNodeIds: string[]): boolean {
   return allActiveNodeIds.some(id => DEV_NODE_IDS.has(id));
@@ -261,6 +275,8 @@ function isInDev(allActiveNodeIds: string[]): boolean {
 function classifyPipelineKind(allActiveNodeIds: string[]): 'mobile' | 'server' | undefined {
   if (allActiveNodeIds.some(id => MOBILE_DEV_NODE_IDS.has(id))) return 'mobile';
   if (allActiveNodeIds.some(id => SERVER_DEV_NODE_IDS.has(id))) return 'server';
+  // QA/UAT features default to mobile pipeline (uses iosVersion + code freeze)
+  if (allActiveNodeIds.some(id => QA_UAT_NODE_IDS.has(id))) return 'mobile';
   return undefined;
 }
 
