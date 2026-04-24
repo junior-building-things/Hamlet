@@ -2329,6 +2329,29 @@ export async function sendInteractiveCardToChat(
 }
 
 /**
+ * Add the bot to a Lark chat by chatId. Idempotent — returns true if
+ * the bot is already a member (code 230001) or was successfully added.
+ */
+export async function addBotToChat(chatId: string): Promise<boolean> {
+  const botToken = await getAccessToken();
+  const appId = process.env.LARK_APP_ID;
+  if (!appId) return false;
+
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/im/v1/chats/${chatId}/members?member_id_type=app_id`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_list: [appId] }),
+    },
+  );
+  const data = await parseJson(res, 'add_bot_to_chat') as { code: number; msg?: string };
+  if (data.code === 0 || data.code === 230001) return true;
+  console.warn(`[lark] addBotToChat failed (code ${data.code}): ${data.msg}`);
+  return false;
+}
+
+/**
  * Resolve emails to Lark open_ids for @mentions.
  */
 export async function resolveOpenIds(

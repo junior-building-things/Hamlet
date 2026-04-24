@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendInteractiveCardToChat, getLarkBotToken } from '@/lib/lark';
+import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat } from '@/lib/lark';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -95,7 +95,14 @@ export async function POST(req: NextRequest) {
           content: `PM made an update to the PRD [${escapeMd(featureName)}](${prdUrl}):\n- **${escapeMd(summary)}**${mentionsLine}`,
         },
       ];
-      await sendInteractiveCardToChat(chatId, cardTitle, 'blue', sections, token);
+      // Ensure the bot is a member of the chat before sending
+      await addBotToChat(chatId);
+      const msgId = await sendInteractiveCardToChat(chatId, cardTitle, 'blue', sections, token);
+      if (!msgId) {
+        return NextResponse.json({
+          toast: { type: 'error', content: 'Failed to send — bot may not have access' },
+        }, { status: 500 });
+      }
       console.log(`[card-action] sent PRD change to feature group ${chatId}: "${featureName}" (${pocEmails.length} POCs)`);
 
       return NextResponse.json({
