@@ -19,7 +19,23 @@ interface LinkDef {
   onClick?: () => void;
 }
 
-function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): LinkDef[] {
+// Hook to track current theme (light/dark) from document.documentElement.
+function useTheme(): 'light' | 'dark' {
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  useEffect(() => {
+    const update = () => {
+      const t = document.documentElement.getAttribute('data-theme');
+      setTheme(t === 'dark' ? 'dark' : 'light');
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+  return theme;
+}
+
+function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void, theme: 'light' | 'dark' = 'light'): LinkDef[] {
   const links: LinkDef[] = [];
   if (feature.meegoUrl)
     links.push({ key: 'meego', label: 'Meego', icon: '/meego.png', iconW: 16, iconH: 16, color: '#B291F7', url: feature.meegoUrl });
@@ -34,7 +50,7 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): 
     links.push({
       key: 'package',
       label: 'Packages',
-      icon: '/qr.svg',
+      icon: theme === 'dark' ? '/qr_dark.png' : '/qr.svg',
       iconW: 14,
       iconH: 14,
       color: 'var(--foreground)',
@@ -242,7 +258,8 @@ interface Props {
 }
 
 export function LinkIcons({ feature, onPackageClick, onLinkUpdate }: Props) {
-  const links = buildLinks(feature, onPackageClick);
+  const theme = useTheme();
+  const links = buildLinks(feature, onPackageClick, theme);
   if (links.length === 0) return <span className="text-gray-600 text-xs">—</span>;
 
   return (
