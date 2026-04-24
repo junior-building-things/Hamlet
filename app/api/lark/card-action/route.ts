@@ -73,12 +73,14 @@ export async function POST(req: NextRequest) {
     try {
       const token = await getLarkBotToken();
 
-      // Resolve POC emails → open_ids → build @mention tags (deduped by id)
+      // Resolve POC emails → open_ids → build @mention tags (deduped by id).
+      // Lark card lark_md format: <at id="ou_xxx"></at> — self-resolving name.
       let mentionsLine = '';
       if (pocEmails.length > 0) {
         const emailToOpenId = await resolveOpenIds(pocEmails, token);
+        console.log(`[card-action] resolved ${Object.keys(emailToOpenId).length}/${pocEmails.length} POC emails: ${JSON.stringify(emailToOpenId)}`);
         const uniqueOpenIds = [...new Set(Object.values(emailToOpenId))].filter(Boolean);
-        const mentions = uniqueOpenIds.map(openId => `<at id=${openId}></at>`).join(' ');
+        const mentions = uniqueOpenIds.map(openId => `<at id="${openId}"></at>`).join(' ');
         if (mentions) mentionsLine = `\n\nPlease take note ${mentions}`;
       }
 
