@@ -78,14 +78,15 @@ export async function POST(req: NextRequest) {
         mentions = uniqueEmails.map(email => `<at email=${email}></at>`).join(' ');
       }
 
-      // Title: 📝 PRD Update - Fri, Apr 24
+      // Title inside body (no colored header)
       const dateStr = new Date().toLocaleDateString('en-US', {
         weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
       });
-      const cardTitle = `📝 PRD Update - ${dateStr}`;
 
-      // Interactive card body: inline clickable feature name + bold summary + @mentions
+      // Interactive card body: title heading + inline clickable feature name + bold summary + @mentions
       const bodyLines = [
+        `**📝 PRD Update - ${dateStr}**`,
+        ``,
         `PM made an update to the PRD [${featureName}](${prdUrl}):`,
         `- **${summary}**`,
       ];
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
         }
       } catch { /* ignore */ }
       await addBotToChat(chatId, userAccessToken);
-      const msgId = await sendInteractiveCardToChat(chatId, cardTitle, 'blue', sections, token);
+      const msgId = await sendInteractiveCardToChat(chatId, '', 'blue', sections, token);
       if (!msgId) {
         return NextResponse.json({
           toast: { type: 'error', content: 'Failed to send — bot may not have access' },

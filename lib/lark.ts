@@ -2298,14 +2298,17 @@ export async function sendInteractiveCardToChat(
     }
   }
 
-  const card = {
+  const card: Record<string, unknown> = {
     config: { wide_screen_mode: true },
-    header: {
-      title: { tag: 'plain_text', content: title },
-      template,
-    },
     elements,
   };
+  // Empty title → skip the colored header entirely (headerless card)
+  if (title) {
+    card.header = {
+      title: { tag: 'plain_text', content: title },
+      template,
+    };
+  }
 
   const content = JSON.stringify(card);
   const res = await fetch(
