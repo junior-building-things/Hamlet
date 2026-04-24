@@ -85,7 +85,10 @@ export function PackageModal({
 
         {/* Content */}
         <div className="flex flex-col items-center gap-4 px-5 py-6">
-          <p className="text-sm text-gray-400 text-center">{featureName}</p>
+          {/* Title above the QR — use the build name (falls back to the feature name). */}
+          <p className="text-sm font-medium text-[var(--foreground)] text-center break-all max-w-[300px]">
+            {packageName || featureName}
+          </p>
 
           {/* QR Code */}
           {(isImageUrl ? qrUrl : generatedQr) && (
@@ -99,20 +102,10 @@ export function PackageModal({
             </div>
           )}
 
-          <p className="text-xs text-gray-500">
-            Scan to install {tabs.length > 1 ? (activeTab === 'ios' ? 'iOS' : 'Android') : tabs[0]?.label ?? ''} package
+          {/* Caption under the QR — build time (SGT) when available, else install hint. */}
+          <p className="text-xs text-gray-500 text-center">
+            {buildTime || `Scan to install ${tabs.length > 1 ? (activeTab === 'ios' ? 'iOS' : 'Android') : tabs[0]?.label ?? ''} package`}
           </p>
-
-          {(packageName || buildTime) && (
-            <div className="flex flex-col items-center gap-0.5 text-center">
-              {packageName && (
-                <p className="text-xs font-medium text-[var(--foreground)] break-all max-w-[280px]">{packageName}</p>
-              )}
-              {buildTime && (
-                <p className="text-[11px] text-gray-500">{buildTime}</p>
-              )}
-            </div>
-          )}
 
           {/* Download link */}
           {downloadUrl && (
