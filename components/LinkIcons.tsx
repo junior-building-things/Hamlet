@@ -47,10 +47,12 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void, t
     links.push({ key: 'figma', label: 'Figma', icon: '/figma.svg', iconW: 10, iconH: 14, color: '#FF7362', url: feature.figmaUrl });
   if (feature.packageQrUrl || feature.iosPackageQrUrl) {
     const hasAndroid = !!feature.packageQrUrl;
+    const isDark = theme === 'dark';
     links.push({
       key: 'package',
       label: 'Packages',
-      icon: theme === 'dark' ? '/qr_dark.png' : '/qr.svg',
+      icon: isDark ? '/qr_dark.png' : '/qr.svg',
+      dynamicIcon: isDark, // use plain <img> for PNG to avoid Next Image sizing issues
       iconW: 14,
       iconH: 14,
       color: 'var(--foreground)',
