@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Feature } from '@/lib/types';
 import { Sidebar, SidebarView } from '@/components/Sidebar';
 import { ProjectView } from '@/components/ProjectView';
@@ -8,8 +8,21 @@ import { TodoView } from '@/components/TodoView';
 import { RolesView } from '@/components/RolesView';
 import { FeatureModal } from '@/components/FeatureModal';
 
+interface PlatformPackage {
+  version: string;
+  qrUrl: string;
+  downloadUrl: string;
+}
+interface PackagesByMeego {
+  updatedAt?: string;
+  features?: Record<string, { android: PlatformPackage | null; ios: PlatformPackage | null }>;
+}
+
+const JUNIOR_PACKAGES_URL = 'https://junior-416594255546.asia-southeast1.run.app/api/packages/latest';
+
 export default function Home() {
-  const [features,      setFeatures]      = useState<Feature[]>([]);
+  const [featuresRaw,   setFeatures]      = useState<Feature[]>([]);
+  const [pkgMap,        setPkgMap]        = useState<PackagesByMeego | null>(null);
   const [activeView,    setActiveView]    = useState<SidebarView>(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
@@ -59,6 +72,36 @@ export default function Home() {
       })
       .catch(() => {});
   }, []);
+
+  // Per-Meego package map from Bits (via Junior + compliance-bot on the DevBox).
+  // Falls back silently to Lark chat data if this fetch fails or a feature is missing.
+  useEffect(() => {
+    fetch(JUNIOR_PACKAGES_URL)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: PackagesByMeego | null) => { if (d?.features) setPkgMap(d); })
+      .catch(() => {});
+  }, []);
+
+  // Enrich features with Bits package URLs (keyed by Meego work item ID).
+  // If a feature has no Bits entry, its existing packageQrUrl from the Lark
+  // chat scan is kept. If neither has data, no package icon is shown.
+  const features = useMemo(() => {
+    const byId = pkgMap?.features;
+    if (!byId) return featuresRaw;
+    return featuresRaw.map(f => {
+      const key = f.meegoIssueId || f.meegoUrl?.match(/\/detail\/(\d+)/)?.[1];
+      if (!key) return f;
+      const p = byId[key];
+      if (!p) return f;
+      return {
+        ...f,
+        packageQrUrl:          p.android?.qrUrl       || f.packageQrUrl,
+        packageDownloadUrl:    p.android?.downloadUrl || f.packageDownloadUrl,
+        iosPackageQrUrl:       p.ios?.qrUrl           || f.iosPackageQrUrl,
+        iosPackageDownloadUrl: p.ios?.downloadUrl     || f.iosPackageDownloadUrl,
+      };
+    });
+  }, [featuresRaw, pkgMap]);
 
   // ── Add-modal callbacks ────────────────────────────────────────────────────
 
