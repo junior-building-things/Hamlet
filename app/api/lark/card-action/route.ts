@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendInteractiveCardToChat, getLarkBotToken } from '@/lib/lark';
+import { sendInteractiveCardToChat, getLarkBotToken, resolveOpenIds } from '@/lib/lark';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
+
+function escapeMd(text: string): string {
+  // Escape lark_md special chars that could break formatting
+  return text.replace(/([*_`\\])/g, '\\$1');
+}
 
 /**
  * Lark interactive card callback endpoint.
@@ -56,6 +61,7 @@ export async function POST(req: NextRequest) {
     const featureName = String(actionValue?.featureName ?? '');
     const prdUrl = String(actionValue?.prdUrl ?? '');
     const summary = String(actionValue?.summary ?? '');
+    const pocEmails = Array.isArray(actionValue?.pocEmails) ? actionValue.pocEmails as string[] : [];
 
     if (!chatId) {
       return NextResponse.json({ error: 'missing chatId' }, { status: 400 });
@@ -63,14 +69,32 @@ export async function POST(req: NextRequest) {
 
     try {
       const token = await getLarkBotToken();
-      const cardTitle = `📝 PRD Updated — ${featureName}`;
+
+      // Resolve POC emails → open_ids → build @mention tags (deduped by id)
+      let mentionsLine = '';
+      if (pocEmails.length > 0) {
+        const emailToOpenId = await resolveOpenIds(pocEmails, token);
+        const uniqueOpenIds = [...new Set(Object.values(emailToOpenId))].filter(Boolean);
+        const mentions = uniqueOpenIds.map(openId => `<at id=${openId}></at>`).join(' ');
+        if (mentions) mentionsLine = `\n\nPlease take note ${mentions}`;
+      }
+
+      // Header: 📝 PRD Update - Fri, Apr 24
+      const dateStr = new Date().toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
+      });
+      const cardTitle = `📝 PRD Update - ${dateStr}`;
+
+      // Body: PM made an update to the PRD <Feature Name (clickable → PRD)>:
+      //       • **<summary>**
+      //       Please take note @tech @server @android @ios @qa @da
       const sections = [
         {
-          content: `**${featureName}** ([PRD](${prdUrl}))\n  • ${summary}`,
+          content: `PM made an update to the PRD [${escapeMd(featureName)}](${prdUrl}):\n\n- **${escapeMd(summary)}**${mentionsLine}`,
         },
       ];
       await sendInteractiveCardToChat(chatId, cardTitle, 'blue', sections, token);
-      console.log(`[card-action] sent PRD change to feature group ${chatId}: "${featureName}"`);
+      console.log(`[card-action] sent PRD change to feature group ${chatId}: "${featureName}" (${pocEmails.length} POCs)`);
 
       return NextResponse.json({
         toast: { type: 'success', content: 'Sent to feature group ✓' },

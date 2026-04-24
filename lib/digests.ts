@@ -1787,7 +1787,15 @@ export function formatUnansweredDigest(findings: UnansweredFinding[]): string {
 // ─── Task 2: PRD Changes digest card ────────────────────────────────────────
 
 export function buildPrdChangesDigestCard(
-  changes: Array<{ name: string; prdUrl: string; meegoUrl: string; summary: string; chatId?: string; workItemId?: string }>,
+  changes: Array<{
+    name: string;
+    prdUrl: string;
+    meegoUrl: string;
+    summary: string;
+    chatId?: string;
+    workItemId?: string;
+    pocEmails?: string[];
+  }>,
 ): { title: string; template: CardHeaderTemplate; sections: CardSection[] } {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
@@ -1821,6 +1829,7 @@ export function buildPrdChangesDigestCard(
             featureName: c.name,
             prdUrl: c.prdUrl,
             summary: c.summary,
+            pocEmails: c.pocEmails ?? [],
           },
         }]
       : undefined;
@@ -2121,7 +2130,15 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // content changes since the last run. If the text differs, use Gemini
   // to summarize what changed and append it to the Change Log section.
   const PRD_SNAPSHOTS_PATH = 'hamlet/prd-snapshots.json';
-  const prdChanges: Array<{ name: string; prdUrl: string; meegoUrl: string; summary: string; chatId?: string; workItemId?: string }> = [];
+  const prdChanges: Array<{
+    name: string;
+    prdUrl: string;
+    meegoUrl: string;
+    summary: string;
+    chatId?: string;
+    workItemId?: string;
+    pocEmails?: string[];
+  }> = [];
   try {
     const { readDocContent, grantBotEditAccess } = await import('./lark');
     const { readJsonState, writeJsonState } = await import('./gcs-state');
@@ -2192,6 +2209,17 @@ ${currentText.slice(0, 4000)}`;
               console.warn(`[digests] append PRD changelog failed for "${f.name}":`, e);
             }
           }
+          // Collect POC emails (Tech Owner, Server, Android, iOS, QA, DA), deduped
+          const POC_ROLE_KEYS = ['Tech_Owner', 'Server', 'Android', 'iOS', 'QA', 'DA'];
+          const pocEmails: string[] = [];
+          for (const roleKey of POC_ROLE_KEYS) {
+            const members = f.roles[roleKey] ?? [];
+            for (const memberName of members) {
+              const email = f.roleEmails[memberName];
+              if (email && !pocEmails.includes(email)) pocEmails.push(email);
+            }
+          }
+
           prdChanges.push({
             name: f.name,
             prdUrl: f.prd,
@@ -2199,6 +2227,7 @@ ${currentText.slice(0, 4000)}`;
             summary,
             chatId: f.chatId,
             workItemId: f.workItemId,
+            pocEmails,
           });
         }
 
