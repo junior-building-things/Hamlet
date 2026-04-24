@@ -313,8 +313,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <PackageModal
           androidQrUrl={feature.packageQrUrl}
           androidDownloadUrl={feature.packageDownloadUrl}
+          androidPackageName={feature.packageName}
+          androidBuildTime={feature.packageBuildTime}
           iosQrUrl={feature.iosPackageQrUrl}
           iosDownloadUrl={feature.iosPackageDownloadUrl}
+          iosPackageName={feature.iosPackageName}
+          iosBuildTime={feature.iosPackageBuildTime}
           featureName={feature.name}
           defaultTab={showIos ? 'ios' : 'android'}
           onClose={() => { setShowPackage(false); setShowIos(false); }}

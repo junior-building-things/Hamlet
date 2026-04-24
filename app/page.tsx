@@ -12,6 +12,8 @@ interface PlatformPackage {
   version: string;
   qrUrl: string;
   downloadUrl: string;
+  packageName?: string;
+  buildTime?: string;
 }
 interface PackagesByMeego {
   updatedAt?: string;
@@ -95,10 +97,14 @@ export default function Home() {
       if (!p) return f;
       return {
         ...f,
-        packageQrUrl:          p.android?.qrUrl       || f.packageQrUrl,
-        packageDownloadUrl:    p.android?.downloadUrl || f.packageDownloadUrl,
-        iosPackageQrUrl:       p.ios?.qrUrl           || f.iosPackageQrUrl,
-        iosPackageDownloadUrl: p.ios?.downloadUrl     || f.iosPackageDownloadUrl,
+        packageQrUrl:          p.android?.qrUrl        || f.packageQrUrl,
+        packageDownloadUrl:    p.android?.downloadUrl  || f.packageDownloadUrl,
+        packageName:           p.android?.packageName  || f.packageName,
+        packageBuildTime:      p.android?.buildTime    || f.packageBuildTime,
+        iosPackageQrUrl:       p.ios?.qrUrl            || f.iosPackageQrUrl,
+        iosPackageDownloadUrl: p.ios?.downloadUrl      || f.iosPackageDownloadUrl,
+        iosPackageName:        p.ios?.packageName      || f.iosPackageName,
+        iosPackageBuildTime:   p.ios?.buildTime        || f.iosPackageBuildTime,
       };
     });
   }, [featuresRaw, pkgMap]);

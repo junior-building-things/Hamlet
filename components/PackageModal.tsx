@@ -6,14 +6,22 @@ import { X, ExternalLink } from 'lucide-react';
 interface Props {
   androidQrUrl?: string;
   androidDownloadUrl?: string;
+  androidPackageName?: string;
+  androidBuildTime?: string;
   iosQrUrl?: string;
   iosDownloadUrl?: string;
+  iosPackageName?: string;
+  iosBuildTime?: string;
   featureName: string;
   defaultTab?: 'android' | 'ios';
   onClose: () => void;
 }
 
-export function PackageModal({ androidQrUrl, androidDownloadUrl, iosQrUrl, iosDownloadUrl, featureName, defaultTab, onClose }: Props) {
+export function PackageModal({
+  androidQrUrl, androidDownloadUrl, androidPackageName, androidBuildTime,
+  iosQrUrl, iosDownloadUrl, iosPackageName, iosBuildTime,
+  featureName, defaultTab, onClose,
+}: Props) {
   const tabs = [
     ...(androidQrUrl ? [{ key: 'android' as const, label: 'Android' }] : []),
     ...(iosQrUrl ? [{ key: 'ios' as const, label: 'iOS' }] : []),
@@ -24,6 +32,8 @@ export function PackageModal({ androidQrUrl, androidDownloadUrl, iosQrUrl, iosDo
 
   const qrUrl = activeTab === 'ios' ? iosQrUrl : androidQrUrl;
   const downloadUrl = activeTab === 'ios' ? iosDownloadUrl : androidDownloadUrl;
+  const packageName = activeTab === 'ios' ? iosPackageName : androidPackageName;
+  const buildTime = activeTab === 'ios' ? iosBuildTime : androidBuildTime;
 
   // Detect whether qrUrl is an image or a plain download URL. Bits returns the
   // APK URL in `qr_code_url`, so we render a QR from it client-side.
@@ -92,6 +102,17 @@ export function PackageModal({ androidQrUrl, androidDownloadUrl, iosQrUrl, iosDo
           <p className="text-xs text-gray-500">
             Scan to install {tabs.length > 1 ? (activeTab === 'ios' ? 'iOS' : 'Android') : tabs[0]?.label ?? ''} package
           </p>
+
+          {(packageName || buildTime) && (
+            <div className="flex flex-col items-center gap-0.5 text-center">
+              {packageName && (
+                <p className="text-xs font-medium text-[var(--foreground)] break-all max-w-[280px]">{packageName}</p>
+              )}
+              {buildTime && (
+                <p className="text-[11px] text-gray-500">{buildTime}</p>
+              )}
+            </div>
+          )}
 
           {/* Download link */}
           {downloadUrl && (

@@ -46,8 +46,12 @@ export interface Feature {
   libraUrl?: string;
   packageQrUrl?: string;
   packageDownloadUrl?: string;
+  packageName?: string;
+  packageBuildTime?: string;
   iosPackageQrUrl?: string;
   iosPackageDownloadUrl?: string;
+  iosPackageName?: string;
+  iosPackageBuildTime?: string;
   commentSummary?: string;
   chatId?: string;
   avatars?: Record<string, string>;
