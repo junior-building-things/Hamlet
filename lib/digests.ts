@@ -2244,6 +2244,28 @@ ${currentText.slice(0, 4000)}`;
     console.warn('[digests] PRD change log scan failed:', e);
   }
 
+  // Step 2c.5: Send PRD Changes digest NOW — don't wait for Q&A scan which can
+  // time out the whole digest run. This ensures the PRD digest is delivered
+  // even if later steps fail.
+  let prdChangesSentEarly = false;
+  if (prdChanges.length > 0) {
+    const card = buildPrdChangesDigestCard(prdChanges);
+    const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
+    console.log('[digests] PRD changes digest:\n' + preview);
+    try {
+      const juniorToken = await getLarkBotToken();
+      const id = await sendInteractiveCardToChat(
+        PM_GROUP_CHAT_ID, card.title, card.template, card.sections, juniorToken,
+      );
+      prdChangesSentEarly = id !== null;
+      console.log(`[digests] PRD changes digest sent: ${prdChangesSentEarly}`);
+    } catch (e) {
+      console.warn('[digests] PRD changes digest send failed:', e);
+    }
+  } else {
+    console.log('[digests] no PRD changes — skipping PRD changes digest');
+  }
+
   // Log distribution of active node IDs across all features (how many times
   // each ID appears as one of a feature's active nodes). This is what the
   // filter actually operates on.
@@ -2631,25 +2653,9 @@ ${currentText.slice(0, 4000)}`;
     console.log('[digests] no unanswered questions — skipping Q&A digest');
   }
 
-  // Step 9: Send PRD Changes digest (only if there are changes) — interactive
-  // card from Junior bot (main Lark app) to the PM group chat.
-  let prdChangesSent = false;
-  if (prdChanges.length > 0) {
-    const card = buildPrdChangesDigestCard(prdChanges);
-    const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
-    console.log('[digests] PRD changes digest:\n' + preview);
-    try {
-      const juniorToken = await getLarkBotToken();
-      const id = await sendInteractiveCardToChat(
-        targetChatId, card.title, card.template, card.sections, juniorToken,
-      );
-      prdChangesSent = id !== null;
-    } catch (e) {
-      console.warn('[digests] PRD changes digest send failed:', e);
-    }
-  } else {
-    console.log('[digests] no PRD changes — skipping PRD changes digest');
-  }
+  // Step 9: PRD Changes digest already sent at Step 2c.5 (before Q&A scan)
+  // to avoid timeout issues. Re-used flag for the return type.
+  const prdChangesSent = prdChangesSentEarly;
 
   return {
     featuresChecked: inDev.length,
