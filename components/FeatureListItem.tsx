@@ -1,5 +1,6 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
@@ -24,16 +25,23 @@ interface Props {
 
 // ─── Inline editable text field ─────────────────────────────────────────────
 
-function EditableText({ value, onSave, className, placeholder, allowEmpty }: {
+function EditableText({ value, onSave, className, placeholder, allowEmpty, showTooltipIfTruncated }: {
   value: string;
   onSave: (v: string) => void;
   className?: string;
   placeholder?: string;
   allowEmpty?: boolean;
+  showTooltipIfTruncated?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  const [showTip, setShowTip] = useState(false);
+  const [tipAnchor, setTipAnchor] = useState({ top: 0, left: 0, width: 0 });
+  const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const spanRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -42,15 +50,26 @@ function EditableText({ value, onSave, className, placeholder, allowEmpty }: {
     }
   }, [editing, draft.length]);
 
-  // Sync external value changes
   useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
 
   function commit() {
     setEditing(false);
     const trimmed = draft.trim();
     if (allowEmpty ? trimmed !== value : trimmed && trimmed !== value) onSave(trimmed);
-    else setDraft(value); // revert
+    else setDraft(value);
   }
+
+  const handleMouseEnter = useCallback(() => {
+    if (!showTooltipIfTruncated || !spanRef.current) return;
+    const el = spanRef.current;
+    if (el.scrollWidth > el.clientWidth && value) {
+      const r = el.getBoundingClientRect();
+      setTipAnchor({ top: r.top, left: r.left, width: r.width });
+      setShowTip(true);
+    }
+  }, [showTooltipIfTruncated, value]);
+
+  const handleMouseLeave = useCallback(() => setShowTip(false), []);
 
   if (editing) {
     return (
@@ -70,9 +89,31 @@ function EditableText({ value, onSave, className, placeholder, allowEmpty }: {
   }
 
   return (
-    <div className="editable-cell w-full min-w-0" onClick={() => setEditing(true)}>
-      <span className={className}>{value || placeholder}</span>
-    </div>
+    <>
+      <div
+        className="editable-cell w-full min-w-0"
+        onClick={() => setEditing(true)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <span ref={spanRef} className={className}>{value || placeholder}</span>
+      </div>
+      {showTip && mounted && value && createPortal(
+        <div
+          className="fixed bg-[var(--background)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 text-xs text-[var(--foreground)] max-w-[400px] pointer-events-none"
+          style={{
+            top: tipAnchor.top - 8,
+            left: tipAnchor.left + tipAnchor.width / 2,
+            transform: 'translate(-50%, -100%)',
+            zIndex: 9999,
+          }}
+        >
+          {value}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--background)]" />
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
@@ -226,6 +267,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
             className="text-xs text-[var(--muted)] truncate"
             placeholder="—"
             allowEmpty
+            showTooltipIfTruncated
           />
         ) : (
           feature.riskNotes && feature.riskNotes.length > 0 && feature.riskLevel !== 'green' && (

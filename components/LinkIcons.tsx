@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
 import Image from 'next/image';
-import { Pencil } from 'lucide-react';
+import { Pencil, Copy, Check } from 'lucide-react';
 
 interface LinkDef {
   key: string;
@@ -48,6 +48,7 @@ function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
   onLinkUpdate?: (linkKey: string, newUrl: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState(link.url ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -68,13 +69,25 @@ function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
     }
   }
 
-  const baseCls = "fixed flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)] shadow-xl transition-colors";
+  async function handleCopy(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!link.url) return;
+    try {
+      await navigator.clipboard.writeText(link.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch { /* ignore */ }
+  }
+
+  // Match POC avatar tooltip style: rounded-xl, shadow-2xl, py-2 px-3
+  const baseCls = "fixed flex items-center gap-2 py-2 px-3 rounded-xl bg-[var(--background)] border border-[var(--border)] shadow-2xl";
   const style = {
-    top: anchor.top - 6,
+    top: anchor.top - 8,
     left: anchor.left + anchor.width / 2,
     transform: 'translate(-50%, -100%)',
     zIndex: 9999,
-    ...(editing ? { minWidth: 300 } : {}),
+    ...(editing ? { minWidth: 360 } : {}),
   };
 
   const arrow = (
@@ -93,7 +106,7 @@ function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
             if (e.key === 'Enter') { e.preventDefault(); commit(); }
             if (e.key === 'Escape') { setDraft(link.url ?? ''); setEditing(false); }
           }}
-          className="flex-1 text-[11px] bg-transparent border-none outline-none text-[var(--foreground)] min-w-0"
+          className="flex-1 text-xs bg-transparent border-none outline-none text-[var(--foreground)] min-w-0"
           placeholder="Paste URL…"
         />
         {arrow}
@@ -104,22 +117,31 @@ function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
 
   const inner = (
     <>
-      <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: link.color }}>
+      <span className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap">
         {link.label}
       </span>
+      {link.url && (
+        <button
+          onClick={handleCopy}
+          className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+          title={copied ? 'Copied!' : 'Copy link'}
+        >
+          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+        </button>
+      )}
       {onLinkUpdate && link.url && (
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditing(true); }}
-          className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors ml-0.5"
+          className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
           title="Edit link"
         >
-          <Pencil className="w-2.5 h-2.5" />
+          <Pencil className="w-3 h-3" />
         </button>
       )}
     </>
   );
 
-  const cls = `${baseCls} cursor-pointer hover:brightness-125`;
+  const cls = `${baseCls} cursor-pointer hover:bg-[var(--card-hover)] transition-colors`;
 
   const el = link.url ? (
     <a href={link.url} target="_blank" rel="noreferrer" className={cls} style={style}
