@@ -2220,10 +2220,19 @@ ${currentText.slice(0, 4000)}`;
             }
           }
 
-          // Resolve chatId from Junior chats cache (workItemId → chatId)
-          const chatId = f.chatId
+          // Resolve chatId: MeegoFeature → Junior chats cache → GCS feature cache
+          let chatId = f.chatId
             || juniorChats.find(jc => jc.meegoId === f.workItemId)?.chatId
             || '';
+          if (!chatId) {
+            try {
+              const featureCache = await readFeatureCache();
+              const cached = featureCache?.features.find(
+                cf => cf.id === f.workItemId || cf.meegoIssueId === f.workItemId,
+              );
+              if (cached?.chatId) chatId = cached.chatId;
+            } catch { /* ignore */ }
+          }
           prdChanges.push({
             name: f.name,
             prdUrl: f.prd,
