@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { X, ExternalLink } from 'lucide-react';
 
 interface Props {
@@ -23,6 +24,20 @@ export function PackageModal({ androidQrUrl, androidDownloadUrl, iosQrUrl, iosDo
 
   const qrUrl = activeTab === 'ios' ? iosQrUrl : androidQrUrl;
   const downloadUrl = activeTab === 'ios' ? iosDownloadUrl : androidDownloadUrl;
+
+  // Detect whether qrUrl is an image or a plain download URL. Bits returns the
+  // APK URL in `qr_code_url`, so we render a QR from it client-side.
+  // Legacy/Lark-chat data sometimes provides an actual image URL (ending in .png/.jpg).
+  const isImageUrl = !!qrUrl && /\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(qrUrl);
+  const qrSource = qrUrl ?? downloadUrl ?? '';
+  const [generatedQr, setGeneratedQr] = useState<string>('');
+
+  useEffect(() => {
+    if (!qrSource || isImageUrl) { setGeneratedQr(''); return; }
+    QRCode.toDataURL(qrSource, { width: 256, margin: 1 })
+      .then(setGeneratedQr)
+      .catch(() => setGeneratedQr(''));
+  }, [qrSource, isImageUrl]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -63,9 +78,14 @@ export function PackageModal({ androidQrUrl, androidDownloadUrl, iosQrUrl, iosDo
           <p className="text-sm text-gray-400 text-center">{featureName}</p>
 
           {/* QR Code */}
-          {qrUrl && (
+          {(isImageUrl ? qrUrl : generatedQr) && (
             <div className="bg-white p-3 rounded-xl">
-              <img src={qrUrl} alt="Package QR Code" className="w-48 h-48" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={isImageUrl ? qrUrl : generatedQr}
+                alt="Package QR Code"
+                className="w-48 h-48"
+              />
             </div>
           )}
 

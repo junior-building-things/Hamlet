@@ -3,13 +3,15 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
 import Image from 'next/image';
-import { Pencil, Copy, Check } from 'lucide-react';
+import { Pencil, Copy, Check, Smartphone, Apple } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface LinkDef {
   key: string;
   label: string;
   icon: string;
   dynamicIcon?: boolean;
+  lucideIcon?: LucideIcon;
   iconW: number;
   iconH: number;
   color: string;
@@ -28,9 +30,9 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): 
   if (feature.figmaUrl)
     links.push({ key: 'figma', label: 'Figma', icon: '/figma.svg', iconW: 10, iconH: 14, color: '#FF7362', url: feature.figmaUrl });
   if (feature.packageQrUrl)
-    links.push({ key: 'android-pkg', label: 'Android Package', icon: feature.packageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: 'var(--foreground)', onClick: () => onPackageClick?.(false) });
+    links.push({ key: 'android-pkg', label: 'Android Package', icon: '', lucideIcon: Smartphone, iconW: 14, iconH: 14, color: '#34D399', onClick: () => onPackageClick?.(false) });
   if (feature.iosPackageQrUrl)
-    links.push({ key: 'ios-pkg', label: 'iOS Package', icon: feature.iosPackageQrUrl, dynamicIcon: true, iconW: 20, iconH: 20, color: 'var(--foreground)', onClick: () => onPackageClick?.(true) });
+    links.push({ key: 'ios-pkg', label: 'iOS Package', icon: '', lucideIcon: Apple, iconW: 14, iconH: 14, color: '#A1A1AA', onClick: () => onPackageClick?.(true) });
   if (feature.libraUrl)
     links.push({ key: 'libra', label: 'Libra', icon: '/libra.png', iconW: 14, iconH: 14, color: '#0073F0', url: feature.libraUrl });
   if (feature.abReportUrl)
@@ -187,7 +189,9 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
     hideTimer.current = setTimeout(() => setShowBubble(false), 100);
   }, []);
 
-  const iconEl = link.dynamicIcon ? (
+  const iconEl = link.lucideIcon ? (
+    <link.lucideIcon className="w-[12px] h-[12px] shrink-0" style={{ color: link.color }} />
+  ) : link.dynamicIcon ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] shrink-0" />
   ) : (
