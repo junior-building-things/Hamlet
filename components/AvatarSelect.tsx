@@ -181,9 +181,12 @@ export function MultiSelect({ options, value, onChange, placeholder, icon, class
   const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
   const selected = new Set(value);
 
+  // Empty set == all selected (both show every feature). Treat them the same.
+  const allSelected = selected.size === 0 || selected.size === options.length;
+
   let label: string;
-  if (selected.size === 0) {
-    label = '';
+  if (allSelected) {
+    label = '';  // show placeholder (e.g. "Status", "Priority")
   } else if (selected.size === 1) {
     label = options.find(o => selected.has(o.value))?.label ?? '';
   } else {
@@ -194,7 +197,7 @@ export function MultiSelect({ options, value, onChange, placeholder, icon, class
     <div ref={ref} className={`relative ${className}`}>
       <button type="button" onClick={() => open ? setOpen(false) : openDropdown()} className={triggerCls}>
         {icon && <span className="text-gray-500 flex-shrink-0 flex items-center">{icon}</span>}
-        <span className={`flex-1 text-left whitespace-nowrap ${!label && placeholder ? 'text-gray-500' : ''}`}>
+        <span className="flex-1 text-left whitespace-nowrap">
           {label || placeholder || '—'}
         </span>
         <ChevronDown className="w-3.5 h-3.5 text-gray-500 flex-shrink-0 ml-auto" />
@@ -202,22 +205,40 @@ export function MultiSelect({ options, value, onChange, placeholder, icon, class
 
       {open && (
         <div className={listDownCls} style={{ maxHeight }}>
-          {options.map(opt => (
-            <div key={opt.value}
-              className={`${itemBaseCls} ${selected.has(opt.value) ? 'bg-[var(--card-hover)]' : ''}`}
-              onClick={() => {
-                const next = new Set(selected);
-                if (next.has(opt.value)) {
-                  next.delete(opt.value);
-                } else {
-                  next.add(opt.value);
-                }
-                onChange([...next]);
-              }}>
-              <span className="text-sm text-[var(--foreground)] flex-1">{opt.label}</span>
-              {selected.has(opt.value) && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
-            </div>
-          ))}
+          {/* Select all / Clear toggle */}
+          <div
+            className={`${itemBaseCls} font-medium border-b border-[var(--border)]`}
+            onClick={() => onChange(allSelected ? [options[0]?.value].filter(Boolean) : [])}
+          >
+            <span className="text-sm text-[var(--foreground)] flex-1">
+              {allSelected ? 'Clear selection' : 'Select all'}
+            </span>
+            {allSelected && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+          </div>
+          {options.map(opt => {
+            const isChecked = allSelected || selected.has(opt.value);
+            return (
+              <div key={opt.value}
+                className={`${itemBaseCls} ${isChecked ? 'bg-[var(--card-hover)]' : ''}`}
+                onClick={() => {
+                  // If currently "all", start filtering with just this one deselected:
+                  // i.e. select every other option, then toggle this off.
+                  if (allSelected) {
+                    onChange(options.filter(o => o.value !== opt.value).map(o => o.value));
+                    return;
+                  }
+                  const next = new Set(selected);
+                  if (next.has(opt.value)) next.delete(opt.value);
+                  else next.add(opt.value);
+                  // If user just selected all options manually → collapse to empty (=all).
+                  if (next.size === options.length) { onChange([]); return; }
+                  onChange([...next]);
+                }}>
+                <span className="text-sm text-[var(--foreground)] flex-1">{opt.label}</span>
+                {isChecked && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
