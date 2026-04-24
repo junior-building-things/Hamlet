@@ -313,6 +313,26 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         <RiskBadge feature={feature} onClick={() => onEdit(feature)} />
       </div>
 
+      {/* Notes (editable, manual user input) */}
+      <div className="hidden sm:flex items-center py-1.5 pl-4 max-w-[200px]">
+        {onFieldUpdate ? (
+          <EditableText
+            value={feature.notes ?? ''}
+            onSave={v => onFieldUpdate(feature.id, { notes: v })}
+            className="text-xs text-[var(--muted)] truncate"
+            placeholder="—"
+            allowEmpty
+            showTooltipIfTruncated
+          />
+        ) : (
+          feature.notes && (
+            <span className="text-xs text-[var(--muted)] truncate" title={feature.notes}>
+              {feature.notes}
+            </span>
+          )
+        )}
+      </div>
+
       {/* Action */}
       <div className="hidden sm:flex items-center pr-4 py-1.5 pl-4">
         {feature.canCompleteNode && onComplete && (

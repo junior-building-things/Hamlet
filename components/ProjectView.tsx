@@ -541,7 +541,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const gridCols = 'sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_max-content_max-content]';
+  const gridCols = 'sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content]';
   const listGridCls = `flex flex-col gap-2 sm:grid ${gridCols} sm:gap-x-1.5 sm:gap-y-1`;
 
   async function handleComplete(feature: Feature) {
