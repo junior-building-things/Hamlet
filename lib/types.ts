@@ -55,6 +55,7 @@ export interface Feature {
   commentSummary?: string;
   chatId?: string;
   avatars?: Record<string, string>;
+  pocEmails?: Record<string, string>;  // name → email (for Junior @mentions)
   agents?: string[];
   agentLastRun?: string;
   // Daily risk assessment data (populated by the digest cron)
