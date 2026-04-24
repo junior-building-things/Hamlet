@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat, refreshUserToken, PM_GROUP_CHAT_ID } from '@/lib/lark';
+import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat, refreshUserToken } from '@/lib/lark';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 import crypto from 'crypto';
 
@@ -54,10 +54,7 @@ export async function POST(req: NextRequest) {
   const actionName = typeof actionValue?.action === 'string' ? actionValue.action : '';
 
   if (actionName === 'send_prd_change_to_group') {
-    // TEMP: route to PM group chat for style verification
-    const TEST_MODE_SEND_TO_PM_GROUP = true;
-    const featureChatId = String(actionValue?.chatId ?? '');
-    const chatId = TEST_MODE_SEND_TO_PM_GROUP ? PM_GROUP_CHAT_ID : featureChatId;
+    const chatId = String(actionValue?.chatId ?? '');
     const featureName = String(actionValue?.featureName ?? '');
     const prdUrl = String(actionValue?.prdUrl ?? '');
     const summary = String(actionValue?.summary ?? '');
