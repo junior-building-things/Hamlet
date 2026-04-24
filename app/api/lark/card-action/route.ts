@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
 
       // Post message body: rich text with inline clickable feature name + @mentions
       const paragraphs: PostParagraph[] = [
+        [], // blank line after title
         [
           { tag: 'text', text: 'PM made an update to the PRD ' },
           { tag: 'a', text: featureName, href: prdUrl },
