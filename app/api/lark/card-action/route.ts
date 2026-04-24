@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat, refreshUserToken } from '@/lib/lark';
+import { sendTextMessage, getLarkBotToken, addBotToChat, refreshUserToken } from '@/lib/lark';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
-function escapeMd(text: string): string {
-  // Escape lark_md special chars that could break formatting
-  return text.replace(/([*_`\\])/g, '\\$1');
-}
 
 /**
  * Lark interactive card callback endpoint.
@@ -73,29 +69,31 @@ export async function POST(req: NextRequest) {
 
       // Build @mention tags by email (Lark card lark_md supports <at email=xxx>)
       console.log(`[card-action] pocEmails: ${JSON.stringify(pocEmails)}`);
-      let mentionsLine = '';
+      let mentions = '';
       if (pocEmails.length > 0) {
-        // Dedupe by email (case-insensitive)
         const uniqueEmails = [...new Set(pocEmails.map(e => e.toLowerCase()))];
-        const mentions = uniqueEmails.map(email => `<at email=${email}></at>`).join(' ');
-        if (mentions) mentionsLine = `\n\nPlease take note ${mentions}`;
+        mentions = uniqueEmails.map(email => `<at email=${email}></at>`).join(' ');
       }
-      console.log(`[card-action] mentionsLine: "${mentionsLine}"`);
 
-      // Header: 📝 PRD Update - Fri, Apr 24
+      // Date line: 📝 PRD Update - Fri, Apr 24
       const dateStr = new Date().toLocaleDateString('en-US', {
         weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
       });
-      const cardTitle = `📝 PRD Update - ${dateStr}`;
 
-      // Body: PM made an update to the PRD <Feature Name (clickable → PRD)>:
-      //       • **<summary>**
-      //       Please take note @tech @server @android @ios @qa @da
-      const sections = [
-        {
-          content: `PM made an update to the PRD [${escapeMd(featureName)}](${prdUrl}):\n- **${escapeMd(summary)}**${mentionsLine}`,
-        },
+      // Plain-text message with @mentions + link (no card chrome).
+      // Lark text supports <at> tags and shows URLs as clickable links.
+      const lines = [
+        `📝 PRD Update - ${dateStr}`,
+        ``,
+        `PM made an update to the PRD ${featureName} (${prdUrl}):`,
+        `- ${summary}`,
       ];
+      if (mentions) {
+        lines.push('');
+        lines.push(`Please take note ${mentions}`);
+      }
+      const text = lines.join('\n');
+
       // Ensure the bot is a member of the chat before sending.
       // If bot isn't in chat, fall back to adding via the user's access token.
       let userAccessToken: string | undefined;
@@ -112,7 +110,7 @@ export async function POST(req: NextRequest) {
         }
       } catch { /* ignore */ }
       await addBotToChat(chatId, userAccessToken);
-      const msgId = await sendInteractiveCardToChat(chatId, cardTitle, 'blue', sections, token);
+      const msgId = await sendTextMessage(chatId, text, token);
       if (!msgId) {
         return NextResponse.json({
           toast: { type: 'error', content: 'Failed to send — bot may not have access' },
