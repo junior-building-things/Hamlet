@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
 import Image from 'next/image';
-import { Pencil, Copy, Check, Smartphone, Apple } from 'lucide-react';
+import { Pencil, Copy, Check } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 interface LinkDef {
@@ -17,6 +17,8 @@ interface LinkDef {
   color: string;
   url?: string;
   onClick?: () => void;
+  /** Optional sub-actions shown inside the hover tooltip (replaces default label+copy). */
+  subActions?: Array<{ label: string; onClick: () => void }>;
 }
 
 function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): LinkDef[] {
@@ -29,10 +31,25 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): 
     links.push({ key: 'compliance', label: 'Compliance', icon: '/compliance.png', iconW: 14, iconH: 14, color: '#88DBDD', url: feature.complianceUrl });
   if (feature.figmaUrl)
     links.push({ key: 'figma', label: 'Figma', icon: '/figma.svg', iconW: 10, iconH: 14, color: '#FF7362', url: feature.figmaUrl });
-  if (feature.packageQrUrl)
-    links.push({ key: 'android-pkg', label: 'Android Package', icon: '', lucideIcon: Smartphone, iconW: 14, iconH: 14, color: '#34D399', onClick: () => onPackageClick?.(false) });
-  if (feature.iosPackageQrUrl)
-    links.push({ key: 'ios-pkg', label: 'iOS Package', icon: '', lucideIcon: Apple, iconW: 14, iconH: 14, color: '#A1A1AA', onClick: () => onPackageClick?.(true) });
+  if (feature.packageQrUrl || feature.iosPackageQrUrl) {
+    const hasAndroid = !!feature.packageQrUrl;
+    const hasIos = !!feature.iosPackageQrUrl;
+    const subActions = [
+      ...(hasAndroid ? [{ label: 'Android', onClick: () => onPackageClick?.(false) }] : []),
+      ...(hasIos     ? [{ label: 'iOS',     onClick: () => onPackageClick?.(true)  }] : []),
+    ];
+    links.push({
+      key: 'package',
+      label: 'Package',
+      icon: '/qr.svg',
+      iconW: 14,
+      iconH: 14,
+      color: 'var(--foreground)',
+      // Default click opens the modal on whichever tab exists first.
+      onClick: () => onPackageClick?.(hasAndroid ? false : true),
+      subActions,
+    });
+  }
   if (feature.libraUrl)
     links.push({ key: 'libra', label: 'Libra', icon: '/libra.png', iconW: 14, iconH: 14, color: '#0073F0', url: feature.libraUrl });
   if (feature.abReportUrl)
@@ -117,7 +134,19 @@ function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
     return createPortal(el, document.body);
   }
 
-  const inner = (
+  const inner = link.subActions && link.subActions.length > 0 ? (
+    <div className="flex items-center gap-1">
+      {link.subActions.map(sa => (
+        <button
+          key={sa.label}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); sa.onClick(); }}
+          className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap px-2 py-0.5 rounded-md hover:bg-[var(--card-hover)] transition-colors"
+        >
+          {sa.label}
+        </button>
+      ))}
+    </div>
+  ) : (
     <>
       <span className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap">
         {link.label}
