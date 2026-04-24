@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendInteractiveCardToChat, getLarkBotToken, resolveOpenIds, PM_GROUP_CHAT_ID } from '@/lib/lark';
+import { sendInteractiveCardToChat, getLarkBotToken } from '@/lib/lark';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -57,10 +57,7 @@ export async function POST(req: NextRequest) {
   const actionName = typeof actionValue?.action === 'string' ? actionValue.action : '';
 
   if (actionName === 'send_prd_change_to_group') {
-    // TEMP: send to PM group chat instead of feature group for verification
-    const TEST_MODE_SEND_TO_PM_GROUP = true;
-    const featureChatId = String(actionValue?.chatId ?? '');
-    const chatId = TEST_MODE_SEND_TO_PM_GROUP ? PM_GROUP_CHAT_ID : featureChatId;
+    const chatId = String(actionValue?.chatId ?? '');
     const featureName = String(actionValue?.featureName ?? '');
     const prdUrl = String(actionValue?.prdUrl ?? '');
     const summary = String(actionValue?.summary ?? '');
