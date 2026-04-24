@@ -139,36 +139,44 @@ export async function POST(req: NextRequest) {
     // Write the synced feature back to the GCS cache (best-effort, don't block response).
     const meegoId = meegoUrl.match(/\/detail\/(\d+)/)?.[1] ?? '';
     if (meegoId) {
-      // Compute updated versionHistory — append new version if it differs from
-      // the last entry. Read current cache to get existing history.
+      // Read existing cache entry to preserve versionHistory and respect
+      // manualEdits (so synced values don't overwrite manually edited ones).
+      let existing: Awaited<ReturnType<typeof readFeatureCache>> extends (infer T | null) ? T extends { features: (infer F)[] } ? F | undefined : undefined : undefined;
+      try {
+        const cache = await readFeatureCache();
+        existing = cache?.features.find(f => f.id === meegoId || f.meegoIssueId === meegoId);
+      } catch { /* fall through */ }
+
+      const manualEdits = new Set(existing?.manualEdits ?? []);
+      // pick: use synced value unless the field was manually edited
+      const keep = <T>(key: string, synced: T, fallback: T | undefined): T | undefined =>
+        manualEdits.has(key) ? fallback : (synced || fallback);
+
+      // Version history: append new version if different from last entry
       let versionHistory: string[] | undefined;
       if (result.iosVersion) {
-        try {
-          const cache = await readFeatureCache();
-          const existing = cache?.features.find(f => f.id === meegoId || f.meegoIssueId === meegoId);
-          const history = existing?.versionHistory ?? [];
-          if (history.length === 0 || history[history.length - 1] !== result.iosVersion) {
-            versionHistory = [...history, result.iosVersion];
-          } else {
-            versionHistory = history;
-          }
-        } catch { /* fall through */ }
+        const history = existing?.versionHistory ?? [];
+        if (history.length === 0 || history[history.length - 1] !== result.iosVersion) {
+          versionHistory = [...history, result.iosVersion];
+        } else {
+          versionHistory = history;
+        }
       }
 
       updateFeatureInCache(meegoId, {
         status: result.status,
-        name: result.name,
+        name: keep('name', result.name, existing?.name),
         owner: result.owner,
-        prd: result.prd,
-        figmaUrl: result.figmaUrl,
-        complianceUrl: result.complianceUrl,
+        prd: keep('prd', result.prd, existing?.prd),
+        figmaUrl: keep('figmaUrl', result.figmaUrl, existing?.figmaUrl),
+        complianceUrl: keep('complianceUrl', result.complianceUrl, existing?.complianceUrl),
         priority: result.priority ?? undefined,
         canCompleteNode: result.canCompleteNode,
         meegoNodeKey: result.meegoNodeKey,
         iosVersion: result.iosVersion,
         ...(versionHistory ? { versionHistory } : {}),
-        abReportUrl: result.abReportUrl,
-        libraUrl: result.libraUrl,
+        abReportUrl: keep('abReportUrl', result.abReportUrl, existing?.abReportUrl),
+        libraUrl: keep('libraUrl', result.libraUrl, existing?.libraUrl),
         chatId: result.chatId,
         pmOwner: result.pmOwner,
         techOwner: result.techOwner,
