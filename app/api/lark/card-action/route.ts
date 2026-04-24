@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       //       Please take note @tech @server @android @ios @qa @da
       const sections = [
         {
-          content: `PM made an update to the PRD [${escapeMd(featureName)}](${prdUrl}):\n\n- **${escapeMd(summary)}**${mentionsLine}`,
+          content: `PM made an update to the PRD [${escapeMd(featureName)}](${prdUrl}):\n- **${escapeMd(summary)}**${mentionsLine}`,
         },
       ];
       await sendInteractiveCardToChat(chatId, cardTitle, 'blue', sections, token);
