@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendTextMessage, getLarkBotToken, addBotToChat, refreshUserToken, PM_GROUP_CHAT_ID } from '@/lib/lark';
+import { sendPostToChat, getLarkBotToken, addBotToChat, refreshUserToken, resolveOpenIds, PM_GROUP_CHAT_ID, PostParagraph } from '@/lib/lark';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 import crypto from 'crypto';
 
@@ -70,35 +70,45 @@ export async function POST(req: NextRequest) {
     try {
       const token = await getLarkBotToken();
 
-      // Build @mention tags by email (Lark card lark_md supports <at email=xxx>)
+      // Resolve POC emails → open_ids for @mentions in post message
       console.log(`[card-action] pocEmails: ${JSON.stringify(pocEmails)}`);
-      let mentions = '';
+      let uniqueOpenIds: string[] = [];
       if (pocEmails.length > 0) {
-        const uniqueEmails = [...new Set(pocEmails.map(e => e.toLowerCase()))];
-        mentions = uniqueEmails.map(email => `<at email=${email}></at>`).join(' ');
+        const emailToOpenId = await resolveOpenIds(pocEmails, token);
+        uniqueOpenIds = [...new Set(Object.values(emailToOpenId))].filter(Boolean);
+        console.log(`[card-action] resolved ${uniqueOpenIds.length}/${pocEmails.length} POCs`);
       }
 
-      // Date line: 📝 PRD Update - Fri, Apr 24
+      // Title: 📝 PRD Update - Fri, Apr 24
       const dateStr = new Date().toLocaleDateString('en-US', {
         weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
       });
+      const title = `📝 PRD Update - ${dateStr}`;
 
-      // Plain-text message with @mentions + link (no card chrome).
-      // Lark text supports <at> tags and shows URLs as clickable links.
-      const lines = [
-        `📝 PRD Update - ${dateStr}`,
-        ``,
-        `PM made an update to the PRD ${featureName} (${prdUrl}):`,
-        `- ${summary}`,
+      // Post message body: rich text with inline clickable feature name + @mentions
+      const paragraphs: PostParagraph[] = [
+        [
+          { tag: 'text', text: 'PM made an update to the PRD ' },
+          { tag: 'a', text: featureName, href: prdUrl },
+          { tag: 'text', text: ':' },
+        ],
+        [
+          { tag: 'text', text: `- ${summary}`, style: ['bold'] },
+        ],
       ];
-      if (mentions) {
-        lines.push('');
-        lines.push(`Please take note ${mentions}`);
+      if (uniqueOpenIds.length > 0) {
+        const mentionLine: Array<{ tag: 'text' | 'at'; text?: string; user_id?: string }> = [
+          { tag: 'text', text: 'Please take note ' },
+        ];
+        for (let i = 0; i < uniqueOpenIds.length; i++) {
+          if (i > 0) mentionLine.push({ tag: 'text', text: ' ' });
+          mentionLine.push({ tag: 'at', user_id: uniqueOpenIds[i] });
+        }
+        paragraphs.push([]); // blank line
+        paragraphs.push(mentionLine as PostParagraph);
       }
-      const text = lines.join('\n');
 
       // Ensure the bot is a member of the chat before sending.
-      // If bot isn't in chat, fall back to adding via the user's access token.
       let userAccessToken: string | undefined;
       try {
         const state = await loadDigestState();
@@ -113,7 +123,7 @@ export async function POST(req: NextRequest) {
         }
       } catch { /* ignore */ }
       await addBotToChat(chatId, userAccessToken);
-      const msgId = await sendTextMessage(chatId, text, token);
+      const msgId = await sendPostToChat(chatId, title, paragraphs, token);
       if (!msgId) {
         return NextResponse.json({
           toast: { type: 'error', content: 'Failed to send — bot may not have access' },

@@ -2153,8 +2153,9 @@ export async function sendDmByEmail(
  * Either a plain text run or a clickable hyperlink.
  */
 export type PostInline =
-  | { tag: 'text'; text: string }
-  | { tag: 'a'; text: string; href: string };
+  | { tag: 'text'; text: string; style?: string[] }
+  | { tag: 'a'; text: string; href: string }
+  | { tag: 'at'; user_id: string };
 
 /** A `post` paragraph is an array of inline elements. Empty array = blank line. */
 export type PostParagraph = PostInline[];
