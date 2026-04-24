@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, X } from 'lucide-react';
 
 // ─── Shared dropdown hook ─────────────────────────────────────────────────────
 
@@ -179,18 +179,41 @@ interface MultiSelectProps {
 
 export function MultiSelect({ options, value, onChange, placeholder, icon, className = 'w-full' }: MultiSelectProps) {
   const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
-  const selected = new Set(value);
 
-  // Empty set == all selected (both show every feature). Treat them the same.
-  const allSelected = selected.size === 0 || selected.size === options.length;
+  // Tri-state: include "value", exclude "!value", or not present.
+  const includes = new Set<string>();
+  const excludes = new Set<string>();
+  for (const v of value) {
+    if (v.startsWith('!')) excludes.add(v.slice(1));
+    else includes.add(v);
+  }
 
+  const totalFilters = includes.size + excludes.size;
   let label: string;
-  if (allSelected) {
-    label = '';  // show placeholder (e.g. "Status", "Priority")
-  } else if (selected.size === 1) {
-    label = options.find(o => selected.has(o.value))?.label ?? '';
+  if (totalFilters === 0) {
+    label = '';
+  } else if (totalFilters === 1 && includes.size === 1) {
+    label = options.find(o => includes.has(o.value))?.label ?? '';
+  } else if (totalFilters === 1 && excludes.size === 1) {
+    const name = options.find(o => excludes.has(o.value))?.label ?? '';
+    label = `Not ${name}`;
   } else {
-    label = `${selected.size} Selected`;
+    label = `${totalFilters} Selected`;
+  }
+
+  function getState(val: string): 'include' | 'exclude' | 'none' {
+    if (includes.has(val)) return 'include';
+    if (excludes.has(val)) return 'exclude';
+    return 'none';
+  }
+
+  function cycle(val: string) {
+    const current = getState(val);
+    const next = value.filter(v => v !== val && v !== `!${val}`);
+    if (current === 'none') next.push(val);
+    else if (current === 'include') next.push(`!${val}`);
+    // 'exclude' → removed (no push)
+    onChange(next);
   }
 
   return (
@@ -205,37 +228,16 @@ export function MultiSelect({ options, value, onChange, placeholder, icon, class
 
       {open && (
         <div className={listDownCls} style={{ maxHeight }}>
-          {/* Select all / Clear toggle */}
-          <div
-            className={`${itemBaseCls} font-medium border-b border-[var(--border)]`}
-            onClick={() => onChange(allSelected ? [options[0]?.value].filter(Boolean) : [])}
-          >
-            <span className="text-sm text-[var(--foreground)] flex-1">
-              {allSelected ? 'Clear selection' : 'Select all'}
-            </span>
-            {allSelected && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
-          </div>
           {options.map(opt => {
-            const isChecked = allSelected || selected.has(opt.value);
+            const state = getState(opt.value);
+            const bg = state === 'include' ? 'bg-[var(--card-hover)]' : state === 'exclude' ? 'bg-red-500/10' : '';
             return (
               <div key={opt.value}
-                className={`${itemBaseCls} ${isChecked ? 'bg-[var(--card-hover)]' : ''}`}
-                onClick={() => {
-                  // If currently "all", start filtering with just this one deselected:
-                  // i.e. select every other option, then toggle this off.
-                  if (allSelected) {
-                    onChange(options.filter(o => o.value !== opt.value).map(o => o.value));
-                    return;
-                  }
-                  const next = new Set(selected);
-                  if (next.has(opt.value)) next.delete(opt.value);
-                  else next.add(opt.value);
-                  // If user just selected all options manually → collapse to empty (=all).
-                  if (next.size === options.length) { onChange([]); return; }
-                  onChange([...next]);
-                }}>
+                className={`${itemBaseCls} ${bg}`}
+                onClick={() => cycle(opt.value)}>
                 <span className="text-sm text-[var(--foreground)] flex-1">{opt.label}</span>
-                {isChecked && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+                {state === 'include' && <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+                {state === 'exclude' && <X className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
               </div>
             );
           })}

@@ -438,16 +438,31 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   }, [features]);
 
   const filtered = useMemo(() => {
-    const statusSet   = new Set(statusFilter);
-    const prioritySet = new Set(priorityFilter);
+    // Tri-state filter: values starting with '!' are excludes, others are includes.
+    function splitFilter(list: string[]): { includes: Set<string>; excludes: Set<string> } {
+      const includes = new Set<string>();
+      const excludes = new Set<string>();
+      for (const v of list) {
+        if (v.startsWith('!')) excludes.add(v.slice(1));
+        else includes.add(v);
+      }
+      return { includes, excludes };
+    }
+    function matchFilter(val: string, includes: Set<string>, excludes: Set<string>): boolean {
+      if (excludes.has(val)) return false;
+      if (includes.size === 0) return true;
+      return includes.has(val);
+    }
+    const statusF   = splitFilter(statusFilter);
+    const priorityF = splitFilter(priorityFilter);
     return features.filter(f => {
       // Hide features with Unknown status (deleted/completed on Meego)
       if (f.status === 'Unknown') return false;
       const q = search.toLowerCase();
       return (
         (!q || f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q) || f.owner.toLowerCase().includes(q)) &&
-        (statusSet.size   === 0 || statusSet.has(f.status ?? '')) &&
-        (prioritySet.size === 0 || prioritySet.has(f.priority ?? ''))
+        matchFilter(f.status ?? '',   statusF.includes,   statusF.excludes) &&
+        matchFilter(f.priority ?? '', priorityF.includes, priorityF.excludes)
       );
     });
   }, [features, search, statusFilter, priorityFilter]);
