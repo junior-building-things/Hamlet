@@ -17,6 +17,7 @@ interface LinkDef {
   color: string;
   url?: string;
   onClick?: () => void;
+  invertInDark?: boolean;
 }
 
 // Hook to track current theme (light/dark) from document.documentElement.
@@ -47,15 +48,14 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void, t
     links.push({ key: 'figma', label: 'Figma', icon: '/figma.svg', iconW: 10, iconH: 14, color: '#FF7362', url: feature.figmaUrl });
   if (feature.packageQrUrl || feature.iosPackageQrUrl) {
     const hasAndroid = !!feature.packageQrUrl;
-    const isDark = theme === 'dark';
     links.push({
       key: 'package',
       label: 'Packages',
-      icon: isDark ? '/qr_dark.png' : '/qr.svg',
-      dynamicIcon: isDark, // use plain <img> for PNG to avoid Next Image sizing issues
+      icon: '/qr.svg',
       iconW: 14,
       iconH: 14,
       color: 'var(--foreground)',
+      invertInDark: true,
       onClick: () => onPackageClick?.(hasAndroid ? false : true),
     });
   }
@@ -199,6 +199,8 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
   const [mounted, setMounted] = useState(false);
   const ref = useRef<HTMLElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const theme = useTheme();
+  const invertStyle = link.invertInDark && theme === 'dark' ? { filter: 'invert(1)' } : undefined;
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -219,9 +221,9 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
     <link.lucideIcon className="w-[12px] h-[12px] shrink-0" style={{ color: link.color }} />
   ) : link.dynamicIcon ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] shrink-0" />
+    <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] shrink-0" style={invertStyle} />
   ) : (
-    <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 15)} height={Math.min(link.iconH, 15)} className="shrink-0" />
+    <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 15)} height={Math.min(link.iconH, 15)} className="shrink-0" style={invertStyle} />
   );
 
   const chip = link.url ? (
