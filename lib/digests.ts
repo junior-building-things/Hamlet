@@ -1771,7 +1771,7 @@ export function formatUnansweredDigest(findings: UnansweredFinding[]): string {
 // ─── Task 2: PRD Changes digest card ────────────────────────────────────────
 
 export function buildPrdChangesDigestCard(
-  changes: Array<{ name: string; prdUrl: string; meegoUrl: string; summary: string }>,
+  changes: Array<{ name: string; prdUrl: string; meegoUrl: string; summary: string; chatId?: string; workItemId?: string }>,
 ): { title: string; template: CardHeaderTemplate; sections: CardSection[] } {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
@@ -1794,7 +1794,22 @@ export function buildPrdChangesDigestCard(
     const lines: string[] = [];
     lines.push(`**${escapeMd(c.name)}** (${linkParts.join(', ')})`);
     lines.push(`  • ${escapeMd(c.summary)}`);
-    sections.push({ content: lines.join('\n') });
+
+    const buttons = c.chatId
+      ? [{
+          text: 'Send to Feature Group',
+          type: 'primary' as const,
+          value: {
+            action: 'send_prd_change_to_group',
+            chatId: c.chatId,
+            featureName: c.name,
+            prdUrl: c.prdUrl,
+            summary: c.summary,
+          },
+        }]
+      : undefined;
+
+    sections.push({ content: lines.join('\n'), buttons });
   }
 
   return { title, template, sections };
@@ -2090,7 +2105,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // content changes since the last run. If the text differs, use Gemini
   // to summarize what changed and append it to the Change Log section.
   const PRD_SNAPSHOTS_PATH = 'hamlet/prd-snapshots.json';
-  const prdChanges: Array<{ name: string; prdUrl: string; meegoUrl: string; summary: string }> = [];
+  const prdChanges: Array<{ name: string; prdUrl: string; meegoUrl: string; summary: string; chatId?: string; workItemId?: string }> = [];
   try {
     const { readDocContent, grantBotEditAccess } = await import('./lark');
     const { readJsonState, writeJsonState } = await import('./gcs-state');
@@ -2161,7 +2176,14 @@ ${currentText.slice(0, 4000)}`;
               console.warn(`[digests] append PRD changelog failed for "${f.name}":`, e);
             }
           }
-          prdChanges.push({ name: f.name, prdUrl: f.prd, meegoUrl: f.meegoUrl, summary });
+          prdChanges.push({
+            name: f.name,
+            prdUrl: f.prd,
+            meegoUrl: f.meegoUrl,
+            summary,
+            chatId: f.chatId,
+            workItemId: f.workItemId,
+          });
         }
 
         // Update snapshot (always, even on first run)

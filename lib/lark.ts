@@ -2238,7 +2238,10 @@ export type CardHeaderTemplate =
 
 export interface CardButton {
   text: string;
-  url: string;
+  /** Opens this URL in a new tab when clicked. Omit for an action button. */
+  url?: string;
+  /** Sent to the card callback endpoint when clicked (action button). */
+  value?: Record<string, unknown>;
   type: 'primary' | 'default' | 'danger';
 }
 
@@ -2277,12 +2280,16 @@ export async function sendInteractiveCardToChat(
     if (s.buttons && s.buttons.length > 0) {
       elements.push({
         tag: 'action',
-        actions: s.buttons.map(b => ({
-          tag: 'button',
-          text: { tag: 'plain_text', content: b.text },
-          url: b.url,
-          type: b.type,
-        })),
+        actions: s.buttons.map(b => {
+          const action: Record<string, unknown> = {
+            tag: 'button',
+            text: { tag: 'plain_text', content: b.text },
+            type: b.type,
+          };
+          if (b.url) action.url = b.url;
+          if (b.value) action.value = b.value;
+          return action;
+        }),
       });
     }
     if (i < sections.length - 1) {
