@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Feature } from '@/lib/types';
 import { Sidebar, SidebarView } from '@/components/Sidebar';
 import { ProjectView } from '@/components/ProjectView';
@@ -8,8 +8,18 @@ import { TodoView } from '@/components/TodoView';
 import { RolesView } from '@/components/RolesView';
 import { FeatureModal } from '@/components/FeatureModal';
 
+interface GlobalPackages {
+  updatedAt?: string;
+  version?: string;
+  android?: { qrUrl?: string; downloadUrl?: string; version?: string } | null;
+  ios?:     { qrUrl?: string; downloadUrl?: string; version?: string } | null;
+}
+
+const JUNIOR_PACKAGES_URL = 'https://junior-416594255546.asia-southeast1.run.app/api/packages/latest';
+
 export default function Home() {
-  const [features,      setFeatures]      = useState<Feature[]>([]);
+  const [featuresRaw,   setFeatures]      = useState<Feature[]>([]);
+  const [globalPkg,     setGlobalPkg]     = useState<GlobalPackages | null>(null);
   const [activeView,    setActiveView]    = useState<SidebarView>(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
@@ -59,6 +69,31 @@ export default function Home() {
       })
       .catch(() => {});
   }, []);
+
+  // Fetch global latest packages (TikTok Android/iOS) from Junior's GCS-backed endpoint.
+  // These serve as a fallback when a feature doesn't have its own package URL from Lark chat.
+  useEffect(() => {
+    fetch(JUNIOR_PACKAGES_URL)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: GlobalPackages | null) => { if (d && (d.android || d.ios)) setGlobalPkg(d); })
+      .catch(() => {});
+  }, []);
+
+  // Enrich features with global package URLs (GCS/Bits data takes precedence over Lark chat scraping).
+  const features = useMemo(() => {
+    if (!globalPkg) return featuresRaw;
+    const androidQr   = globalPkg.android?.qrUrl       || '';
+    const androidDl   = globalPkg.android?.downloadUrl || '';
+    const iosQr       = globalPkg.ios?.qrUrl           || '';
+    const iosDl       = globalPkg.ios?.downloadUrl     || '';
+    return featuresRaw.map(f => ({
+      ...f,
+      packageQrUrl:          androidQr || f.packageQrUrl,
+      packageDownloadUrl:    androidDl || f.packageDownloadUrl,
+      iosPackageQrUrl:       iosQr     || f.iosPackageQrUrl,
+      iosPackageDownloadUrl: iosDl     || f.iosPackageDownloadUrl,
+    }));
+  }, [featuresRaw, globalPkg]);
 
   // ── Add-modal callbacks ────────────────────────────────────────────────────
 
