@@ -17,8 +17,6 @@ interface LinkDef {
   color: string;
   url?: string;
   onClick?: () => void;
-  /** Optional sub-actions shown inside the hover tooltip (replaces default label+copy). */
-  subActions?: Array<{ label: string; onClick: () => void }>;
 }
 
 function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): LinkDef[] {
@@ -33,21 +31,14 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void): 
     links.push({ key: 'figma', label: 'Figma', icon: '/figma.svg', iconW: 10, iconH: 14, color: '#FF7362', url: feature.figmaUrl });
   if (feature.packageQrUrl || feature.iosPackageQrUrl) {
     const hasAndroid = !!feature.packageQrUrl;
-    const hasIos = !!feature.iosPackageQrUrl;
-    const subActions = [
-      ...(hasAndroid ? [{ label: 'Android', onClick: () => onPackageClick?.(false) }] : []),
-      ...(hasIos     ? [{ label: 'iOS',     onClick: () => onPackageClick?.(true)  }] : []),
-    ];
     links.push({
       key: 'package',
-      label: 'Package',
+      label: 'Packages',
       icon: '/qr.svg',
       iconW: 14,
       iconH: 14,
       color: 'var(--foreground)',
-      // Default click opens the modal on whichever tab exists first.
       onClick: () => onPackageClick?.(hasAndroid ? false : true),
-      subActions,
     });
   }
   if (feature.libraUrl)
@@ -134,19 +125,7 @@ function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
     return createPortal(el, document.body);
   }
 
-  const inner = link.subActions && link.subActions.length > 0 ? (
-    <div className="flex items-center gap-1">
-      {link.subActions.map(sa => (
-        <button
-          key={sa.label}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); sa.onClick(); }}
-          className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap px-2 py-0.5 rounded-md hover:bg-[var(--card-hover)] transition-colors"
-        >
-          {sa.label}
-        </button>
-      ))}
-    </div>
-  ) : (
+  const inner = (
     <>
       <span className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap">
         {link.label}
