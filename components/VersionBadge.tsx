@@ -1,4 +1,6 @@
 'use client';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 const VERSION_COLORS = [
   { bg: 'bg-cyan-500/15 border border-cyan-500/30',     text: 'text-cyan-700'    },
@@ -20,23 +22,52 @@ function versionColor(version: string) {
 }
 
 export function VersionBadge({ version, versionHistory }: { version?: string; versionHistory?: string[] }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0 });
+  const [mounted, setMounted] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const show = useCallback(() => {
+    if (ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      setAnchor({ top: r.top, left: r.left, width: r.width });
+    }
+    setShowTooltip(true);
+  }, []);
+  const hide = useCallback(() => setShowTooltip(false), []);
+
   if (!version) return null;
   const config = versionColor(version);
   const hasHistory = versionHistory && versionHistory.length > 1;
   const trail = hasHistory ? versionHistory.join(' → ') : undefined;
 
   return (
-    <div className="relative group/version">
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${config.bg} ${config.text}`}>
+    <>
+      <span
+        ref={ref}
+        className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${config.bg} ${config.text}`}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+      >
         {version}
       </span>
-      {trail && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 bg-[var(--background)] border border-[var(--border)] rounded-lg shadow-xl
-                        text-[11px] text-[var(--foreground)] whitespace-nowrap opacity-0 group-hover/version:opacity-100 transition-opacity pointer-events-none z-50">
+      {trail && showTooltip && mounted && createPortal(
+        <div
+          className="fixed px-2.5 py-1.5 bg-[var(--background)] border border-[var(--border)] rounded-lg shadow-xl text-[11px] text-[var(--foreground)] whitespace-nowrap pointer-events-none"
+          style={{
+            top: anchor.top - 6,
+            left: anchor.left + anchor.width / 2,
+            transform: 'translate(-50%, -100%)',
+            zIndex: 9999,
+          }}
+        >
           {trail}
           <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--background)]" />
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
