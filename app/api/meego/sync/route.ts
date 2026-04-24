@@ -4,7 +4,7 @@ import { batchFetchAvatars, refreshUserToken, searchLibraInChat, getLarkBotToken
 import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
 import { cookies } from 'next/headers';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
-import { updateFeatureInCache, markFeatureDeleted } from '@/lib/feature-cache';
+import { updateFeatureInCache, markFeatureDeleted, readFeatureCache } from '@/lib/feature-cache';
 
 // Cache refreshed tokens in memory to avoid refreshing on every sync call
 let cachedUserToken = '';
@@ -139,6 +139,22 @@ export async function POST(req: NextRequest) {
     // Write the synced feature back to the GCS cache (best-effort, don't block response).
     const meegoId = meegoUrl.match(/\/detail\/(\d+)/)?.[1] ?? '';
     if (meegoId) {
+      // Compute updated versionHistory — append new version if it differs from
+      // the last entry. Read current cache to get existing history.
+      let versionHistory: string[] | undefined;
+      if (result.iosVersion) {
+        try {
+          const cache = await readFeatureCache();
+          const existing = cache?.features.find(f => f.id === meegoId || f.meegoIssueId === meegoId);
+          const history = existing?.versionHistory ?? [];
+          if (history.length === 0 || history[history.length - 1] !== result.iosVersion) {
+            versionHistory = [...history, result.iosVersion];
+          } else {
+            versionHistory = history;
+          }
+        } catch { /* fall through */ }
+      }
+
       updateFeatureInCache(meegoId, {
         status: result.status,
         name: result.name,
@@ -150,6 +166,7 @@ export async function POST(req: NextRequest) {
         canCompleteNode: result.canCompleteNode,
         meegoNodeKey: result.meegoNodeKey,
         iosVersion: result.iosVersion,
+        ...(versionHistory ? { versionHistory } : {}),
         abReportUrl: result.abReportUrl,
         libraUrl: result.libraUrl,
         chatId: result.chatId,

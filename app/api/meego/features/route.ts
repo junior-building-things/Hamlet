@@ -36,23 +36,37 @@ export async function GET(req: Request) {
     const features = deletedIds.size > 0
       ? raw.filter(f => !deletedIds.has(f.id) && !deletedIds.has(f.meegoIssueId ?? ''))
       : raw;
-    // Merge with existing cache to preserve manually edited fields.
-    // manualEdits[] tracks which fields the user edited in the UI — those
-    // values must survive cache replacement.
+    // Merge with existing cache to preserve enriched fields that fetchUserStories
+    // doesn't return (versionHistory, avatars, risk, team roles, package URLs,
+    // chatId, etc.) plus manualEdits and the manually edited field values.
     try {
       const prevCache = await readFeatureCache();
       if (prevCache) {
         const prevById = new Map(prevCache.features.map(f => [f.meegoIssueId ?? f.id, f]));
         for (let i = 0; i < features.length; i++) {
           const prev = prevById.get(features[i].meegoIssueId ?? features[i].id);
-          if (prev?.manualEdits && prev.manualEdits.length > 0) {
-            // Carry forward manualEdits and the manually edited field values
-            const merged = { ...features[i], manualEdits: prev.manualEdits };
+          if (!prev) continue;
+          // Start from prev (has all enriched fields), then overwrite with
+          // fresh fields the live fetch is authoritative for.
+          const merged = {
+            ...prev,
+            name: features[i].name,
+            priority: features[i].priority,
+            meegoUrl: features[i].meegoUrl,
+            meegoProjectKey: features[i].meegoProjectKey,
+            meegoIssueId: features[i].meegoIssueId,
+            meegoNodeKey: features[i].meegoNodeKey || prev.meegoNodeKey,
+            lastUpdated: features[i].lastUpdated || prev.lastUpdated,
+            prd: features[i].prd || prev.prd,
+            complianceUrl: features[i].complianceUrl || prev.complianceUrl,
+          };
+          // Restore manually edited field values (override the fresh data)
+          if (prev.manualEdits && prev.manualEdits.length > 0) {
             for (const key of prev.manualEdits) {
               if (key in prev) (merged as unknown as Record<string, unknown>)[key] = (prev as unknown as Record<string, unknown>)[key];
             }
-            features[i] = merged;
           }
+          features[i] = merged;
         }
       }
       await writeFeatureCache(features);
