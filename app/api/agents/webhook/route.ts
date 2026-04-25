@@ -316,15 +316,20 @@ async function handleMessage(body: LarkEvent) {
     console.warn('[webhook] feature lookup failed:', e);
   }
 
-  const prompt = `${agent.persona}
-
-A team member sent you this ${chatType} message:
-"${userText}"
-${featureContext}
-
-Reply naturally and helpfully. Keep your response concise (1-3 sentences). If you have feature data, use it to answer the question directly. If you don't have the specific information requested, say so honestly. Don't make up project details.
-
-Reply with ONLY your response text (no quotes, no explanation).`;
+  // Allow editing the persona + the wrapper template via the Prompts admin UI
+  const { getPrompt } = await import('@/lib/prompts');
+  const { getPromptDef, renderPrompt } = await import('@/lib/prompt-registry');
+  const personaId = agent.key === 'rio' ? 'rio.persona' : 'mia.persona';
+  const personaDef = getPromptDef(personaId);
+  const persona = await getPrompt(personaId, personaDef?.default ?? agent.persona);
+  const wrapperDef = getPromptDef('hamlet.agent_webhook');
+  const wrapperTmpl = await getPrompt('hamlet.agent_webhook', wrapperDef?.default ?? '');
+  const prompt = renderPrompt(wrapperTmpl, {
+    persona,
+    chatType,
+    userText,
+    featureContext,
+  });
 
   try {
     const result = await model.generateContent(prompt);

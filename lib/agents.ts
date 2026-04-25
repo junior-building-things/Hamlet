@@ -176,11 +176,15 @@ async function runUnansweredCheck(
         .map(m => `<at user_id="${m.id.open_id}">${m.name}</at>`)
         .join(' ');
 
-      const prompt = `You are ${agent === 'rio' ? 'Rio, a PM Agent' : 'Mia, an RD Agent'} in a team chat. A team member sent this message tagging ${mentionNames} but no one has replied yet. Generate a brief, friendly follow-up message (1-2 sentences max) that re-tags the same people and encourages them to respond. Use emoji if appropriate. Don't repeat the original question, just nudge politely.
-
-Original message: ${content}
-
-Reply with ONLY the follow-up text (no quotes, no explanation). The @mentions will be added automatically, so don't include @Name in your response.`;
+      const { getPrompt } = await import('./prompts');
+      const { getPromptDef, renderPrompt } = await import('./prompt-registry');
+      const def = getPromptDef('hamlet.unanswered_followup');
+      const tmpl = await getPrompt('hamlet.unanswered_followup', def?.default ?? '');
+      const prompt = renderPrompt(tmpl, {
+        agentDescription: agent === 'rio' ? 'Rio, a PM Agent' : 'Mia, an RD Agent',
+        mentionNames,
+        content,
+      });
 
       const result = await model.generateContent(prompt);
       const followUp = result.response.text().trim();

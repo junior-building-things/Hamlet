@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
 import { copyPrdTemplate, readDocContent, editDocSection, renameDocSection, addDocSection, addDocComment, listDocComments, replyToComment, duplicateDoc } from '@/lib/lark';
+import { getPrompt } from '@/lib/prompts';
+import { getPromptDef, renderPrompt } from '@/lib/prompt-registry';
 import type { Feature } from '@/lib/types';
 
 const PROJECT_KEY   = '5f105019a8b9a853da64767f';
@@ -140,12 +142,9 @@ export async function POST(req: NextRequest) {
       if (!apiKey) throw new Error('GOOGLE_AI_API_KEY not set');
       const genAI  = new GoogleGenerativeAI(apiKey);
       const model  = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
-      const prompt = `You are Hamlet, a helpful PM assistant. Below is the raw Meego work item brief for a feature. Answer the user's question concisely and naturally based only on the information in the brief. If the answer is not present in the brief, say so honestly.
-
-User's question: ${params.query}
-
-Meego brief:
-${brief}`;
+      const def = getPromptDef('hamlet.meego_query');
+      const tmpl = await getPrompt('hamlet.meego_query', def?.default ?? '');
+      const prompt = renderPrompt(tmpl, { query: params.query ?? '', brief });
       const result  = await model.generateContent(prompt);
       const answer  = result.response.text().trim();
       return NextResponse.json({ reply: answer });
@@ -189,7 +188,9 @@ ${brief}`;
 
       const genAI  = new GoogleGenerativeAI(apiKey);
       const model  = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
-      const prompt = `You are Hamlet, a helpful PM assistant. Below is the content of a Lark document. Provide a clear, concise summary highlighting the key points, structure, and any action items.\n\nDocument content:\n${content.slice(0, 8000)}`;
+      const def = getPromptDef('hamlet.doc_summarize');
+      const tmpl = await getPrompt('hamlet.doc_summarize', def?.default ?? '');
+      const prompt = renderPrompt(tmpl, { content: content.slice(0, 8000) });
       const result = await model.generateContent(prompt);
       const summary = result.response.text().trim();
       return NextResponse.json({ reply: summary, links: [{ label: '📄 Doc', url: params.docUrl }] });
@@ -230,7 +231,12 @@ ${brief}`;
             docContext = (await readDocContent(params.docUrl)).slice(0, 4000);
           } catch { /* best effort */ }
 
-          const prompt = `Write 2-4 sentences for a PRD section titled "${params.section}". ${docContext ? `Context:\n${docContext}` : ''}\nReturn ONLY plain text.`;
+          const def = getPromptDef('hamlet.prd_section_autogen');
+          const tmpl = await getPrompt('hamlet.prd_section_autogen', def?.default ?? '');
+          const prompt = renderPrompt(tmpl, {
+            section: params.section ?? '',
+            docContext: docContext ? `Context:\n${docContext}` : '',
+          });
           try {
             const result = await model.generateContent(prompt);
             sectionContent = result.response.text().trim();
@@ -287,18 +293,15 @@ ${brief}`;
           } catch { /* best effort */ }
 
           const existingReplies = target.replies.map(r => r.content).join('\n');
-          const prompt = `You are a TikTok product manager replying to a comment on a PRD document.
-
-Comment quoted text: "${target.quote}"
-Comment: "${target.content}"
-${existingReplies ? `Existing replies:\n${existingReplies}\n` : ''}
-${docContext ? `Document context:\n${docContext}\n` : ''}
-Instruction: Write a reply that is "${params.replyText}"
-
-Rules:
-- Keep it concise (1-3 sentences)
-- Be professional but conversational
-- Return ONLY the reply text, no quotes or formatting`;
+          const def = getPromptDef('hamlet.prd_comment_reply');
+          const tmpl = await getPrompt('hamlet.prd_comment_reply', def?.default ?? '');
+          const prompt = renderPrompt(tmpl, {
+            quote: target.quote,
+            content: target.content,
+            existingReplies: existingReplies ? `Existing replies:\n${existingReplies}\n` : '',
+            docContext: docContext ? `Document context:\n${docContext}\n` : '',
+            replyText: params.replyText ?? '',
+          });
 
           const result = await model.generateContent(prompt);
           finalReply = result.response.text().trim();

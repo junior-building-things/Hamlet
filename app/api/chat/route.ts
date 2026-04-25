@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getPrompt } from '@/lib/prompts';
+import { getPromptDef } from '@/lib/prompt-registry';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -102,9 +104,12 @@ async function parseIntent(messages: ChatMsg[], userMessage: string): Promise<In
     ? '\n\nPrevious conversation:\n' + recent.map(m => `${m.role === 'user' ? 'User' : 'Hamlet'}: ${m.content}`).join('\n')
     : '';
 
+  const def = getPromptDef('hamlet.chat_intent');
+  const systemPrompt = await getPrompt('hamlet.chat_intent', def?.default ?? SYSTEM);
+
   const genAI  = new GoogleGenerativeAI(apiKey);
   const model  = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
-  const result = await model.generateContent(`${SYSTEM}${history}\n\nUser: ${userMessage}`);
+  const result = await model.generateContent(`${systemPrompt}${history}\n\nUser: ${userMessage}`);
   const raw    = result.response.text().trim();
 
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
