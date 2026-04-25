@@ -1356,46 +1356,23 @@ export async function evaluateChatRisk(
     return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
   }
 
-  // Build the prompt — different intro depending on whether there's a prior
-  // risk to evaluate against.
-  const priorBlock = prior
-    ? `A previously detected risk is currently being tracked for this feature:
-  Level:   ${prior.level}
-  Summary: "${prior.summary}"
-  Raised:  ${prior.raisedAtIso.slice(0, 10)}
-
-Your job is to decide what the CURRENT risk situation is, given both the prior risk and the new messages below:
-- If the new messages clearly resolve the prior risk and no new risk has surfaced → "none"
-- If the prior risk is still relevant (or hasn't been touched) → carry it forward (re-state the same level + a short summary)
-- If the new messages confirm or worsen the prior risk → escalate (bump level and update the summary)
-- If a new unrelated risk has been raised → replace the prior summary with the new one (use whichever level fits)
-
-Be conservative about clearing a risk: only return "none" if there is clear evidence the issue is resolved. Silence does NOT mean resolution.`
-    : `Decide whether any of the messages below indicate a risk to the feature's progress, timeline, or successful launch.
-
-A "risk" is something a team member has called out that may delay, block, or compromise the feature. Examples that count as risk:
-- Tech owner says they need more time or won't hit the deadline
-- An unresolved blocker or dependency slipping
-- Quality concerns, scope creep, or readiness doubts
-- Anyone explicitly saying "this is at risk", "we may not make it", or similar
-
-Do NOT flag as a risk:
-- Routine status updates ("PRD updated", "merged X")
-- Open questions still being discussed
-- Risks that have already been resolved in the same conversation
-- Off-topic or social conversation`;
-
-  const prompt = `You are reviewing the last 24 hours of messages from a TikTok PM team chat for the feature "${featureName}".
-
-${priorBlock}
-
-Messages (oldest first):
-${formatted}
-
-Respond with ONLY a single JSON object on one line, no markdown fences:
-{"level":"none"|"yellow"|"red","summary":"<short clause, max 12 words, lowercase, no trailing period; empty string when level is none>"}
-
-Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
+  // Build the prompt from the registry — separate templates for "with prior"
+  // vs "no prior" so each can be edited independently in the admin UI.
+  const { getPrompt: getPromptFn } = await import('./prompts');
+  const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
+  const promptId = prior ? 'hamlet.chat_risk_eval_prior' : 'hamlet.chat_risk_eval';
+  const def = getDefFn(promptId);
+  const tmpl = await getPromptFn(promptId, def?.default ?? '');
+  const prompt = renderFn(tmpl, prior ? {
+    featureName,
+    priorLevel: prior.level,
+    priorSummary: prior.summary,
+    priorDate: prior.raisedAtIso.slice(0, 10),
+    messages: formatted,
+  } : {
+    featureName,
+    messages: formatted,
+  });
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -2171,13 +2148,14 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           try {
             const prdGenAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '');
             const model = prdGenAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
-            const prompt = `A PRD (Product Requirements Document) was edited. Compare the old and new versions and write a 1-sentence summary of what changed. Focus on CONTENT changes (new sections, removed requirements, updated logic), not formatting. If it's just minor wording tweaks, say "Minor wording edits". Reply with ONLY the summary, no prefix.
-
-OLD VERSION:
-${prevText.slice(0, 4000)}
-
-NEW VERSION:
-${currentText.slice(0, 4000)}`;
+            const { getPrompt } = await import('./prompts');
+            const { renderPrompt, getPromptDef } = await import('./prompt-registry');
+            const def = getPromptDef('hamlet.prd_change_summary');
+            const tmpl = await getPrompt('hamlet.prd_change_summary', def?.default ?? '');
+            const prompt = renderPrompt(tmpl, {
+              prevText: prevText.slice(0, 4000),
+              currentText: currentText.slice(0, 4000),
+            });
             const result = await model.generateContent(prompt);
             summary = result.response.text()?.trim() ?? 'PRD content updated';
             console.log(`[digests] PRD changed for "${f.name}": ${summary}`);
