@@ -19,7 +19,7 @@ import {
 } from './lark';
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
-import { readFeatureCache, writeFeatureCache } from './feature-cache';
+import { readFeatureCache, writeFeatureCache, patchFeaturesInCache } from './feature-cache';
 
 /** Append a new version to the history if it differs from the last entry. */
 function trackVersionHistory(history: string[] | undefined, newVersion: string | undefined): string[] | undefined {
@@ -2451,17 +2451,17 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     );
   }
 
-  // Step 6b: Write risk data to the GCS feature cache so the Hamlet UI can
-  // display the risk level + notes columns. Also incrementally scans the
-  // Meego op log for planned-version changes per feature and materialises
-  // the full history onto the cached Feature as `versionChanges`. When the
-  // list is non-empty, the feature is force-flagged as red ("Delayed").
+  // Step 6b: Compute risk + versionChanges deltas per cached feature and
+  // apply them via an optimistic-concurrency patch. The cache is also
+  // written by per-card sync calls (`updateFeatureInCache`); using a
+  // patch + GCS generation preconditions prevents either side from
+  // silently overwriting the other.
   try {
     const featureCache = await readFeatureCache();
     if (featureCache) {
       const riskByWorkItemId = new Map(riskFindings.map(r => [r.feature.workItemId, r]));
       const featureByWorkItemId = new Map(features.map(f => [f.workItemId, f]));
-      let updated = 0;
+      const deltas = new Map<string, Partial<import('./types').Feature>>();
       let versionScanned = 0;
       let versionDelayed = 0;
       for (const cached of featureCache.features) {
@@ -2479,9 +2479,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
 
         // Features in AB Testing should have NO risk level shown.
         if (statusName === '实验中') {
-          cached.riskLevel = undefined;
-          cached.riskNotes = undefined;
-          updated++;
+          deltas.set(fId, { riskLevel: undefined, riskNotes: undefined });
           continue;
         }
 
@@ -2490,15 +2488,15 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         // longer apply. Check both the raw Meego key and the cached
         // English status (covers features no longer in the current run).
         if (statusKey === 'end' || cached.status === 'Done' || cached.status === '已完成') {
-          cached.riskLevel = undefined;
-          cached.riskNotes = undefined;
-          updated++;
+          deltas.set(fId, { riskLevel: undefined, riskNotes: undefined });
           continue;
         }
 
         // Incrementally update versionChanges from the Meego op log. We
         // only re-scan the records that postdate the latest cached entry,
         // so per-run cost is bounded; first encounter walks more pages.
+        let nextVersionChanges = cached.versionChanges;
+        let versionChangesChanged = false;
         if (meegoUrl) {
           try {
             const existing = cached.versionChanges ?? [];
@@ -2507,7 +2505,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
               : 0;
             const fresh = await getAllVersionChanges(meegoUrl, sinceMs);
             if (fresh.length > 0) {
-              // Append + dedupe by (date, from, to) so re-scans are idempotent.
               const seen = new Set(existing.map(c => `${c.date}|${c.from}|${c.to}`));
               const merged = [...existing];
               for (const c of fresh) {
@@ -2515,60 +2512,63 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
                 if (!seen.has(k)) { merged.push(c); seen.add(k); }
               }
               merged.sort((a, b) => a.date.localeCompare(b.date));
-              cached.versionChanges = merged;
-            } else if (existing.length === 0) {
-              cached.versionChanges = undefined;
+              nextVersionChanges = merged;
+              versionChangesChanged = true;
             }
             versionScanned++;
-            if (cached.versionChanges && cached.versionChanges.length > 0) versionDelayed++;
+            if (nextVersionChanges && nextVersionChanges.length > 0) versionDelayed++;
           } catch (e) {
             console.warn(`[digests] version-change scan failed for ${cached.name}:`, e);
           }
         }
 
+        const delta: Partial<import('./types').Feature> = {};
+        if (versionChangesChanged) delta.versionChanges = nextVersionChanges;
+
         // If the feature has any planned-version changes, force red and
         // surface a "Delayed" marker on the corresponding RiskFinding so
         // the digest card renders consistently with the Hamlet UI.
-        const hasDelay = (cached.versionChanges?.length ?? 0) > 0;
+        const hasDelay = (nextVersionChanges?.length ?? 0) > 0;
         if (hasDelay && finding) {
-          const latest = cached.versionChanges![cached.versionChanges!.length - 1];
+          const latest = nextVersionChanges![nextVersionChanges!.length - 1];
           finding.delay = { detail: `version ${latest.from} → ${latest.to}` };
           finding.level = 'red';
         }
 
         if (finding) {
-          cached.riskLevel = finding.level;
+          delta.riskLevel = finding.level;
           const notes: string[] = [...finding.reasons];
           if (finding.delay) notes.unshift(finding.delay.detail);
-          cached.riskNotes = notes.length > 0 ? notes : undefined;
-          updated++;
+          delta.riskNotes = notes.length > 0 ? notes : undefined;
+          deltas.set(fId, delta);
           continue;
         }
 
-        // No risk finding (feature wasn't in the in-dev set this run) but
-        // we still detected version changes — surface as red on the cache.
+        // No risk finding but we detected version changes — surface as red.
         if (hasDelay) {
-          cached.riskLevel = 'red';
-          const latest = cached.versionChanges![cached.versionChanges!.length - 1];
-          cached.riskNotes = [`version ${latest.from} → ${latest.to}`];
-          updated++;
+          const latest = nextVersionChanges![nextVersionChanges!.length - 1];
+          delta.riskLevel = 'red';
+          delta.riskNotes = [`version ${latest.from} → ${latest.to}`];
+          deltas.set(fId, delta);
           continue;
         }
 
-        // Tech Design / Development features not in riskFindings (e.g. no
-        // version or launch date) default to green (Low risk).
+        // Tech Design / Development features not in riskFindings default to green.
         if (statusName === '技术方案设计中' || statusName === '开发中') {
-          cached.riskLevel = 'green';
-          cached.riskNotes = undefined;
-          updated++;
+          delta.riskLevel = 'green';
+          delta.riskNotes = undefined;
+          deltas.set(fId, delta);
+          continue;
         }
-        // Other statuses (QA, Merged, Done, etc.) not in riskFindings keep
-        // their previous risk data.
+
+        // Other statuses (QA, Merged, etc.) not in riskFindings keep their
+        // previous risk data — only persist if versionChanges changed.
+        if (Object.keys(delta).length > 0) deltas.set(fId, delta);
       }
       // Re-sort risk findings since some may have been bumped to red above.
       riskFindings.sort((a, b) => severityOrder[a.level] - severityOrder[b.level]);
-      await writeFeatureCache(featureCache.features);
-      console.log(`[digests] risk data written to feature cache for ${updated} features (version-change scan: ${versionScanned} scanned, ${versionDelayed} delayed)`);
+      await patchFeaturesInCache(deltas);
+      console.log(`[digests] risk data patched into feature cache for ${deltas.size} features (version-change scan: ${versionScanned} scanned, ${versionDelayed} delayed)`);
     }
   } catch (e) {
     console.warn('[digests] failed to write risk data to feature cache:', e);

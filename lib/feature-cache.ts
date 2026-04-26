@@ -6,7 +6,7 @@
  * is shared across browsers/devices and survives page refreshes.
  */
 
-import { readJsonState, writeJsonState } from './gcs-state';
+import { readJsonState, writeJsonState, updateJsonState } from './gcs-state';
 import { Feature } from './types';
 
 const FEATURES_PATH = 'hamlet/features.json';
@@ -46,24 +46,56 @@ export async function writeFeatureCache(features: Feature[]): Promise<void> {
 }
 
 /**
- * Update a single feature in the GCS cache (by id). Reads the current
- * cache, merges the updated fields, and writes back. If the cache doesn't
- * exist or the feature isn't in it, this is a no-op.
+ * Update a single feature in the GCS cache (by id). Uses an optimistic
+ * read-modify-write loop with GCS generation preconditions, so a
+ * concurrent writer (e.g. the digest pipeline rewriting the cache from
+ * Step 6b) can't silently lose this update or vice versa. If the cache
+ * doesn't exist or the feature isn't in it, this is a no-op.
  */
 export async function updateFeatureInCache(
   featureId: string,
   updates: Partial<Feature>,
 ): Promise<void> {
   try {
-    const cache = await readJsonState<FeatureCache>(FEATURES_PATH);
-    if (!cache) return;
-    const idx = cache.features.findIndex(f => f.id === featureId);
-    if (idx === -1) return;
-    cache.features[idx] = { ...cache.features[idx], ...updates };
-    cache.updatedAt = new Date().toISOString();
-    await writeJsonState(FEATURES_PATH, cache);
+    await updateJsonState<FeatureCache>(FEATURES_PATH, (cache) => {
+      if (!cache) return { updatedAt: new Date().toISOString(), features: [] };
+      const idx = cache.features.findIndex(f => f.id === featureId);
+      if (idx !== -1) {
+        cache.features[idx] = { ...cache.features[idx], ...updates };
+      }
+      cache.updatedAt = new Date().toISOString();
+      return cache;
+    });
   } catch (e) {
     console.warn('[feature-cache] update failed:', e);
+  }
+}
+
+/**
+ * Apply per-feature field deltas to the GCS cache atomically. Used by
+ * the digest pipeline so Step 6b's risk + versionChanges writes don't
+ * race with concurrent per-card sync calls. Each entry's value is
+ * shallow-merged onto the matching cached feature (looked up by id or
+ * meegoIssueId). Features not present in the cache are skipped.
+ */
+export async function patchFeaturesInCache(
+  deltas: Map<string, Partial<Feature>>,
+): Promise<void> {
+  if (deltas.size === 0) return;
+  try {
+    await updateJsonState<FeatureCache>(FEATURES_PATH, (cache) => {
+      if (!cache) return { updatedAt: new Date().toISOString(), features: [] };
+      for (const [id, delta] of deltas) {
+        const idx = cache.features.findIndex(f => (f.meegoIssueId ?? f.id) === id || f.id === id);
+        if (idx !== -1) {
+          cache.features[idx] = { ...cache.features[idx], ...delta };
+        }
+      }
+      cache.updatedAt = new Date().toISOString();
+      return cache;
+    });
+  } catch (e) {
+    console.warn('[feature-cache] patch failed:', e);
   }
 }
 
