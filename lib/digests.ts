@@ -2469,12 +2469,37 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         const finding = riskByWorkItemId.get(fId);
         const meegoFeature = featureByWorkItemId.get(fId);
         const statusName = meegoFeature?.overallStatusName ?? '';
+        const statusKey = meegoFeature?.overallStatusKey;
         const meegoUrl = meegoFeature?.meegoUrl ?? cached.meegoUrl;
+
+        // Skip terminal-state features BEFORE running any per-feature
+        // Meego calls — these don't need risk evaluation, and skipping
+        // them keeps Step 6b within the route's maxDuration when the
+        // cache holds 100+ features.
+
+        // Features in AB Testing should have NO risk level shown.
+        if (statusName === '实验中') {
+          cached.riskLevel = undefined;
+          cached.riskNotes = undefined;
+          updated++;
+          continue;
+        }
+
+        // Done / launched features should also have NO risk level — they're
+        // not in active dev anymore so deadline pressure and delays no
+        // longer apply. Check both the raw Meego key and the cached
+        // English status (covers features no longer in the current run).
+        if (statusKey === 'end' || cached.status === 'Done' || cached.status === '已完成') {
+          cached.riskLevel = undefined;
+          cached.riskNotes = undefined;
+          updated++;
+          continue;
+        }
 
         // Incrementally update versionChanges from the Meego op log. We
         // only re-scan the records that postdate the latest cached entry,
         // so per-run cost is bounded; first encounter walks more pages.
-        if (meegoUrl && statusName !== '实验中') {
+        if (meegoUrl) {
           try {
             const existing = cached.versionChanges ?? [];
             const sinceMs = existing.length > 0
@@ -2499,26 +2524,6 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           } catch (e) {
             console.warn(`[digests] version-change scan failed for ${cached.name}:`, e);
           }
-        }
-
-        // Features in AB Testing should have NO risk level shown.
-        if (statusName === '实验中') {
-          cached.riskLevel = undefined;
-          cached.riskNotes = undefined;
-          updated++;
-          continue;
-        }
-
-        // Done / launched features should also have NO risk level — they're
-        // not in active dev anymore so deadline pressure and delays no
-        // longer apply. Check both the raw Meego key and the cached
-        // English status (covers features no longer in the current run).
-        const statusKey = meegoFeature?.overallStatusKey;
-        if (statusKey === 'end' || cached.status === 'Done' || cached.status === '已完成') {
-          cached.riskLevel = undefined;
-          cached.riskNotes = undefined;
-          updated++;
-          continue;
         }
 
         // If the feature has any planned-version changes, force red and
