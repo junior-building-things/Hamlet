@@ -930,6 +930,64 @@ export async function getAllVersionChanges(
   return out;
 }
 
+/**
+ * Compare a numeric short version like "44.9" or "45.0" — returns
+ * positive if a > b, negative if a < b, zero if equal. Returns null if
+ * either side can't be parsed.
+ */
+function compareShortVersion(a: string, b: string): number | null {
+  const pa = a.match(/^(\d+)\.(\d+)/);
+  const pb = b.match(/^(\d+)\.(\d+)/);
+  if (!pa || !pb) return null;
+  const maj = Number(pa[1]) - Number(pb[1]);
+  if (maj !== 0) return maj;
+  return Number(pa[2]) - Number(pb[2]);
+}
+
+/**
+ * Fetch a feature's iOS / Android planned + actual launched versions
+ * from Meego and detect whether the planned version is higher than the
+ * actual launched version on either platform — interpreted as a "delay"
+ * signal. Returns null if no mismatch (or if comparison isn't possible
+ * because one side is empty / unparseable).
+ */
+export async function detectVersionMismatch(
+  meegoUrl: string,
+): Promise<{ platform: 'ios' | 'android'; planned: string; actual: string } | null> {
+  let raw: string;
+  try {
+    raw = await callMeegoMcp('get_workitem_brief', {
+      url: meegoUrl,
+      fields: [...VERSION_LAUNCHED_FIELDS, ...VERSION_PLANNED_FIELDS],
+    });
+  } catch {
+    return null;
+  }
+  let brief: BriefJson;
+  try { brief = JSON.parse(raw) as BriefJson; } catch { return null; }
+  const fields = brief.work_item_fields ?? [];
+  const get = (key: string): string => {
+    const val = fields.find(f => f.key === key)?.value;
+    return extractShortVersions(val)[0] ?? '';
+  };
+  const iosPlanned   = get('field_08a9ca');
+  const iosActual    = get('ios_actual_online_version');
+  const androidPlanned = get('field_c88970');
+  const androidActual  = get('android_actual_online_version');
+
+  // Per spec: delayed when planned > actual on either platform. Both
+  // sides must be present and parseable for the comparison to count.
+  if (iosPlanned && iosActual) {
+    const cmp = compareShortVersion(iosPlanned, iosActual);
+    if (cmp !== null && cmp > 0) return { platform: 'ios', planned: iosPlanned, actual: iosActual };
+  }
+  if (androidPlanned && androidActual) {
+    const cmp = compareShortVersion(androidPlanned, androidActual);
+    if (cmp !== null && cmp > 0) return { platform: 'android', planned: androidPlanned, actual: androidActual };
+  }
+  return null;
+}
+
 // ─── Feature discovery via list_todo + MQL (raw Chinese statuses) ─────────
 
 interface MeegoTodoItem {
@@ -2519,6 +2577,33 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
             if (nextVersionChanges && nextVersionChanges.length > 0) versionDelayed++;
           } catch (e) {
             console.warn(`[digests] version-change scan failed for ${cached.name}:`, e);
+          }
+
+          // Also flag features whose iOS or Android planned version is
+          // higher than the corresponding actual-launched version (planned
+          // > actual on either platform → delayed). This catches slips
+          // that aren't captured by the op-log scan because the planned
+          // field was never edited (the actual just shipped to a later
+          // version). Synthesise a versionChanges entry so the rest of
+          // the pipeline + UI render it the same as op-log delays.
+          try {
+            const mismatch = await detectVersionMismatch(meegoUrl);
+            if (mismatch) {
+              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+              // from = planned (the lower one), to = actual (the higher)
+              // — matches the "M/D: 44.9 → 45.0" tooltip format.
+              const synth = { date: today, from: mismatch.planned, to: mismatch.actual };
+              const list = nextVersionChanges ?? [];
+              const seen = new Set(list.map(c => `${c.date}|${c.from}|${c.to}`));
+              const k = `${synth.date}|${synth.from}|${synth.to}`;
+              if (!seen.has(k)) {
+                nextVersionChanges = [...list, synth].sort((a, b) => a.date.localeCompare(b.date));
+                versionChangesChanged = true;
+                if (versionScanned > 0 && (cached.versionChanges?.length ?? 0) === 0) versionDelayed++;
+              }
+            }
+          } catch (e) {
+            console.warn(`[digests] version-mismatch check failed for ${cached.name}:`, e);
           }
         }
 
