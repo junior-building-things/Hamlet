@@ -988,6 +988,67 @@ export async function detectVersionMismatch(
   return null;
 }
 
+/**
+ * Format a unix-ms timestamp as "Apr 9" in Singapore time. Returns ''
+ * for invalid / non-positive inputs so callers can short-circuit.
+ */
+function formatShortDateMs(ms: number): string {
+  if (!ms || ms <= 0) return '';
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Singapore' });
+}
+
+/**
+ * Compare a feature's "Server 计划上线时间" (Server Planned Launch Date,
+ * field_cde888 on the QA-test-preparation node) against the schedule on
+ * its "Server上线" (Server Launch) node. If the node's scheduled finish
+ * is later than the planned launch date, the feature has slipped on the
+ * server side — return both dates formatted as "Apr 9" / "Apr 13".
+ *
+ * Returns null when there is no Server上线 node, when either date is
+ * missing, or when the schedule isn't past the planned date.
+ */
+export async function detectServerLaunchDelay(
+  meegoUrl: string,
+): Promise<{ planned: string; scheduled: string } | null> {
+  let raw: string;
+  try {
+    raw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+  } catch {
+    return null;
+  }
+  let parsed: { list?: Array<{ basic?: { name?: string; node_key?: string }; schedule?: { estimate_finish_time?: number | null }; form_items?: Array<{ field_key?: string; value?: unknown }> }> };
+  try { parsed = JSON.parse(raw); } catch { return null; }
+  const nodes = parsed.list ?? [];
+
+  // Find the Server Planned Launch Date (field_cde888) — typically lives
+  // on the QA-test-preparation node but we accept it from any node.
+  let plannedMs = 0;
+  for (const node of nodes) {
+    const item = (node.form_items ?? []).find(f => f.field_key === 'field_cde888');
+    if (!item || item.value === null || item.value === undefined || item.value === '') continue;
+    const v = typeof item.value === 'string' ? Number(item.value) : Number(item.value);
+    if (!isNaN(v) && v > 0) { plannedMs = v; break; }
+  }
+  if (!plannedMs) return null;
+
+  // Find the Server上线 node and its scheduled finish.
+  const launchNode = nodes.find(n => n.basic?.name === 'Server上线');
+  const scheduledMs = launchNode?.schedule?.estimate_finish_time ?? 0;
+  if (!scheduledMs || scheduledMs <= 0) return null;
+
+  // Treat scheduled-later-than-planned as a delay. Use a 1-day grace so
+  // small intra-day differences don't false-positive.
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  if (scheduledMs - plannedMs <= ONE_DAY_MS) return null;
+
+  const planned = formatShortDateMs(plannedMs);
+  const scheduled = formatShortDateMs(scheduledMs);
+  if (!planned || !scheduled) return null;
+  return { planned, scheduled };
+}
+
 // ─── Feature discovery via list_todo + MQL (raw Chinese statuses) ─────────
 
 interface MeegoTodoItem {
@@ -2531,31 +2592,22 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         const meegoUrl = meegoFeature?.meegoUrl ?? cached.meegoUrl;
 
         // Skip terminal-state features BEFORE running any per-feature
-        // Meego calls — these don't need risk evaluation, and skipping
-        // them keeps Step 6b within the route's maxDuration when the
-        // cache holds 100+ features.
-
-        // Features in AB Testing should have NO risk level shown.
-        if (statusName === '实验中') {
-          deltas.set(fId, { riskLevel: undefined, riskNotes: undefined });
-          continue;
-        }
-
-        // Done / launched features should also have NO risk level — they're
-        // not in active dev anymore so deadline pressure and delays no
-        // longer apply. Check both the raw Meego key and the cached
-        // English status (covers features no longer in the current run).
+        // Meego calls — these don't need risk evaluation OR delay
+        // detection (the RiskBadge UI hides for Done features anyway).
+        // Skipping them keeps Step 6b within the route's maxDuration
+        // when the cache holds 100+ features.
         if (statusKey === 'end' || cached.status === 'Done' || cached.status === '已完成') {
           deltas.set(fId, { riskLevel: undefined, riskNotes: undefined });
           continue;
         }
 
-        // Incrementally update versionChanges from the Meego op log. We
-        // only re-scan the records that postdate the latest cached entry,
-        // so per-run cost is bounded; first encounter walks more pages.
+        // Run all the version / launch-date delay scans for non-Done
+        // features — including AB Testing, since AB Testing only
+        // suppresses the riskLevel badge, not the Delayed badge.
         let nextVersionChanges = cached.versionChanges;
         let versionChangesChanged = false;
         if (meegoUrl) {
+          // (i) Op-log scan: planned-version field changes over time.
           try {
             const existing = cached.versionChanges ?? [];
             const sinceMs = existing.length > 0
@@ -2574,24 +2626,17 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
               versionChangesChanged = true;
             }
             versionScanned++;
-            if (nextVersionChanges && nextVersionChanges.length > 0) versionDelayed++;
           } catch (e) {
             console.warn(`[digests] version-change scan failed for ${cached.name}:`, e);
           }
 
-          // Also flag features whose iOS or Android planned version is
-          // higher than the corresponding actual-launched version (planned
-          // > actual on either platform → delayed). This catches slips
-          // that aren't captured by the op-log scan because the planned
-          // field was never edited (the actual just shipped to a later
-          // version). Synthesise a versionChanges entry so the rest of
-          // the pipeline + UI render it the same as op-log delays.
+          // (ii) Snapshot scan: actual launched > planned on either
+          // platform — catches slips where the planned field never
+          // moved in the op log.
           try {
             const mismatch = await detectVersionMismatch(meegoUrl);
             if (mismatch) {
               const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-              // from = planned (the lower one), to = actual (the higher)
-              // — matches the "M/D: 44.9 → 45.0" tooltip format.
               const synth = { date: today, from: mismatch.planned, to: mismatch.actual };
               const list = nextVersionChanges ?? [];
               const seen = new Set(list.map(c => `${c.date}|${c.from}|${c.to}`));
@@ -2599,24 +2644,55 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
               if (!seen.has(k)) {
                 nextVersionChanges = [...list, synth].sort((a, b) => a.date.localeCompare(b.date));
                 versionChangesChanged = true;
-                if (versionScanned > 0 && (cached.versionChanges?.length ?? 0) === 0) versionDelayed++;
               }
             }
           } catch (e) {
             console.warn(`[digests] version-mismatch check failed for ${cached.name}:`, e);
           }
+
+          // (iii) Server-launch slip: Server上线 node scheduled later
+          // than the field_cde888 "Server 计划上线时间" planned date.
+          try {
+            const serverDelay = await detectServerLaunchDelay(meegoUrl);
+            if (serverDelay) {
+              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+              const synth = { date: today, from: serverDelay.planned, to: serverDelay.scheduled };
+              const list = nextVersionChanges ?? [];
+              const seen = new Set(list.map(c => `${c.date}|${c.from}|${c.to}`));
+              const k = `${synth.date}|${synth.from}|${synth.to}`;
+              if (!seen.has(k)) {
+                nextVersionChanges = [...list, synth].sort((a, b) => a.date.localeCompare(b.date));
+                versionChangesChanged = true;
+              }
+            }
+          } catch (e) {
+            console.warn(`[digests] server-launch-delay check failed for ${cached.name}:`, e);
+          }
+
+          if (nextVersionChanges && nextVersionChanges.length > 0) versionDelayed++;
         }
 
         const delta: Partial<import('./types').Feature> = {};
         if (versionChangesChanged) delta.versionChanges = nextVersionChanges;
 
-        // If the feature has any planned-version changes, force red and
-        // surface a "Delayed" marker on the corresponding RiskFinding so
-        // the digest card renders consistently with the Hamlet UI.
+        // Features in AB Testing should have NO riskLevel shown — but
+        // we still want any Delayed signal (versionChanges) to render.
+        if (statusName === '实验中') {
+          delta.riskLevel = undefined;
+          delta.riskNotes = undefined;
+          deltas.set(fId, delta);
+          continue;
+        }
+
+        // If the feature has any planned-version / launch-date slips,
+        // force red and surface a "Delayed" marker on the corresponding
+        // RiskFinding so the digest card renders consistently with the
+        // Hamlet UI. The from/to values are already self-describing
+        // (versions like "44.9 → 45.0" or dates like "Apr 9 → Apr 13").
         const hasDelay = (nextVersionChanges?.length ?? 0) > 0;
         if (hasDelay && finding) {
           const latest = nextVersionChanges![nextVersionChanges!.length - 1];
-          finding.delay = { detail: `version ${latest.from} → ${latest.to}` };
+          finding.delay = { detail: `${latest.from} → ${latest.to}` };
           finding.level = 'red';
         }
 
@@ -2629,11 +2705,11 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           continue;
         }
 
-        // No risk finding but we detected version changes — surface as red.
+        // No risk finding but we detected delays — surface as red.
         if (hasDelay) {
           const latest = nextVersionChanges![nextVersionChanges!.length - 1];
           delta.riskLevel = 'red';
-          delta.riskNotes = [`version ${latest.from} → ${latest.to}`];
+          delta.riskNotes = [`${latest.from} → ${latest.to}`];
           deltas.set(fId, delta);
           continue;
         }
