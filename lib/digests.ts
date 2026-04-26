@@ -1198,13 +1198,6 @@ function businessDaysUntil(target: Date): number {
   return days;
 }
 
-function daysSinceIsoDate(iso: string): number | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return null;
-  return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
-}
-
 function maxLevel(levels: RiskLevel[]): RiskLevel {
   if (levels.includes('red')) return 'red';
   if (levels.includes('yellow')) return 'yellow';
@@ -1248,19 +1241,6 @@ export async function evaluateFeatureRisk(feature: MeegoFeature): Promise<RiskFi
   }
   // Server features without a planned launch date: no deadline warning —
   // they default to green (Low risk) unless other signals flag them.
-
-  // Stale check — no Meego updates in 7+ days
-  const daysStale = feature.lastUpdatedIso ? daysSinceIsoDate(feature.lastUpdatedIso) : null;
-  if (daysStale !== null && daysStale >= 7) {
-    reasons.push(`No Meego updates in ${daysStale} days`);
-    levels.push('red');
-  }
-
-  // Missing PRD
-  if (!feature.prd) {
-    reasons.push('PRD link not set');
-    levels.push('yellow');
-  }
 
   const level = reasons.length === 0 ? 'green' : maxLevel(levels);
   return { level, reasons, feature };
