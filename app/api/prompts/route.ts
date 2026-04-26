@@ -8,17 +8,22 @@ export const dynamic = 'force-dynamic';
  * GET /api/prompts
  *
  * Returns the full prompt registry merged with any GCS overrides.
- * Each entry has both the default and the (possibly overridden) current text.
+ * Each entry exposes both the registry default and the (possibly
+ * overridden) current value for both the prompt text and the thinking
+ * budget. `isOverridden` is true if EITHER field is overridden.
  */
 export async function GET() {
   try {
     const overrides = await listOverrides();
     const items = PROMPT_REGISTRY.map(def => {
       const override = overrides[def.id];
+      const defaultThinkingBudget = def.defaultThinkingBudget ?? 'dynamic';
       return {
         ...def,
+        defaultThinkingBudget,
         current: override?.content ?? def.default,
-        isOverridden: Boolean(override),
+        currentThinkingBudget: override?.thinkingBudget ?? defaultThinkingBudget,
+        isOverridden: Boolean(override?.content !== undefined || override?.thinkingBudget !== undefined),
         updatedAt: override?.updatedAt ?? null,
         updatedBy: override?.updatedBy ?? null,
       };

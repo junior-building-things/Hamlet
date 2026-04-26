@@ -15,8 +15,28 @@ import { readJsonState, writeJsonState } from './gcs-state';
 const PROMPTS_PATH = 'hamlet/prompts.json';
 const CACHE_TTL_MS = 30 * 1000;
 
+/**
+ * Allowed thinking-budget settings for a prompt. Maps to the
+ * `@google/genai` SDK as follows:
+ *   dynamic → thinkingBudget: -1   (model picks per call — Gemini default)
+ *   off     → thinkingBudget: 0    (no thinking at all)
+ *   minimal → thinkingLevel: MINIMAL
+ *   low     → thinkingLevel: LOW
+ *   medium  → thinkingLevel: MEDIUM
+ *   high    → thinkingLevel: HIGH
+ *
+ * Only meaningful for prompts sent to thinking-capable models (e.g.
+ * gemini-3.1-flash-lite-preview). Non-thinking models ignore the field.
+ */
+export type ThinkingBudget = 'dynamic' | 'off' | 'minimal' | 'low' | 'medium' | 'high';
+
+export const THINKING_BUDGETS: ThinkingBudget[] = ['dynamic', 'off', 'minimal', 'low', 'medium', 'high'];
+
 export interface PromptOverride {
-  content: string;
+  /** Override text. If absent, fall back to the default in prompt-registry. */
+  content?: string;
+  /** Override thinking budget. If absent, fall back to the registry default (or 'dynamic'). */
+  thinkingBudget?: ThinkingBudget;
   updatedAt: string;
   updatedBy?: string;
 }
@@ -46,13 +66,40 @@ export async function getPrompt(id: string, fallback: string): Promise<string> {
 }
 
 /**
- * Save a prompt override to GCS. Invalidates the in-memory cache so
- * the next getPrompt call sees the new value.
+ * Get the thinking-budget setting for a prompt. Returns the override if
+ * set, else the provided fallback (default 'dynamic'). Pair with
+ * `thinkingBudgetToConfig()` to produce a value spreadable into the
+ * `@google/genai` `thinkingConfig` field.
  */
-export async function setPrompt(id: string, content: string, updatedBy?: string): Promise<void> {
+export async function getPromptThinkingBudget(
+  id: string,
+  fallback: ThinkingBudget = 'dynamic',
+): Promise<ThinkingBudget> {
   const overrides = await loadOverrides();
+  return overrides[id]?.thinkingBudget ?? fallback;
+}
+
+// Note: the helper that maps ThinkingBudget into the @google/genai
+// ThinkingConfig shape lives in the consumer (currently Junior's
+// lib/prompts.ts) so it can reference the SDK's ThinkingLevel enum
+// directly. Hamlet stores the choice; Junior reads + applies it.
+
+/**
+ * Save a prompt override to GCS. Either or both of `content` and
+ * `thinkingBudget` may be passed; whichever is omitted is left unchanged
+ * (or unset on a brand-new override). Invalidates the in-memory cache.
+ */
+export async function setPrompt(
+  id: string,
+  patch: { content?: string; thinkingBudget?: ThinkingBudget },
+  updatedBy?: string,
+): Promise<void> {
+  const overrides = await loadOverrides();
+  const prev = overrides[id];
   overrides[id] = {
-    content,
+    ...(prev ?? {}),
+    ...(patch.content !== undefined ? { content: patch.content } : {}),
+    ...(patch.thinkingBudget !== undefined ? { thinkingBudget: patch.thinkingBudget } : {}),
     updatedAt: new Date().toISOString(),
     ...(updatedBy ? { updatedBy } : {}),
   };

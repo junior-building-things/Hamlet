@@ -3,6 +3,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { Loader2, RotateCcw, Save, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
+type ThinkingBudget = 'dynamic' | 'off' | 'minimal' | 'low' | 'medium' | 'high';
+
+const THINKING_BUDGET_OPTIONS: ThinkingBudget[] = ['dynamic', 'off', 'minimal', 'low', 'medium', 'high'];
+
 interface PromptItem {
   id: string;
   name: string;
@@ -13,6 +17,8 @@ interface PromptItem {
   variables: string[];
   default: string;
   current: string;
+  defaultThinkingBudget: ThinkingBudget;
+  currentThinkingBudget: ThinkingBudget;
   isOverridden: boolean;
   updatedAt: string | null;
   updatedBy: string | null;
@@ -127,20 +133,27 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
   onSave: () => void;
 }) {
   const [draft, setDraft] = useState(prompt.current);
+  const [budgetDraft, setBudgetDraft] = useState<ThinkingBudget>(prompt.currentThinkingBudget);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setDraft(prompt.current); }, [prompt.current, expanded]);
+  useEffect(() => {
+    setDraft(prompt.current);
+    setBudgetDraft(prompt.currentThinkingBudget);
+  }, [prompt.current, prompt.currentThinkingBudget, expanded]);
 
-  const isDirty = draft !== prompt.current;
+  const isDirty = draft !== prompt.current || budgetDraft !== prompt.currentThinkingBudget;
   const serviceCls = SERVICE_COLORS[prompt.service] ?? '';
 
   async function handleSave() {
     setSaving(true);
     try {
+      const body: { content?: string; thinkingBudget?: ThinkingBudget } = {};
+      if (draft !== prompt.current) body.content = draft;
+      if (budgetDraft !== prompt.currentThinkingBudget) body.thinkingBudget = budgetDraft;
       const res = await fetch(`/api/prompts/${prompt.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: draft }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('Save failed');
       toast.success('Prompt saved');
@@ -195,13 +208,27 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
 
       {expanded && (
         <div className="px-4 pb-4 border-t border-[var(--border)]">
-          <div className="mt-3 mb-2 flex items-center justify-between">
-            <div className="text-xs text-[var(--muted)]">
+          <div className="mt-3 mb-2 flex items-center justify-between gap-3">
+            <div className="text-xs text-[var(--muted)] flex items-center gap-3 flex-wrap">
+              <label className="inline-flex items-center gap-1.5">
+                <span className="text-[11px]">Thinking budget:</span>
+                <select
+                  value={budgetDraft}
+                  onChange={e => setBudgetDraft(e.target.value as ThinkingBudget)}
+                  className="bg-[var(--card-hover)] border border-[var(--border)] rounded px-2 py-0.5 text-[11px] text-[var(--foreground)] focus:outline-none focus:border-blue-500"
+                >
+                  {THINKING_BUDGET_OPTIONS.map(b => (
+                    <option key={b} value={b}>
+                      {b}{b === prompt.defaultThinkingBudget ? ' (default)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
               {prompt.variables.length > 0 && (
-                <>Variables: {prompt.variables.map(v => <code key={v} className="bg-[var(--card-hover)] px-1.5 py-0.5 rounded mr-1 text-[11px]">${`{${v}}`}</code>)}</>
+                <span>Variables: {prompt.variables.map(v => <code key={v} className="bg-[var(--card-hover)] px-1.5 py-0.5 rounded mr-1 text-[11px]">${`{${v}}`}</code>)}</span>
               )}
               {prompt.updatedAt && (
-                <span className="ml-3 text-[11px]">
+                <span className="text-[11px]">
                   Last edited {new Date(prompt.updatedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}
                   {prompt.updatedBy && ` by ${prompt.updatedBy}`}
                 </span>

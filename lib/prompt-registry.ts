@@ -24,6 +24,13 @@ export interface PromptDef {
   variables: string[];
   /** Hardcoded default text. */
   default: string;
+  /**
+   * Default thinking budget when no GCS override is set. Only meaningful
+   * for prompts sent to thinking-capable models (e.g. gemini-3.1-flash-
+   * lite-preview). Defaults to 'dynamic' (model decides per call) when
+   * unset.
+   */
+  defaultThinkingBudget?: import('./prompts').ThinkingBudget;
 }
 
 // ─── Hamlet prompts ─────────────────────────────────────────────────────────
