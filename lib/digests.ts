@@ -946,10 +946,10 @@ function compareShortVersion(a: string, b: string): number | null {
 
 /**
  * Fetch a feature's iOS / Android planned + actual launched versions
- * from Meego and detect whether the planned version is higher than the
- * actual launched version on either platform — interpreted as a "delay"
- * signal. Returns null if no mismatch (or if comparison isn't possible
- * because one side is empty / unparseable).
+ * from Meego and detect whether the actual launched version is higher
+ * than the planned version on either platform (i.e. it slipped to a
+ * later release than planned). Returns null if no mismatch — or if the
+ * comparison can't be made because one side is empty / unparseable.
  */
 export async function detectVersionMismatch(
   meegoUrl: string,
@@ -975,14 +975,14 @@ export async function detectVersionMismatch(
   const androidPlanned = get('field_c88970');
   const androidActual  = get('android_actual_online_version');
 
-  // Per spec: delayed when planned > actual on either platform. Both
-  // sides must be present and parseable for the comparison to count.
+  // Delayed when actual > planned on either platform. Both sides must be
+  // present + parseable for the comparison to count.
   if (iosPlanned && iosActual) {
-    const cmp = compareShortVersion(iosPlanned, iosActual);
+    const cmp = compareShortVersion(iosActual, iosPlanned);
     if (cmp !== null && cmp > 0) return { platform: 'ios', planned: iosPlanned, actual: iosActual };
   }
   if (androidPlanned && androidActual) {
-    const cmp = compareShortVersion(androidPlanned, androidActual);
+    const cmp = compareShortVersion(androidActual, androidPlanned);
     if (cmp !== null && cmp > 0) return { platform: 'android', planned: androidPlanned, actual: androidActual };
   }
   return null;
