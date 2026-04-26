@@ -127,6 +127,12 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
 
   useEffect(() => { setMounted(true); }, []);
 
+  // Done / launched features should never display a risk badge — the
+  // backend clears riskLevel for them on the next digest run, but this
+  // guard hides any stale data immediately (and suppresses the Delayed
+  // marker triggered by historical versionChanges).
+  if (feature.status === 'Done' || feature.status === '已完成') return null;
+
   const versionChanges = feature.versionChanges && feature.versionChanges.length > 0
     ? feature.versionChanges
     : null;

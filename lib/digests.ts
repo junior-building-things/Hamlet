@@ -2509,6 +2509,18 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           continue;
         }
 
+        // Done / launched features should also have NO risk level — they're
+        // not in active dev anymore so deadline pressure and delays no
+        // longer apply. Check both the raw Meego key and the cached
+        // English status (covers features no longer in the current run).
+        const statusKey = meegoFeature?.overallStatusKey;
+        if (statusKey === 'end' || cached.status === 'Done' || cached.status === '已完成') {
+          cached.riskLevel = undefined;
+          cached.riskNotes = undefined;
+          updated++;
+          continue;
+        }
+
         // If the feature has any planned-version changes, force red and
         // surface a "Delayed" marker on the corresponding RiskFinding so
         // the digest card renders consistently with the Hamlet UI.
