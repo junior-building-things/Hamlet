@@ -34,10 +34,8 @@ import {
   pruneStaleRisks,
   dropExitedFeatures,
   recordRunTime,
-  previousRunCutoffMs,
   isJuniorChatsCacheFresh,
   getWatchlist,
-  PersistedDelayChange,
   DigestStateFile,
   JuniorChatCacheEntry,
 } from './digest-state';
@@ -776,7 +774,6 @@ async function resolveServerPlannedLaunchDate(meegoUrl: string): Promise<string>
  */
 const FIELD_KEY_IOS_VERSION = 'field_08a9ca';
 const FIELD_KEY_ANDROID_VERSION = 'field_c88970';
-const FIELD_KEY_SERVER_LAUNCH_DATE = 'field_cde888';
 
 /** Op record (subset of fields we care about). */
 interface OpRecord {
@@ -798,12 +795,15 @@ interface OpRecordPage { has_more?: boolean; start_from?: string; total?: number
  * `sinceMs`. Records come back newest-first, so we early-exit as soon as
  * we see one older than the cutoff (avoiding the full-history walk).
  *
- * Capped at 5 pages to bound latency in case the cursor logic ever loops.
+ * `maxPages` bounds latency: 5 pages is enough for incremental "since last
+ * run" scans, but the full-history scan used by `getAllVersionChanges`
+ * passes a higher cap so it can walk the entire activity log on first
+ * encounter with a feature.
  */
-async function fetchRecentOpRecords(meegoUrl: string, sinceMs: number): Promise<OpRecord[]> {
+async function fetchRecentOpRecords(meegoUrl: string, sinceMs: number, maxPages = 5): Promise<OpRecord[]> {
   const all: OpRecord[] = [];
   let startFrom: string | undefined;
-  for (let page = 0; page < 5; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const args: Record<string, unknown> = { url: meegoUrl };
     if (startFrom) args.start_from = startFrom;
     let raw: string;
@@ -831,51 +831,6 @@ async function fetchRecentOpRecords(meegoUrl: string, sinceMs: number): Promise<
     startFrom = parsed.start_from;
   }
   return all;
-}
-
-/** A single Delayed-relevant change extracted from the op records. */
-export interface FieldChange {
-  kind: 'version' | 'launch_date';
-  /** Display string, e.g. "version 44.4 → 44.5" or "planned launch 16 Apr → 17 Apr". */
-  detail: string;
-  operationTimeMs: number;
-}
-
-/**
- * Format a single date value (ISO string or unix ms or `[ts]`) as `D MMM`
- * in Singapore time so the digest reads consistently with the rest of the
- * card. Returns the raw value if no date can be parsed.
- */
-function formatChangeDate(value: unknown): string {
-  function tryFormat(v: unknown): string {
-    if (typeof v === 'number' && v > 0) {
-      const ms = v > 1e12 ? v : v * 1000;
-      const d = new Date(ms);
-      if (!isNaN(d.getTime())) {
-        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' });
-      }
-    }
-    if (typeof v === 'string') {
-      const m = v.match(/(\d{4}-\d{2}-\d{2})/);
-      if (m) {
-        const d = new Date(m[1] + 'T00:00:00+08:00');
-        if (!isNaN(d.getTime())) {
-          return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' });
-        }
-      }
-      const ts = Number(v);
-      if (!isNaN(ts) && ts > 0) return tryFormat(ts);
-    }
-    return '';
-  }
-  if (Array.isArray(value)) {
-    for (const v of value) {
-      const out = tryFormat(v);
-      if (out) return out;
-    }
-    return '';
-  }
-  return tryFormat(value);
 }
 
 /**
@@ -914,71 +869,64 @@ async function resolveVersionShortName(versionId: string | number): Promise<stri
 }
 
 /**
- * Walk a feature's recent op records and pull out any changes to the iOS
- * version, Android version, or Server Planned Launch Date fields that
- * happened after `sinceMs`. Returns one FieldChange per matching record.
+ * Walk the Meego activity log and return EVERY iOS / Android version change
+ * for this feature, oldest first. Each entry is `{ date: 'YYYY-MM-DD', from,
+ * to }` where `from`/`to` are short version names (e.g. "44.9").
  *
- * Multiple changes for the same field are collapsed: only the most recent
- * one is returned, and the "from" side is taken from the OLDEST record so
- * the displayed transition spans the full delay window.
+ * If `sinceMs` is provided, only records with `operation_time > sinceMs` are
+ * scanned — used for incremental updates against a previously-cached list.
+ * When `sinceMs` is omitted (or 0), the entire op log is walked, paginating
+ * up to 50 pages.
+ *
+ * Multiple entries on the same date for the same field are kept as separate
+ * transitions (so we don't lose intermediate hops).
  */
-export async function detectDelayedFieldChanges(
+export async function getAllVersionChanges(
   meegoUrl: string,
-  sinceMs: number,
-): Promise<FieldChange[]> {
-  const records = await fetchRecentOpRecords(meegoUrl, sinceMs);
+  sinceMs = 0,
+): Promise<Array<{ date: string; from: string; to: string }>> {
+  const records = await fetchRecentOpRecords(meegoUrl, sinceMs, 50);
   if (records.length === 0) return [];
 
-  // Collect changes per field, sorted oldest first.
-  interface RawChange { kind: FieldChange['kind']; old: unknown; new: unknown; ts: number; fieldKey: string }
-  const byKind = new Map<string, RawChange[]>();
+  // Collect raw changes with timestamp, then resolve version names + sort.
+  interface Raw { ts: number; oldId: string | number | undefined; newId: string | number | undefined }
+  const raws: Raw[] = [];
   for (const r of records) {
     if (r.op_record_module !== 'field_mod') continue;
     if (r.operation_type !== 'modify') continue;
     const ts = r.operation_time ?? 0;
-    if (ts < sinceMs) continue;
+    if (ts <= sinceMs) continue;
     for (const c of r.record_contents ?? []) {
       const fk = c.object?.object_value;
-      if (!fk) continue;
-      let kind: FieldChange['kind'] | null = null;
-      if (fk === FIELD_KEY_IOS_VERSION || fk === FIELD_KEY_ANDROID_VERSION) kind = 'version';
-      else if (fk === FIELD_KEY_SERVER_LAUNCH_DATE) kind = 'launch_date';
-      if (!kind) continue;
-      const list = byKind.get(kind) ?? [];
-      list.push({ kind, old: c.old, new: c.new, ts, fieldKey: fk });
-      byKind.set(kind, list);
+      if (fk !== FIELD_KEY_IOS_VERSION && fk !== FIELD_KEY_ANDROID_VERSION) continue;
+      const oldId = unwrapValue(c.old) as string | number | undefined;
+      const newId = unwrapValue(c.new) as string | number | undefined;
+      if (oldId === undefined || oldId === null || newId === undefined || newId === null) continue;
+      raws.push({ ts, oldId, newId });
     }
   }
+  if (raws.length === 0) return [];
 
-  if (byKind.size === 0) return [];
+  // Resolve unique version IDs once, then map back.
+  const ids = new Set<string>();
+  for (const r of raws) { ids.add(String(r.oldId)); ids.add(String(r.newId)); }
+  const nameById = new Map<string, string>();
+  await Promise.all([...ids].map(async id => {
+    nameById.set(id, await resolveVersionShortName(id));
+  }));
 
-  // Collapse each field's changes into a single from→to transition. Use
-  // the oldest record's `old` and the newest record's `new`, so a 44.4 →
-  // 44.5 → 44.6 sequence in one window reads as "44.4 → 44.6".
-  const out: FieldChange[] = [];
-  for (const [kind, list] of byKind.entries()) {
-    list.sort((a, b) => a.ts - b.ts);
-    const first = list[0];
-    const last = list[list.length - 1];
-    if (kind === 'version') {
-      const fromIds = Array.isArray(first.old) ? first.old : [first.old];
-      const toIds   = Array.isArray(last.new)  ? last.new  : [last.new];
-      const fromName = fromIds[0] !== undefined && fromIds[0] !== null ? await resolveVersionShortName(fromIds[0] as string | number) : '';
-      const toName   = toIds[0]   !== undefined && toIds[0]   !== null ? await resolveVersionShortName(toIds[0]   as string | number) : '';
-      if (fromName && toName && fromName !== toName) {
-        out.push({ kind: 'version', detail: `version ${fromName} → ${toName}`, operationTimeMs: last.ts });
-      }
-    } else if (kind === 'launch_date') {
-      const fromStr = formatChangeDate(unwrapValue(first.old));
-      const toStr   = formatChangeDate(unwrapValue(last.new));
-      if (fromStr && toStr && fromStr !== toStr) {
-        out.push({ kind: 'launch_date', detail: `planned launch ${fromStr} → ${toStr}`, operationTimeMs: last.ts });
-      } else if (toStr && !fromStr) {
-        // First time the field was set in the window — also worth surfacing.
-        out.push({ kind: 'launch_date', detail: `planned launch set to ${toStr}`, operationTimeMs: last.ts });
-      }
-    }
+  const out: Array<{ date: string; from: string; to: string }> = [];
+  for (const r of raws) {
+    const from = nameById.get(String(r.oldId)) ?? String(r.oldId);
+    const to   = nameById.get(String(r.newId)) ?? String(r.newId);
+    if (!from || !to || from === to) continue;
+    const d = new Date(r.ts);
+    if (isNaN(d.getTime())) continue;
+    // Use Singapore time so the day boundary matches the rest of the digest.
+    const date = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' }); // YYYY-MM-DD
+    out.push({ date, from, to });
   }
+  out.sort((a, b) => a.date.localeCompare(b.date));
   return out;
 }
 
@@ -2306,22 +2254,15 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     console.log(`[digests] resolved Lark chat for ${resolvedChats}/${inDev.length} in-dev features`);
   }
 
-  // Step 4: Evaluate risk — Meego signals first, then two persistence-aware
-  // passes:
-  //   a) qualitative chat risk via Gemini 2.5 Flash Lite (last 24h of chat
-  //      messages, with prior state passed in so quiet days don't drop the
-  //      risk back to low)
-  //   b) Delayed-state detection via the Meego activity log (any edit to
-  //      the iOS/Android version or Server Planned Launch Date field since
-  //      the previous digest run shows the feature as "Delayed" for the
-  //      next 2 runs after detection).
-  //
-  // Both kinds of state are stored in the same GCS digest-state file.
-  // (state was already loaded at Step 0 above so we can use the
+  // Step 4: Evaluate risk — Meego signals (deadline pressure) plus a
+  // persistence-aware qualitative chat risk pass via Gemini 2.5 Flash Lite
+  // (last 24h of chat messages, with prior state passed in so quiet days
+  // don't drop the risk back to low). Persisted in the GCS digest-state
+  // file. (state was already loaded at Step 0 above so we can use the
   // discoveredIdsCache as a discovery fallback.)
-
-  // Cutoff for "since the previous run" activity-log scans.
-  const opLogCutoffMs = previousRunCutoffMs(state);
+  //
+  // Delayed-state detection (full version-change history per feature)
+  // happens later in Step 6b alongside the feature-cache writeback.
 
   const nowIso = new Date().toISOString();
   const riskFindings: RiskFinding[] = [];
@@ -2342,8 +2283,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
             : undefined,
         );
 
-        // Persist or clear chat risk on the entry (delay state lives
-        // alongside, so we update fields rather than blowing the entry away)
+        // Persist or clear chat risk on the entry.
         const entry = state.features[feature.workItemId] ?? { name: feature.name, lastSeenIso: nowIso };
         entry.name = feature.name;
         entry.lastSeenIso = nowIso;
@@ -2356,8 +2296,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
             raisedAtIso: priorChat?.raisedAtIso ?? nowIso,
           };
         }
-        // Only keep the entry around if SOMETHING is set on it.
-        if (entry.chatRisk || entry.delayChange) {
+        if (entry.chatRisk) {
           state.features[feature.workItemId] = entry;
         } else {
           delete state.features[feature.workItemId];
@@ -2369,65 +2308,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         }
       }
 
-      // ── (b) Delayed-state detection from activity log ──────────────────
-      // Scan the op record for any version/launch-date edit AFTER the
-      // previous run. If a fresh change is found, set runsLeftToShow=2.
-      // Otherwise carry forward + decrement an existing delay entry.
-      let activeDelay: PersistedDelayChange | undefined;
-      try {
-        const changes = await detectDelayedFieldChanges(feature.meegoUrl, opLogCutoffMs);
-        const priorDelay = prior?.delayChange;
-
-        if (changes.length > 0) {
-          // New change — pick the most recent one (sorted ascending by ts).
-          const latest = changes.sort((a, b) => a.operationTimeMs - b.operationTimeMs).at(-1)!;
-          activeDelay = {
-            detail: latest.detail,
-            detectedAtIso: nowIso,
-            // Show on this run + 1 more = 2 total runs of "Delayed".
-            runsLeftToShow: 2,
-          };
-          console.log(`[digests] delay detected for "${feature.name}": ${latest.detail}`);
-        } else if (priorDelay && priorDelay.runsLeftToShow > 1) {
-          // No new change, but a prior delay still has runs left — carry it.
-          activeDelay = {
-            detail: priorDelay.detail,
-            detectedAtIso: priorDelay.detectedAtIso,
-            runsLeftToShow: priorDelay.runsLeftToShow - 1,
-          };
-          console.log(`[digests] delay carried forward for "${feature.name}" (${activeDelay.runsLeftToShow} runs left): ${activeDelay.detail}`);
-        }
-        // else: priorDelay was undefined, or runsLeftToShow=1 → drop entirely.
-      } catch (e) {
-        console.warn(`[digests] activity-log scan failed for ${feature.name}:`, e);
-      }
-
-      // Persist or clear the delay entry alongside chat risk.
-      const entry2 = state.features[feature.workItemId] ?? { name: feature.name, lastSeenIso: nowIso };
-      entry2.name = feature.name;
-      entry2.lastSeenIso = nowIso;
-      if (activeDelay) {
-        entry2.delayChange = activeDelay;
-      } else {
-        delete entry2.delayChange;
-      }
-      if (entry2.chatRisk || entry2.delayChange) {
-        state.features[feature.workItemId] = entry2;
-      } else {
-        delete state.features[feature.workItemId];
-      }
-
-      // Override the finding's display if Delayed is active. The level
-      // bumps to red so card sorting still places it at the top.
-      if (activeDelay && activeDelay.runsLeftToShow > 0) {
-        // Append the detection date to the delay detail for the notes column.
-        const delayDate = new Date(activeDelay.detectedAtIso);
-        const dateSuffix = !isNaN(delayDate.getTime())
-          ? ` on ${delayDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' })}`
-          : '';
-        finding.delay = { detail: `${activeDelay.detail}${dateSuffix}` };
-        finding.level = 'red';
-      }
+      // Note: Delayed-state detection has moved to Step 6b — it runs
+      // alongside the feature-cache writeback so each feature's full
+      // version-change history is materialised onto the cached Feature
+      // (rather than persisted in DigestState with a TTL).
 
       riskFindings.push(finding);
     } catch (e) {
@@ -2568,18 +2452,54 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
 
   // Step 6b: Write risk data to the GCS feature cache so the Hamlet UI can
-  // display the risk level + notes columns. Also includes delay info.
+  // display the risk level + notes columns. Also incrementally scans the
+  // Meego op log for planned-version changes per feature and materialises
+  // the full history onto the cached Feature as `versionChanges`. When the
+  // list is non-empty, the feature is force-flagged as red ("Delayed").
   try {
     const featureCache = await readFeatureCache();
     if (featureCache) {
       const riskByWorkItemId = new Map(riskFindings.map(r => [r.feature.workItemId, r]));
       const featureByWorkItemId = new Map(features.map(f => [f.workItemId, f]));
       let updated = 0;
+      let versionScanned = 0;
+      let versionDelayed = 0;
       for (const cached of featureCache.features) {
         const fId = cached.meegoIssueId ?? cached.id;
         const finding = riskByWorkItemId.get(fId);
         const meegoFeature = featureByWorkItemId.get(fId);
         const statusName = meegoFeature?.overallStatusName ?? '';
+        const meegoUrl = meegoFeature?.meegoUrl ?? cached.meegoUrl;
+
+        // Incrementally update versionChanges from the Meego op log. We
+        // only re-scan the records that postdate the latest cached entry,
+        // so per-run cost is bounded; first encounter walks more pages.
+        if (meegoUrl && statusName !== '实验中') {
+          try {
+            const existing = cached.versionChanges ?? [];
+            const sinceMs = existing.length > 0
+              ? Date.parse(existing[existing.length - 1].date + 'T00:00:00+08:00') || 0
+              : 0;
+            const fresh = await getAllVersionChanges(meegoUrl, sinceMs);
+            if (fresh.length > 0) {
+              // Append + dedupe by (date, from, to) so re-scans are idempotent.
+              const seen = new Set(existing.map(c => `${c.date}|${c.from}|${c.to}`));
+              const merged = [...existing];
+              for (const c of fresh) {
+                const k = `${c.date}|${c.from}|${c.to}`;
+                if (!seen.has(k)) { merged.push(c); seen.add(k); }
+              }
+              merged.sort((a, b) => a.date.localeCompare(b.date));
+              cached.versionChanges = merged;
+            } else if (existing.length === 0) {
+              cached.versionChanges = undefined;
+            }
+            versionScanned++;
+            if (cached.versionChanges && cached.versionChanges.length > 0) versionDelayed++;
+          } catch (e) {
+            console.warn(`[digests] version-change scan failed for ${cached.name}:`, e);
+          }
+        }
 
         // Features in AB Testing should have NO risk level shown.
         if (statusName === '实验中') {
@@ -2589,11 +2509,31 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           continue;
         }
 
+        // If the feature has any planned-version changes, force red and
+        // surface a "Delayed" marker on the corresponding RiskFinding so
+        // the digest card renders consistently with the Hamlet UI.
+        const hasDelay = (cached.versionChanges?.length ?? 0) > 0;
+        if (hasDelay && finding) {
+          const latest = cached.versionChanges![cached.versionChanges!.length - 1];
+          finding.delay = { detail: `version ${latest.from} → ${latest.to}` };
+          finding.level = 'red';
+        }
+
         if (finding) {
           cached.riskLevel = finding.level;
           const notes: string[] = [...finding.reasons];
           if (finding.delay) notes.unshift(finding.delay.detail);
           cached.riskNotes = notes.length > 0 ? notes : undefined;
+          updated++;
+          continue;
+        }
+
+        // No risk finding (feature wasn't in the in-dev set this run) but
+        // we still detected version changes — surface as red on the cache.
+        if (hasDelay) {
+          cached.riskLevel = 'red';
+          const latest = cached.versionChanges![cached.versionChanges!.length - 1];
+          cached.riskNotes = [`version ${latest.from} → ${latest.to}`];
           updated++;
           continue;
         }
@@ -2608,8 +2548,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         // Other statuses (QA, Merged, Done, etc.) not in riskFindings keep
         // their previous risk data.
       }
+      // Re-sort risk findings since some may have been bumped to red above.
+      riskFindings.sort((a, b) => severityOrder[a.level] - severityOrder[b.level]);
       await writeFeatureCache(featureCache.features);
-      console.log(`[digests] risk data written to feature cache for ${updated} features`);
+      console.log(`[digests] risk data written to feature cache for ${updated} features (version-change scan: ${versionScanned} scanned, ${versionDelayed} delayed)`);
     }
   } catch (e) {
     console.warn('[digests] failed to write risk data to feature cache:', e);

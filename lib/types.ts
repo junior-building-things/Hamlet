@@ -61,6 +61,13 @@ export interface Feature {
   // Daily risk assessment data (populated by the digest cron)
   riskLevel?: 'red' | 'yellow' | 'green';
   riskNotes?: string[];
+  /**
+   * Full history of planned-version changes detected from the Meego op log.
+   * Each entry: { date: 'YYYY-MM-DD', from: '44.9', to: '45.0' }.
+   * If non-empty, the feature is rendered with a "🔴 Delayed" risk badge
+   * and the list is shown on hover (formatted as "M/D: from → to").
+   */
+  versionChanges?: Array<{ date: string; from: string; to: string }>;
   // Free-form user notes (manually entered in the Notes column)
   notes?: string;
   // Fields manually edited in the UI — protected from sync overwrites

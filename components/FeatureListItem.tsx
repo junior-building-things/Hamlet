@@ -127,8 +127,15 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
 
   useEffect(() => { setMounted(true); }, []);
 
+  const versionChanges = feature.versionChanges && feature.versionChanges.length > 0
+    ? feature.versionChanges
+    : null;
+  const isDelayed = !!versionChanges;
   const reasons = feature.riskNotes && feature.riskNotes.length > 0 ? feature.riskNotes : [];
-  const showTooltip = reasons.length > 0 && feature.riskLevel !== 'green';
+
+  // Delayed → tooltip lists each version change formatted as "M/D: from → to".
+  // Otherwise → reasons list (skip on green since no actionable info).
+  const showTooltip = isDelayed || (reasons.length > 0 && feature.riskLevel !== 'green');
 
   function handleEnter() {
     if (!showTooltip || !ref.current) return;
@@ -138,7 +145,13 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
   }
   function handleLeave() { setShowTip(false); }
 
-  if (!feature.riskLevel) return null;
+  if (!feature.riskLevel && !isDelayed) return null;
+
+  // When delayed, badge always renders red regardless of underlying riskLevel.
+  const effectiveLevel = isDelayed ? 'red' : feature.riskLevel;
+  const label = isDelayed
+    ? 'Delayed'
+    : (effectiveLevel === 'red' ? 'High' : effectiveLevel === 'yellow' ? 'Medium' : 'Low');
 
   return (
     <>
@@ -148,13 +161,13 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
         onMouseEnter={handleEnter}
         onMouseLeave={handleLeave}
         className={`inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
-          feature.riskLevel === 'red' ? 'text-red-600' :
-          feature.riskLevel === 'yellow' ? 'text-amber-600' :
+          effectiveLevel === 'red' ? 'text-red-600' :
+          effectiveLevel === 'yellow' ? 'text-amber-600' :
           'text-emerald-600'
         }`}
       >
-        <span>{feature.riskLevel === 'red' ? '🔴' : feature.riskLevel === 'yellow' ? '🟡' : '🟢'}</span>
-        <span>{feature.riskLevel === 'red' ? 'High' : feature.riskLevel === 'yellow' ? 'Medium' : 'Low'}</span>
+        <span>{effectiveLevel === 'red' ? '🔴' : effectiveLevel === 'yellow' ? '🟡' : '🟢'}</span>
+        <span>{label}</span>
       </span>
       {showTip && mounted && createPortal(
         <div
@@ -166,7 +179,15 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
             zIndex: 9999,
           }}
         >
-          {reasons.length === 1 ? (
+          {isDelayed ? (
+            <ul className="list-none space-y-0.5">
+              {versionChanges!.map((c, i) => {
+                const [, mm, dd] = c.date.split('-');
+                const short = `${parseInt(mm, 10)}/${parseInt(dd, 10)}`;
+                return <li key={i}>{short}: {c.from} → {c.to}</li>;
+              })}
+            </ul>
+          ) : reasons.length === 1 ? (
             <span>{reasons[0]}</span>
           ) : (
             <ul className="list-disc list-inside space-y-0.5">
