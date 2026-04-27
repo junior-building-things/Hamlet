@@ -2034,40 +2034,39 @@ const AB_OPEN_PERSONAL_CHAT_ID = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
 const AB_OPEN_PM_GROUP_CHAT_ID = 'oc_ea2940122b041a9c9ee4153596d6a15c';
 const AB_OPEN_TARGET_CHAT_ID = AB_OPEN_PERSONAL_CHAT_ID; // ← change to AB_OPEN_PM_GROUP_CHAT_ID when ready
 
+const AB_SETUP_ALIASES = [
+  'ab set-up',
+  'a/b set-up',
+  'a/b testing setup',
+  'ab testing setup',
+  'a/b testing set-up',
+  'ab testing set-up',
+  'a/b setup',
+  'ab setup',
+  'experiment setup',
+  'a/b test setup',
+  'ab test setup',
+  'a/b 设置',
+  'ab实验设置',
+];
+
 /**
- * Send the AB-open draft card to the PM's personal group. The card has
- * one section with the formatted message preview and a single "Send to
- * PM Group" button whose value carries enough context for the
- * card-action handler to re-send the message verbatim.
+ * Build the per-feature card section + Send-button payload for one
+ * AB-open transition. Reads + parses the feature's PRD on each call;
+ * called once per transitioning feature in parallel. Returns the
+ * lark_md card content and the rich-text post payload that the Send
+ * button will forward.
  */
-export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUrl: string): Promise<void> {
-  // Inline the message-build logic so we can pass libraUrl through
-  // cleanly without round-tripping a tuple via buildAbTestingMessage.
+export async function buildAbOpenSection(
+  feature: MeegoFeature,
+  libraUrl: string,
+): Promise<{ cardContent: string; postTitle: string; postParagraphs: PostParagraph[] }> {
   let background = '_(Background section not found in PRD — fill in)_';
   let abSetup = '_(A/B Setup section not found in PRD — fill in)_';
-  const AB_SETUP_ALIASES = [
-    'ab set-up',
-    'a/b set-up',
-    'a/b testing setup',
-    'ab testing setup',
-    'a/b testing set-up',
-    'ab testing set-up',
-    'a/b setup',
-    'ab setup',
-    'experiment setup',
-    'a/b test setup',
-    'ab test setup',
-    'a/b 设置',
-    'ab实验设置',
-  ];
   if (feature.prd) {
     try {
       const md = await readDocContent(feature.prd);
       const sections = extractDocSections(md, [
-        // Canonical key is still "Background" because that's how the
-        // outgoing message labels it — but we ONLY match the actual
-        // PRD heading variants, not the literal word "background"
-        // (which can appear in unrelated places in a PRD).
         { canonical: 'Background', aliases: [
           'what we are building?',
           'what we are building and why?',
@@ -2082,11 +2081,6 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
       ]);
       if (sections.has('Background')) background = sections.get('Background')!;
       if (sections.has('AbSetup'))    abSetup    = sections.get('AbSetup')!;
-      // Prefer the table extractor for AB Setup — most PRDs put
-      // the variants in a 3-col table (Group | Treatment | Traffic),
-      // and the inline extractor flattens cells into one stream of
-      // text that's hard to read in the message. The table
-      // extractor only returns Group + Treatment.
       try {
         const fromTable = await extractAbSetupTable(feature.prd, AB_SETUP_ALIASES);
         if (fromTable) abSetup = fromTable;
@@ -2097,17 +2091,15 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
       console.warn(`[digests] PRD section extraction failed for "${feature.name}":`, e);
     }
   }
+
   const versionSuffix = feature.iosVersion ? ` (${feature.iosVersion})` : '';
   const refs: Array<{ label: string; url: string }> = [];
   if (feature.prd) refs.push({ label: 'PRD',   url: feature.prd });
   if (libraUrl)    refs.push({ label: 'Libra', url: libraUrl });
 
-  // Card body uses lark_md so it can render bold + clickable links +
-  // the :LetMeSee: workspace emoji shortcode. Title line repeats the
-  // header text with the emoji because the card header itself is
-  // plain_text and won't render shortcodes.
-  const cardBody = [
-    `**:LetMeSee: ${feature.name} [📲 AB open]**`,
+  // Card section: bold lead line (no emoji), then the structured body.
+  const cardContent = [
+    `**${feature.name} [📲 AB open]**`,
     `**Background**: ${background}`,
     `**A/B Setup${versionSuffix}**: ${abSetup}`,
     refs.length > 0
@@ -2115,11 +2107,11 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
       : '',
   ].filter(Boolean).join('\n');
 
-  // Post (rich text) variant — sent by the Send button. Title carries
-  // the feature name + tag; paragraphs carry the structured body so
-  // links remain clickable in the rich-text rendering.
-  const postTitle = `:LetMeSee: ${feature.name} [📲 AB open]`;
+  // Post (rich text) variant — sent by the Send button. No title; the
+  // bolded lead paragraph IS the visual title.
+  const postTitle = '';
   const postParagraphs: PostParagraph[] = [
+    [{ tag: 'text', text: `${feature.name} [📲 AB open]`, style: ['bold'] }],
     [
       { tag: 'text', text: 'Background: ', style: ['bold'] },
       { tag: 'text', text: background },
@@ -2139,35 +2131,52 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
     });
     postParagraphs.push(inlines);
   }
+  return { cardContent, postTitle, postParagraphs };
+}
 
+/**
+ * Send the daily AB-open digest card aggregating ALL features that
+ * transitioned into 实验中 in this digest run. One card with a yellow
+ * header dated today; one section per feature with its own Send button.
+ */
+export async function sendAbOpenDigestCard(
+  features: Array<{ feature: MeegoFeature; libraUrl: string }>,
+): Promise<void> {
+  if (features.length === 0) return;
   const token = await getLarkBotToken();
   if (!token) {
-    console.warn('[digests] no bot token; skipping AB Testing card');
+    console.warn('[digests] no bot token; skipping AB Testing digest card');
     return;
   }
-  const sections: CardSection[] = [
-    { content: cardBody },
-    {
-      content: '_Click below to forward this message. Currently sends to your personal group for testing._',
+  const built = await Promise.allSettled(
+    features.map(({ feature, libraUrl }) => buildAbOpenSection(feature, libraUrl)),
+  );
+  const sections: CardSection[] = [];
+  for (let i = 0; i < built.length; i++) {
+    const result = built[i];
+    if (result.status !== 'fulfilled') {
+      console.warn(`[digests] AB-open section build failed for "${features[i].feature.name}":`, result.reason);
+      continue;
+    }
+    const { cardContent, postTitle, postParagraphs } = result.value;
+    sections.push({
+      content: cardContent,
       buttons: [
         {
           text: 'Send to PM Group',
           type: 'primary',
-          value: {
-            action: 'send_ab_open_to_pm_group',
-            postTitle,
-            postParagraphs,
-          },
+          value: { action: 'send_ab_open_to_pm_group', postTitle, postParagraphs },
         },
       ],
-    },
-  ];
-  // Yellow header so the card stands out as a transition notification.
-  // Header text is plain_text — no shortcode rendering — so it carries
-  // the feature name and visible-character tags only.
-  const headerText = `[📲 AB open] ${feature.name}`;
+    });
+  }
+  if (sections.length === 0) return;
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
+  });
+  const headerText = `📲 Features in AB Testing — ${today}`;
   const id = await sendInteractiveCardToChat(AB_OPEN_PERSONAL_CHAT_ID, headerText, 'yellow', sections, token);
-  console.log(`[digests] AB Testing transition card sent for "${feature.name}": message_id=${id ?? 'null'}`);
+  console.log(`[digests] AB-open digest card sent (${sections.length} feature${sections.length === 1 ? '' : 's'}): message_id=${id ?? 'null'}`);
 }
 
 // ─── Main orchestrator ─────────────────────────────────────────────────────
@@ -2275,6 +2284,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // re-save state at the end. Loaded once from GCS digest state.
   const abOpenNotified = new Set<string>(state.abOpenNotified ?? []);
   let notifiedSetChanged = false;
+  // Features transitioning into AB Testing this run; sent as one
+  // aggregate card at the end of Step 2b.
+  const abOpenTransitions: Array<{ feature: MeegoFeature; libraUrl: string }> = [];
   try {
     const prevCache = await readFeatureCache();
     const prevStatusMap = new Map<string, string>();
@@ -2301,24 +2313,29 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       // Notify on AB Testing. Fires once per feature ever — covers both
       // (a) the initial backfill of features already in 实验中 when this
       // shipped, and (b) future fresh transitions into 实验中. Tracked
-      // by Meego workItemId in DigestState.abOpenNotified.
+      // by Meego workItemId in DigestState.abOpenNotified. Cards are
+      // collected and sent as ONE aggregate digest at the end of the
+      // loop (similar to the PRD-changes digest).
       if (f.overallStatusName === AB_TESTING_STATUS) {
         const alreadyNotified = abOpenNotified.has(f.workItemId);
         if (!alreadyNotified) {
           const reason = (prevStatus && prevStatus !== 'AB Testing' && prevStatus !== AB_TESTING_STATUS)
             ? `transition from ${prevStatus}`
             : 'backfill (already in AB Testing)';
-          console.log(`[digests] AB-open notify "${f.name}" — ${reason}`);
+          console.log(`[digests] AB-open queue "${f.name}" — ${reason}`);
           const libraUrl = prevCache?.features.find(c => (c.meegoIssueId ?? c.id) === f.workItemId)?.libraUrl ?? '';
-          // Mark notified IMMEDIATELY (before the network call) so a
-          // crash mid-send doesn't cause a duplicate next run; the
-          // user can manually clear the set if they want a re-send.
           abOpenNotified.add(f.workItemId);
           notifiedSetChanged = true;
-          sendAbTestingTransitionCard(f, libraUrl)
-            .catch(e => console.warn(`[digests] AB Testing card send failed for "${f.name}":`, e));
+          abOpenTransitions.push({ feature: f, libraUrl });
         }
       }
+    }
+    // Send the aggregated AB-open card after the loop. Fire-and-forget
+    // (with .catch) because a slow PRD parse shouldn't block the rest
+    // of the digest pipeline.
+    if (abOpenTransitions.length > 0) {
+      sendAbOpenDigestCard(abOpenTransitions)
+        .catch(e => console.warn('[digests] AB-open digest card send failed:', e));
     }
 
     // MERGE into the existing GCS cache — update features the digest knows
