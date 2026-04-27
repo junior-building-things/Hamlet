@@ -22,6 +22,8 @@ interface LarkBlock {
   children?: string[];
   text?: { elements?: Array<{ text_run?: { content?: string } }> };
   table_cell?: { row_index: number; col_index: number };
+  table?: unknown;
+  [k: string]: unknown;
 }
 
 const LARK_BASE_URL = 'https://open.larksuite.com';
@@ -93,11 +95,17 @@ export async function GET(req: NextRequest) {
         children_count: b.children?.length ?? 0,
       };
     });
+    // Also dump full raw JSON for any block with block_type ∈ {31, 32}
+    // so we can see the real shape of table / cell metadata.
+    const rawTableBlocks = blocks
+      .filter(b => b.block_type === 31 || b.block_type === 32)
+      .slice(0, 20);
     return NextResponse.json({
       docId,
       blockCount: blocks.length,
       tableExtraction,
       blocks: summary,
+      rawTableBlocks,
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
