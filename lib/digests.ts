@@ -2047,8 +2047,25 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
     try {
       const md = await readDocContent(feature.prd);
       const sections = extractDocSections(md, [
-        { canonical: 'Background', aliases: ['background', 'background and context', 'context', '背景'] },
-        { canonical: 'AbSetup',    aliases: ['a/b setup', 'ab setup', 'experiment setup', 'a/b test setup', 'ab test setup', 'a/b 设置', 'ab实验设置'] },
+        // Canonical key is still "Background" because that's how the
+        // outgoing message labels it — but we ONLY match the actual
+        // PRD heading variants, not the literal word "background"
+        // (which can appear in unrelated places in a PRD).
+        { canonical: 'Background', aliases: [
+          'what we are building?',
+          'what we are building and why?',
+          'what we are building and why',
+          'what we are building',
+        ] },
+        { canonical: 'AbSetup', aliases: [
+          'a/b setup',
+          'ab setup',
+          'experiment setup',
+          'a/b test setup',
+          'ab test setup',
+          'a/b 设置',
+          'ab实验设置',
+        ] },
       ]);
       if (sections.has('Background')) background = sections.get('Background')!;
       if (sections.has('AbSetup'))    abSetup    = sections.get('AbSetup')!;
