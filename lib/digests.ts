@@ -2396,7 +2396,7 @@ export async function sendAbConcludedDigestCard(
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
   });
-  const headerText = `✅ AB Briefs Scheduled — ${today}`;
+  const headerText = `✅ AB Concluded — ${today}`;
   const id = await sendInteractiveCardToChat(AB_OPEN_PERSONAL_CHAT_ID, headerText, 'green', sections, token);
   console.log(`[digests] AB-concluded digest card sent (${sections.length} feature${sections.length === 1 ? '' : 's'}): message_id=${id ?? 'null'}`);
 }
