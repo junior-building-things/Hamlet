@@ -164,16 +164,29 @@ function blockText(b: LarkBlock): string {
 // ─── Shared doc block helpers ─────────────────────────────────────────────────
 
 async function getDocBlocks(docId: string, token: string): Promise<LarkBlock[]> {
-  const res  = await fetch(
-    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks?page_size=500&document_revision_id=-1`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  const data = await parseJson(res, 'get_blocks') as {
-    code: number; msg?: string;
-    data?: { items?: LarkBlock[] };
-  };
-  if (data.code !== 0) throw new Error(`get_blocks error ${data.code}: ${data.msg}`);
-  return data.data?.items ?? [];
+  // Lark caps page_size at 500. Long PRDs (>500 blocks) need
+  // pagination via page_token, otherwise sections past block 500 are
+  // invisible — extractAbSetupTable returned empty for several large
+  // PRDs because the AB Setup heading sat beyond the first page.
+  const all: LarkBlock[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    const params = new URLSearchParams({ page_size: '500', document_revision_id: '-1' });
+    if (pageToken) params.set('page_token', pageToken);
+    const res = await fetch(
+      `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const data = await parseJson(res, 'get_blocks') as {
+      code: number; msg?: string;
+      data?: { items?: LarkBlock[]; has_more?: boolean; page_token?: string };
+    };
+    if (data.code !== 0) throw new Error(`get_blocks error ${data.code}: ${data.msg}`);
+    all.push(...(data.data?.items ?? []));
+    if (!data.data?.has_more || !data.data.page_token) break;
+    pageToken = data.data.page_token;
+  }
+  return all;
 }
 
 type UpdateTextElement =

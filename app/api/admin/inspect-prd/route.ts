@@ -52,12 +52,21 @@ async function resolveDocId(url: string, token: string): Promise<string> {
 }
 
 async function getDocBlocks(docId: string, token: string): Promise<LarkBlock[]> {
-  const res = await fetch(
-    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks?page_size=500&document_revision_id=-1`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  const data = await res.json() as { data?: { items?: LarkBlock[] } };
-  return data.data?.items ?? [];
+  const all: LarkBlock[] = [];
+  let pageToken: string | undefined;
+  for (let p = 0; p < 20; p++) {
+    const params = new URLSearchParams({ page_size: '500', document_revision_id: '-1' });
+    if (pageToken) params.set('page_token', pageToken);
+    const res = await fetch(
+      `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const data = await res.json() as { data?: { items?: LarkBlock[]; has_more?: boolean; page_token?: string } };
+    all.push(...(data.data?.items ?? []));
+    if (!data.data?.has_more || !data.data.page_token) break;
+    pageToken = data.data.page_token;
+  }
+  return all;
 }
 
 const TEXT_BEARING_KEYS = ['text','heading1','heading2','heading3','heading4','heading5','heading6','heading7','heading8','heading9','bullet','ordered','code','quote','todo','callout'] as const;
