@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
+import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 
 export async function GET(req: NextRequest) {
   const base   = process.env.LARK_BASE_URL ?? 'https://open.larkoffice.com';
@@ -100,6 +101,21 @@ export async function GET(req: NextRequest) {
   }
 
   const refreshToken = (inner.refresh_token as string | undefined) ?? '';
+
+  // Also persist the fresh refresh token into the digest GCS state so
+  // background flows (digest pipeline, card-action "Send AS me", etc.)
+  // can pick up where the user just left off. Refresh tokens rotate
+  // per use, so this re-login is the canonical way to recover after
+  // a 20026 "refresh token is invalid" error in those flows.
+  if (refreshToken) {
+    try {
+      const state = await loadDigestState();
+      state.larkUserRefreshToken = refreshToken;
+      await saveDigestState(state);
+    } catch (e) {
+      console.warn('[auth/callback] failed to persist refresh token to digest state:', e);
+    }
+  }
 
   const sessionToken = await createSession({
     userId:    u.user_id ?? u.open_id ?? 'unknown',
