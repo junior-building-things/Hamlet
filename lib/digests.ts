@@ -791,20 +791,26 @@ interface OpRecord {
 interface OpRecordPage { has_more?: boolean; start_from?: string; total?: number; op_records?: OpRecord[] }
 
 /**
- * Fetch op records for a feature, walking pagination only as far back as
- * `sinceMs`. Records come back newest-first, so we early-exit as soon as
- * we see one older than the cutoff (avoiding the full-history walk).
+ * Fetch field-modification op records for a feature, walking pagination
+ * to the end (capped at `maxPages` for safety). Records are returned by
+ * the Meego API in chronological order (oldest first), so we can't early-
+ * exit on a `sinceMs` cutoff — instead we collect everything past the
+ * cutoff and filter in memory.
  *
- * `maxPages` bounds latency: 5 pages is enough for incremental "since last
- * run" scans, but the full-history scan used by `getAllVersionChanges`
- * passes a higher cap so it can walk the entire activity log on first
- * encounter with a feature.
+ * `op_record_module` and `operation_type` filters are passed to the API
+ * so each page only contains the records we care about; this drastically
+ * reduces the number of pages a feature with thousands of op events
+ * would otherwise need.
  */
-async function fetchRecentOpRecords(meegoUrl: string, sinceMs: number, maxPages = 5): Promise<OpRecord[]> {
+async function fetchRecentOpRecords(meegoUrl: string, sinceMs: number, maxPages = 200): Promise<OpRecord[]> {
   const all: OpRecord[] = [];
   let startFrom: string | undefined;
   for (let page = 0; page < maxPages; page++) {
-    const args: Record<string, unknown> = { url: meegoUrl };
+    const args: Record<string, unknown> = {
+      url: meegoUrl,
+      op_record_module: ['field_mod'],
+      operation_type: ['modify'],
+    };
     if (startFrom) args.start_from = startFrom;
     let raw: string;
     try {
@@ -819,15 +825,11 @@ async function fetchRecentOpRecords(meegoUrl: string, sinceMs: number, maxPages 
       break;
     }
     const records = parsed.op_records ?? [];
-    let reachedCutoff = false;
     for (const r of records) {
-      if (r.operation_time !== undefined && r.operation_time < sinceMs) {
-        reachedCutoff = true;
-        break;
-      }
+      if (r.operation_time !== undefined && r.operation_time <= sinceMs) continue;
       all.push(r);
     }
-    if (reachedCutoff || !parsed.has_more || !parsed.start_from) break;
+    if (!parsed.has_more || !parsed.start_from) break;
     startFrom = parsed.start_from;
   }
   return all;
@@ -986,6 +988,36 @@ export async function detectVersionMismatch(
     if (cmp !== null && cmp > 0) return { platform: 'android', planned: androidPlanned, actual: androidActual };
   }
   return null;
+}
+
+/**
+ * Walk the Meego op log to find the YYYY-MM-DD (Singapore time) of the
+ * most recent edit to the given field key. Returns null if no matching
+ * edit is found within the pagination cap.
+ *
+ * Pagination is oldest-first, so this walks ALL pages — expensive (~80s
+ * for an active feature with hundreds of edits). Callers should only
+ * invoke this on a transition (e.g. first detection of a new mismatch)
+ * and cache the resulting date alongside their other state.
+ */
+export async function findLatestFieldEditDate(meegoUrl: string, fieldKey: string): Promise<string | null> {
+  let records: OpRecord[];
+  try {
+    records = await fetchRecentOpRecords(meegoUrl, 0, 200);
+  } catch {
+    return null;
+  }
+  let latestMs = 0;
+  for (const r of records) {
+    const ts = r.operation_time ?? 0;
+    if (ts <= latestMs) continue;
+    const matched = (r.record_contents ?? []).some(c => c.object?.object_value === fieldKey);
+    if (matched) latestMs = ts;
+  }
+  if (!latestMs) return null;
+  const d = new Date(latestMs);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
 }
 
 /**
@@ -2632,17 +2664,43 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
 
           // (ii) Snapshot scan: actual launched > planned on either
           // platform — catches slips where the planned field never
-          // moved in the op log.
+          // moved in the op log. On first detection of a (planned →
+          // actual) pair, look up the date the launched-version field
+          // was last edited (the slip date) and cache the entry; on
+          // subsequent runs we recognise the same pair and skip the
+          // expensive date lookup.
           try {
             const mismatch = await detectVersionMismatch(meegoUrl);
             if (mismatch) {
-              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-              const synth = { date: today, from: mismatch.planned, to: mismatch.actual };
               const list = nextVersionChanges ?? [];
-              const seen = new Set(list.map(c => `${c.date}|${c.from}|${c.to}`));
-              const k = `${synth.date}|${synth.from}|${synth.to}`;
-              if (!seen.has(k)) {
-                nextVersionChanges = [...list, synth].sort((a, b) => a.date.localeCompare(b.date));
+              const matchesPair = (c: { from: string; to: string }) =>
+                c.from === mismatch.planned && c.to === mismatch.actual;
+              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+              // Cached entries written today are most likely placeholders
+              // from the older synthesis path that used "today" before the
+              // op-log date lookup was wired in. Refresh them so the date
+              // reflects when the slip actually happened.
+              const cachedEntry = list.find(matchesPair);
+              const alreadyCached = !!cachedEntry && cachedEntry.date !== today;
+              if (!alreadyCached) {
+                const launchedFieldKey = mismatch.platform === 'ios'
+                  ? 'ios_actual_online_version'
+                  : 'android_actual_online_version';
+                let date: string | null = null;
+                try {
+                  date = await findLatestFieldEditDate(meegoUrl, launchedFieldKey);
+                } catch (e) {
+                  console.warn(`[digests] launched-field date lookup failed for ${cached.name}:`, e);
+                }
+                if (!date) {
+                  date = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+                }
+                // Drop any older entry for the same pair that might have
+                // a stale date (e.g. previously written as "today" before
+                // the op-log lookup was wired in).
+                const cleaned = list.filter(c => !matchesPair(c));
+                nextVersionChanges = [...cleaned, { date, from: mismatch.planned, to: mismatch.actual }]
+                  .sort((a, b) => a.date.localeCompare(b.date));
                 versionChangesChanged = true;
               }
             }
