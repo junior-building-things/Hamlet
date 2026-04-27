@@ -2036,6 +2036,10 @@ async function fetchAndCacheLinks(
 const AB_OPEN_PERSONAL_CHAT_ID = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
 const AB_OPEN_PM_GROUP_CHAT_ID = 'oc_ea2940122b041a9c9ee4153596d6a15c';
 const AB_OPEN_TARGET_CHAT_ID = AB_OPEN_PERSONAL_CHAT_ID; // ← change to AB_OPEN_PM_GROUP_CHAT_ID when ready
+// Open ID of the PM whose name should be @-mentioned in the
+// forwarded post (so the message looks "from" them). Sent by the
+// bot but pinging the PM gives the same effect for readers.
+const AB_OPEN_MENTION_OPEN_ID = 'ou_1e7fa98f1e46311d8a5e4554dc7a668e';
 
 const AB_SETUP_ALIASES = [
   'ab set-up',
@@ -2181,6 +2185,12 @@ export async function buildAbOpenSection(
       console.warn(`[digests] AB-open image extraction failed for "${feature.name}":`, e);
     }
   }
+
+  // @-mention the PM at the very bottom of the post — sent by the bot
+  // but a ping on the PM gives the same effect for readers (and makes
+  // it clear who's authoring the update). Sits below the image when
+  // there is one.
+  postParagraphs.push([{ tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID }]);
 
   return { cardContent, cardImages, postTitle, postParagraphs };
 }

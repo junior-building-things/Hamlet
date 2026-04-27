@@ -144,44 +144,16 @@ export async function POST(req: NextRequest) {
     // the real PM group oc_ea2940122b041a9c9ee4153596d6a15c when ready.
     const targetChatId = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
     try {
-      // Try sending AS the PM (user token) first so the message
-      // appears authored by them in the destination chat. If the
-      // user identity is missing the required scope (Lark restricts
-      // user-token IM sends in some app types), fall back to the
-      // bot identity so the click still posts something.
-      let userToken: string | null = null;
-      try {
-        const state = await loadDigestState();
-        const refresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-        if (refresh) {
-          const result = await refreshUserToken(refresh);
-          if (result) {
-            userToken = result.accessToken;
-            state.larkUserRefreshToken = result.refreshToken;
-            await saveDigestState(state);
-          }
-        }
-      } catch (e) {
-        console.warn('[card-action] AB-open: user token refresh failed:', e);
-      }
       const botToken = await getLarkBotToken();
-      let id: string | null = null;
-      let sentAs: 'user' | 'bot' = 'bot';
-      if (userToken) {
-        id = await sendPostToChat(targetChatId, postTitle, postParagraphs, userToken);
-        if (id) sentAs = 'user';
-      }
-      if (!id) {
-        id = await sendPostToChat(targetChatId, postTitle, postParagraphs, botToken);
-      }
+      const id = await sendPostToChat(targetChatId, postTitle, postParagraphs, botToken);
       if (!id) {
         return NextResponse.json({
-          toast: { type: 'error', content: 'Failed to send — sender may not be in chat' },
+          toast: { type: 'error', content: 'Failed to send — bot may not be in chat' },
         }, { status: 500 });
       }
-      console.log(`[card-action] sent AB-open post to ${targetChatId} as=${sentAs}: msg_id=${id}`);
+      console.log(`[card-action] sent AB-open post to ${targetChatId}: msg_id=${id}`);
       return NextResponse.json({
-        toast: { type: 'success', content: sentAs === 'user' ? 'Sent ✓' : 'Sent (as bot) ✓' },
+        toast: { type: 'success', content: 'Sent ✓' },
       });
     } catch (e) {
       console.warn('[card-action] send AB-open failed:', e);
