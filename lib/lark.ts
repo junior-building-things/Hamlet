@@ -1138,21 +1138,26 @@ export async function uploadDocImageForMessage(
   const tenantToken = await getAccessToken();
   // 1) Download the binary from Drive media API. The `extra` param
   // tells Lark which docx the image belongs to so it can verify
-  // access on our behalf. The bot tenant token doesn't have the
-  // docs:document.media:download scope, so we prefer the PM's
-  // user_access_token (which has full doc permissions) when
-  // available, falling back to the bot token otherwise.
+  // access on our behalf. Try the bot tenant token first (it has
+  // the docs:document.media:download scope), then fall back to the
+  // PM's user_access_token if the bot is denied (e.g. the scope
+  // was revoked, or the doc is restricted to the user's identity).
   const extra = encodeURIComponent(JSON.stringify({ doc_type: 'docx', doc_token: parentDocToken }));
-  const downloadAuthToken = userAccessToken || tenantToken;
-  const dlRes = await fetch(
-    `${LARK_BASE_URL}/open-apis/drive/v1/medias/${imageFileToken}/download?extra=${extra}`,
-    { headers: { Authorization: `Bearer ${downloadAuthToken}` } },
-  );
-  if (!dlRes.ok) {
-    const body = await dlRes.text().catch(() => '');
-    console.warn(`[lark] image download failed: ${dlRes.status} ${dlRes.statusText} token=${imageFileToken} parent=${parentDocToken} usingUserToken=${!!userAccessToken} body=${body.slice(0, 400)}`);
+  const tryDownload = async (auth: string, label: string) => {
+    const res = await fetch(
+      `${LARK_BASE_URL}/open-apis/drive/v1/medias/${imageFileToken}/download?extra=${extra}`,
+      { headers: { Authorization: `Bearer ${auth}` } },
+    );
+    if (res.ok) return res;
+    const body = await res.text().catch(() => '');
+    console.warn(`[lark] image download failed (${label}): ${res.status} ${res.statusText} token=${imageFileToken} body=${body.slice(0, 300)}`);
     return null;
+  };
+  let dlRes = await tryDownload(tenantToken, 'bot');
+  if (!dlRes && userAccessToken) {
+    dlRes = await tryDownload(userAccessToken, 'user');
   }
+  if (!dlRes) return null;
   const blob = await dlRes.blob();
   if (blob.size === 0) return null;
 
