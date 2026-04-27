@@ -103,40 +103,44 @@ const SOCIAL_COMPONENTS = [
   { id: 'cjvllclrm',              label: 'Profile' },
 ];
 
-// Role members with keys + avatars
-const TECH_OWNERS: AvatarOption[] = [
-  { value: '7210676945535778820', label: 'Austin Lee',   avatarUrl: AV['Austin Lee'] },
-  { value: '7291604705006895105', label: 'Kyle Chan',    avatarUrl: AV['Kyle Chan'] },
-  { value: '6990536503940218908', label: 'Xuan Sheng',   avatarUrl: AV['Xuan Sheng'] },
-  { value: '7405623196516450307', label: 'Tianyang Ni',  avatarUrl: AV['Tianyang Ni'] },
+// Role members with keys + avatars. Helper to look up the avatar URL fresh
+// from the AV map at call time (the map is populated dynamically as features
+// sync — defining options at module load would bake in undefined avatars).
+const opt = (value: string, label: string): AvatarOption => ({ value, label, avatarUrl: AV[label] });
+
+const TECH_OWNERS = (): AvatarOption[] => [
+  opt('7210676945535778820', 'Austin Lee'),
+  opt('7291604705006895105', 'Kyle Chan'),
+  opt('6990536503940218908', 'Xuan Sheng'),
+  opt('7405623196516450307', 'Tianyang Ni'),
 ];
-const SERVER_OWNERS: AvatarOption[] = [
-  { value: '7210676945535778820', label: 'Austin Lee',    avatarUrl: AV['Austin Lee'] },
-  { value: '7291604705006895105', label: 'Kyle Chan',     avatarUrl: AV['Kyle Chan'] },
-  { value: '6990536503940218908', label: 'Xuan Sheng',    avatarUrl: AV['Xuan Sheng'] },
-  { value: '7405623196516450307', label: 'Tianyang Ni',   avatarUrl: AV['Tianyang Ni'] },
-  { value: 'jinming.zhang',       label: 'Jinming Zhang', avatarUrl: AV['Jinming Zhang'] },
+const SERVER_OWNERS = (): AvatarOption[] => [
+  opt('7210676945535778820', 'Austin Lee'),
+  opt('7291604705006895105', 'Kyle Chan'),
+  opt('6990536503940218908', 'Xuan Sheng'),
+  opt('7405623196516450307', 'Tianyang Ni'),
+  opt('jinming.zhang', 'Jinming Zhang'),
 ];
-const ANDROID_OWNERS: AvatarOption[] = [
-  { value: '7210676945535778820', label: 'Austin Lee',  avatarUrl: AV['Austin Lee'] },
-  { value: '6990536503940218908', label: 'Xuan Sheng',  avatarUrl: AV['Xuan Sheng'] },
+const ANDROID_OWNERS = (): AvatarOption[] => [
+  opt('7210676945535778820', 'Austin Lee'),
+  opt('6990536503940218908', 'Xuan Sheng'),
 ];
-const IOS_OWNERS: AvatarOption[] = [
-  { value: 'baorishouaries',      label: 'Rishou Bao',  avatarUrl: AV['Rishou Bao'] },
-  { value: '7226934680916967426', label: 'Kim Li',      avatarUrl: AV['Kim Li'] },
+const IOS_OWNERS = (): AvatarOption[] => [
+  opt('baorishouaries', 'Rishou Bao'),
+  opt('7226934680916967426', 'Kim Li'),
 ];
-const UIUX_OWNERS: AvatarOption[] = [
-  { value: '7205032929586593796', label: 'Tao Zhu',   avatarUrl: AV['Tao Zhu'] },
-  { value: '7493184335885942785', label: 'Hazel Li',  avatarUrl: AV['Hazel Li'] },
+const UIUX_OWNERS = (): AvatarOption[] => [
+  opt('7205032929586593796', 'Tao Zhu'),
+  opt('7493184335885942785', 'Hazel Li'),
 ];
-const DA_OPTIONS: AvatarOption[] = [
-  { value: '7107489609088647170', label: 'Lionel Lew', avatarUrl: AV['Lionel Lew'] },
+const DA_OPTIONS = (): AvatarOption[] => [
+  opt('7107489609088647170', 'Lionel Lew'),
 ];
-const CONTENT_OPTIONS: AvatarOption[] = [
-  { value: '7005856195756032028', label: 'Edward Lin', avatarUrl: AV['Edward Lin'] },
+const CONTENT_OPTIONS = (): AvatarOption[] => [
+  opt('7005856195756032028', 'Edward Lin'),
 ];
-const QA_OPTIONS: AvatarOption[] = [
-  { value: '7242202760668643331', label: 'Xiaobo Tian', avatarUrl: AV['Xiaobo Tian'] },
+const QA_OPTIONS = (): AvatarOption[] => [
+  opt('7242202760668643331', 'Xiaobo Tian'),
 ];
 const PM_OPTIONS: AvatarOption[] = [
   { value: 'thomas.oefverstroem', label: 'Thomas', avatarUrl: AV['Thomas'] },
@@ -222,9 +226,9 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     ios:             '',
     uiux:            '',
     tpm:             TPM_OPTIONS[0].value,  // Spring Ren default
-    da:              DA_OPTIONS[0].value,
-    contentDesigner: CONTENT_OPTIONS[0].value,
-    qa:              QA_OPTIONS[0].value,
+    da:              DA_OPTIONS()[0].value,
+    contentDesigner: CONTENT_OPTIONS()[0].value,
+    qa:              QA_OPTIONS()[0].value,
   });
   const [prdType, setPrdType]               = useState<'regular' | 'halfday'>('regular');
   const [featureDescription, setFeatureDescription] = useState('');
@@ -499,44 +503,44 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>UX Designer</FormLabel>
-                    <AvatarSelect options={UIUX_OWNERS} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
+                    <AvatarSelect options={UIUX_OWNERS()} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Content Designer</FormLabel>
-                    <AvatarSelect options={CONTENT_OPTIONS} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} />
+                    <AvatarSelect options={CONTENT_OPTIONS()} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>DS</FormLabel>
-                    <AvatarSelect options={DA_OPTIONS} value={form.da} onChange={v => setField('da', v)} />
+                    <AvatarSelect options={DA_OPTIONS()} value={form.da} onChange={v => setField('da', v)} />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>QA</FormLabel>
-                    <AvatarSelect options={QA_OPTIONS} value={form.qa} onChange={v => setField('qa', v)} />
+                    <AvatarSelect options={QA_OPTIONS()} value={form.qa} onChange={v => setField('qa', v)} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Android</FormLabel>
-                    <AvatarSelect options={ANDROID_OWNERS} value={form.android} onChange={v => setField('android', v)} placeholder="Optional" />
+                    <AvatarSelect options={ANDROID_OWNERS()} value={form.android} onChange={v => setField('android', v)} placeholder="Optional" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>iOS</FormLabel>
-                    <AvatarSelect options={IOS_OWNERS} value={form.ios} onChange={v => setField('ios', v)} placeholder="Optional" />
+                    <AvatarSelect options={IOS_OWNERS()} value={form.ios} onChange={v => setField('ios', v)} placeholder="Optional" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Server</FormLabel>
-                    <AvatarSelect options={SERVER_OWNERS} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" dropUp />
+                    <AvatarSelect options={SERVER_OWNERS()} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" dropUp />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Tech Owner</FormLabel>
-                    <AvatarSelect options={TECH_OWNERS} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" dropUp />
+                    <AvatarSelect options={TECH_OWNERS()} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" dropUp />
                   </div>
                 </div>
               </div>
