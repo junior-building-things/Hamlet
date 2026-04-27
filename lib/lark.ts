@@ -858,6 +858,63 @@ export async function readDocContent(docUrl: string): Promise<string> {
 }
 
 /**
+ * Pull the body text under each named heading from a markdown-ish doc
+ * representation (the kind `readDocContent` produces — `#`/`##`/`###`
+ * prefixes denote heading levels, plain lines are body content).
+ *
+ * Returns a Map of the canonical (input-cased) heading name → joined
+ * body text. Headings are matched case-insensitively, and any of the
+ * supplied alias forms in `aliases` count as a hit for the canonical
+ * name. Bodies are trimmed and capped at `maxChars` to keep downstream
+ * card content compact.
+ */
+export function extractDocSections(
+  markdown: string,
+  sections: Array<{ canonical: string; aliases: string[] }>,
+  maxChars = 600,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  const lines = markdown.split('\n');
+  // Pre-normalise alias lookups → canonical name.
+  const aliasMap = new Map<string, string>();
+  for (const s of sections) {
+    for (const a of s.aliases) aliasMap.set(a.toLowerCase(), s.canonical);
+  }
+  let activeCanonical: string | null = null;
+  let activeBody: string[] = [];
+  const flush = () => {
+    if (activeCanonical && activeBody.length > 0) {
+      const joined = activeBody.join(' ').replace(/\s+/g, ' ').trim();
+      if (joined && !out.has(activeCanonical)) {
+        out.set(activeCanonical, joined.length > maxChars ? joined.slice(0, maxChars - 1) + '…' : joined);
+      }
+    }
+    activeBody = [];
+  };
+  for (const raw of lines) {
+    const line = raw.trim();
+    const headingMatch = line.match(/^(#+)\s*(.*)$/);
+    if (headingMatch) {
+      flush();
+      const headingText = headingMatch[2].toLowerCase();
+      // Match if the heading exactly equals or starts with any alias
+      // (so "Background and context" still counts as Background).
+      activeCanonical = null;
+      for (const [alias, canonical] of aliasMap) {
+        if (headingText === alias || headingText.startsWith(alias)) {
+          activeCanonical = canonical;
+          break;
+        }
+      }
+      continue;
+    }
+    if (activeCanonical && line) activeBody.push(line);
+  }
+  flush();
+  return out;
+}
+
+/**
  * Edit a specific section (by heading) in a Lark doc, replacing its first
  * paragraph content with new text.
  */

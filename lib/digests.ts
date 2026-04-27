@@ -11,6 +11,8 @@ import {
   refreshUserToken,
   searchAbReport,
   extractFigmaUrlFromPrd,
+  readDocContent,
+  extractDocSections,
   ChatMessage,
   CardSection,
   CardHeaderTemplate,
@@ -2014,6 +2016,80 @@ async function fetchAndCacheLinks(
   return { figmaUrl, abReportUrl, written };
 }
 
+// ─── AB Testing transition notification ───────────────────────────────────
+
+/**
+ * Lark chat IDs for the AB-open notification flow. The "draft" card
+ * (with a Send button) goes to the PM's personal group; in production
+ * the button forwards the formatted message to the wider PM group.
+ *
+ * For now BOTH the draft AND the button-forwarded message land in the
+ * personal group so we can iterate on the format without spamming the
+ * real PM group. Flip AB_OPEN_TARGET_CHAT_ID to AB_OPEN_PM_GROUP_CHAT_ID
+ * once we're satisfied.
+ */
+const AB_OPEN_PERSONAL_CHAT_ID = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
+const AB_OPEN_PM_GROUP_CHAT_ID = 'oc_ea2940122b041a9c9ee4153596d6a15c';
+const AB_OPEN_TARGET_CHAT_ID = AB_OPEN_PERSONAL_CHAT_ID; // ← change to AB_OPEN_PM_GROUP_CHAT_ID when ready
+
+/**
+ * Send the AB-open draft card to the PM's personal group. The card has
+ * one section with the formatted message preview and a single "Send to
+ * PM Group" button whose value carries enough context for the
+ * card-action handler to re-send the message verbatim.
+ */
+export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUrl: string): Promise<void> {
+  // Inline the message-build logic so we can pass libraUrl through
+  // cleanly without round-tripping a tuple via buildAbTestingMessage.
+  let background = '_(Background section not found in PRD — fill in)_';
+  let abSetup = '_(A/B Setup section not found in PRD — fill in)_';
+  if (feature.prd) {
+    try {
+      const md = await readDocContent(feature.prd);
+      const sections = extractDocSections(md, [
+        { canonical: 'Background', aliases: ['background', 'background and context', 'context', '背景'] },
+        { canonical: 'AbSetup',    aliases: ['a/b setup', 'ab setup', 'experiment setup', 'a/b test setup', 'ab test setup', 'a/b 设置', 'ab实验设置'] },
+      ]);
+      if (sections.has('Background')) background = sections.get('Background')!;
+      if (sections.has('AbSetup'))    abSetup    = sections.get('AbSetup')!;
+    } catch (e) {
+      console.warn(`[digests] PRD section extraction failed for "${feature.name}":`, e);
+    }
+  }
+  const titleLine = `**[LetMeSee] ${feature.name} [📲 AB open]**`;
+  const version = feature.iosVersion ? ` (${feature.iosVersion})` : '';
+  const refs: string[] = [];
+  if (feature.prd) refs.push(`[PRD](${feature.prd})`);
+  if (libraUrl)    refs.push(`[Libra](${libraUrl})`);
+  const message = [
+    titleLine,
+    `**Background**: ${background}`,
+    `**A/B Setup${version}**: ${abSetup}`,
+    refs.length > 0 ? `**Reference**: ${refs.join(' | ')}` : '',
+  ].filter(Boolean).join('\n');
+
+  const token = await getLarkBotToken();
+  if (!token) {
+    console.warn('[digests] no bot token; skipping AB Testing card');
+    return;
+  }
+  const sections: CardSection[] = [
+    { content: message },
+    {
+      content: '_Click below to forward this message. Currently sends to your personal group for testing._',
+      buttons: [
+        {
+          text: 'Send to PM Group',
+          type: 'primary',
+          value: { action: 'send_ab_open_to_pm_group', message },
+        },
+      ],
+    },
+  ];
+  const id = await sendInteractiveCardToChat(AB_OPEN_PERSONAL_CHAT_ID, '', 'blue', sections, token);
+  console.log(`[digests] AB Testing transition card sent for "${feature.name}": message_id=${id ?? 'null'}`);
+}
+
 // ─── Main orchestrator ─────────────────────────────────────────────────────
 
 export async function runDailyDigests(): Promise<DigestRunResult> {
@@ -2111,8 +2187,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
 
   // Step 2b: Update the GCS feature cache with fresh status/name/priority
   // from each brief, AND detect status transitions that need notifications.
-  // Currently notifies when a feature enters 待线内评审 (Line Review).
+  // Currently notifies when a feature enters 待线内评审 (Line Review) or
+  // 实验中 (AB Testing).
   const LINE_REVIEW_STATUS = '待线内评审';
+  const AB_TESTING_STATUS = '实验中';
   try {
     const prevCache = await readFeatureCache();
     const prevStatusMap = new Map<string, string>();
@@ -2135,6 +2213,22 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           headerTitle: 'PRD Ready ✅',
           headerTemplate: 'green',
         }).catch(e => console.warn(`[digests] Line Review card send failed for "${f.name}":`, e));
+      }
+      // Detect transitions INTO AB Testing and send a draft "AB open"
+      // notification card (with a button) to the PM's personal group.
+      // The button currently re-sends the message back to the same group
+      // for testing — flip the destination once we're confident.
+      if (
+        f.overallStatusName === AB_TESTING_STATUS &&
+        prevStatus &&
+        prevStatus !== 'AB Testing' &&
+        prevStatus !== AB_TESTING_STATUS
+      ) {
+        console.log(`[digests] status transition: "${f.name}" ${prevStatus} → AB Testing`);
+        // Look up Libra link from the cached Feature record.
+        const libraUrl = prevCache?.features.find(c => (c.meegoIssueId ?? c.id) === f.workItemId)?.libraUrl ?? '';
+        sendAbTestingTransitionCard(f, libraUrl)
+          .catch(e => console.warn(`[digests] AB Testing card send failed for "${f.name}":`, e));
       }
     }
 

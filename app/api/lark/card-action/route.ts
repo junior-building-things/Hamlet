@@ -127,6 +127,37 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (actionName === 'send_ab_open_to_pm_group') {
+    const message = String(actionValue?.message ?? '');
+    if (!message) {
+      return NextResponse.json({
+        toast: { type: 'error', content: 'Missing message' },
+      }, { status: 400 });
+    }
+    // Currently sends to the personal group (testing mode). Flip to
+    // the real PM group oc_ea2940122b041a9c9ee4153596d6a15c when ready.
+    const targetChatId = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
+    try {
+      const token = await getLarkBotToken();
+      const sections = [{ content: message }];
+      const id = await sendInteractiveCardToChat(targetChatId, '', 'blue', sections, token);
+      if (!id) {
+        return NextResponse.json({
+          toast: { type: 'error', content: 'Failed to send — bot may not have access' },
+        }, { status: 500 });
+      }
+      console.log(`[card-action] sent AB-open message to ${targetChatId}: msg_id=${id}`);
+      return NextResponse.json({
+        toast: { type: 'success', content: 'Sent ✓' },
+      });
+    } catch (e) {
+      console.warn('[card-action] send AB-open failed:', e);
+      return NextResponse.json({
+        toast: { type: 'error', content: 'Failed to send' },
+      }, { status: 500 });
+    }
+  }
+
   console.log('[card-action] no matching action:', actionName, 'type:', body.type);
   return NextResponse.json({ ok: true });
 }
