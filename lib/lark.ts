@@ -1119,24 +1119,32 @@ export async function extractSectionImageTokens(
 }
 
 /**
- * Download an image referenced by a Lark Drive media `file_token`,
- * then re-upload it via `/im/v1/images` so it can be embedded in a
- * Lark `post` message via `{tag: 'img', image_key, …}`. Returns the
- * resulting `image_key` or null on any failure (network, auth, image
- * format, etc. — the caller should silently skip the image rather
- * than blowing up the parent message).
+ * Download an image referenced by a Lark Drive media `file_token`
+ * that's embedded in a docx, then re-upload it via `/im/v1/images`
+ * so it can be embedded in a Lark `post` message via
+ * `{tag: 'img', image_key, …}`. Returns the resulting `image_key`
+ * or null on any failure.
+ *
+ * The `parentDocToken` is the docx's own file_token — Lark's media
+ * download API requires it via the `extra` query param to authorise
+ * access to images that live inside a doc. Without it the download
+ * returns 400 Bad Request.
  */
 export async function uploadDocImageForMessage(
-  docFileToken: string,
+  imageFileToken: string,
+  parentDocToken: string,
 ): Promise<{ image_key: string; width?: number; height?: number } | null> {
   const tenantToken = await getAccessToken();
-  // 1) Download the binary from Drive media API.
+  // 1) Download the binary from Drive media API. The `extra` param
+  // tells Lark which docx the image belongs to so it can verify
+  // access on our behalf.
+  const extra = encodeURIComponent(JSON.stringify({ doc_type: 'docx', doc_token: parentDocToken }));
   const dlRes = await fetch(
-    `${LARK_BASE_URL}/open-apis/drive/v1/medias/${docFileToken}/download`,
+    `${LARK_BASE_URL}/open-apis/drive/v1/medias/${imageFileToken}/download?extra=${extra}`,
     { headers: { Authorization: `Bearer ${tenantToken}` } },
   );
   if (!dlRes.ok) {
-    console.warn(`[lark] image download failed: ${dlRes.status} ${dlRes.statusText} token=${docFileToken}`);
+    console.warn(`[lark] image download failed: ${dlRes.status} ${dlRes.statusText} token=${imageFileToken}`);
     return null;
   }
   const blob = await dlRes.blob();
@@ -1157,6 +1165,16 @@ export async function uploadDocImageForMessage(
     return null;
   }
   return { image_key: upData.data.image_key };
+}
+
+/**
+ * Resolve a Lark wiki / docx URL to its underlying document `obj_token`
+ * (a.k.a. doc_token). Exposed so callers that already need the token
+ * for things like `uploadDocImageForMessage` don't have to round-trip
+ * through `readDocContent`.
+ */
+export async function resolveDocIdFromUrl(url: string): Promise<string> {
+  return resolveDocId(url);
 }
 
 /**

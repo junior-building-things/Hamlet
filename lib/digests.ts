@@ -16,6 +16,7 @@ import {
   extractAbSetupTable,
   extractSectionImageTokens,
   uploadDocImageForMessage,
+  resolveDocIdFromUrl,
   PostParagraph,
   ChatMessage,
   CardSection,
@@ -2152,7 +2153,11 @@ export async function buildAbOpenSection(
       ]);
       if (imageTokens.length > 0) {
         console.log(`[digests] AB-open: found ${imageTokens.length} image(s) in Background for "${feature.name}"`);
-        const uploaded = await Promise.all(imageTokens.map(t => uploadDocImageForMessage(t)));
+        // Resolve the parent doc token once — uploadDocImageForMessage
+        // needs it for the Drive media `extra` param so the download
+        // succeeds for images embedded in a docx.
+        const parentDocToken = await resolveDocIdFromUrl(feature.prd);
+        const uploaded = await Promise.all(imageTokens.map(t => uploadDocImageForMessage(t, parentDocToken)));
         for (const img of uploaded) {
           if (!img) continue;
           postParagraphs.push([
