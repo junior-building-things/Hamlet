@@ -3136,12 +3136,13 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         matched++;
         abConcluded.add(feature.workItemId);
         abConcludedChanged = true;
-        // Pull AB report URL from the cached link state (populated by
-        // Task 3 in Step 5 — searchAbReport across the PM's Drive).
-        const links = state.featureLinks?.[feature.workItemId];
-        const abReportUrl = links?.abReportUrl ?? '';
-        // Libra URL lives on the cached Feature.
+        // Prefer the AB Report + Libra URLs from the Hamlet feature
+        // cache (the source of truth shown in the UI). Fall back to
+        // the digest's link cache only when the Hamlet cache is
+        // missing the field.
         const cachedFeature = (await readFeatureCache())?.features.find(c => (c.meegoIssueId ?? c.id) === feature.workItemId);
+        const linksCache = state.featureLinks?.[feature.workItemId];
+        const abReportUrl = cachedFeature?.abReportUrl || linksCache?.abReportUrl || '';
         const libraUrl = cachedFeature?.libraUrl ?? '';
         abConcludedTransitions.push({ feature, abReportUrl, libraUrl });
         console.log(`[digests] AB-concluded queue "${feature.name}" — AB Brief invite detected`);
