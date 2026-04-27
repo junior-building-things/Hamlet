@@ -10,6 +10,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_token:       'No token received from Lark — please try again.',
   user_info:      'Could not fetch your user info — please try again.',
   no_user:        'Login failed — please try again.',
+  access_limited: 'Sorry, access is currently limited. Stay tuned!',
 };
 
 const FEATURES = [

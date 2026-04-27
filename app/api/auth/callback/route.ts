@@ -92,6 +92,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=no_user`);
   }
 
+  // Allowlist check: only specific emails can log in for now.
+  const ALLOWED_EMAILS = new Set(['thomas.oefverstroem@bytedance.com']);
+  const userEmail = (u.enterprise_email ?? u.email ?? '').toLowerCase();
+  if (!ALLOWED_EMAILS.has(userEmail)) {
+    return NextResponse.redirect(`${origin}/login?error=access_limited`);
+  }
+
   const refreshToken = (inner.refresh_token as string | undefined) ?? '';
 
   const sessionToken = await createSession({
