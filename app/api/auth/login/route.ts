@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     app_id:       appId,
     redirect_uri: redirectUri,
     state,
-    scope:        'search:docs:read drive:drive.search:readonly contact:user.id:readonly contact:user.base:readonly contact:user.email:readonly im:chat:read im:chat.members:write_only im:message im:message.send_as_user im:resource docx:document:readonly',
+    scope:        'search:docs:read drive:drive.search:readonly contact:user.id:readonly contact:user.base:readonly contact:user.email:readonly im:chat:read im:chat.members:write_only im:message im:resource docx:document:readonly',
   });
 
   return NextResponse.redirect(`${base}/open-apis/authen/v1/authorize?${params}`);
