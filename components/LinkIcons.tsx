@@ -350,8 +350,7 @@ function AddLinkButton({ feature, onLinkUpdate }: {
                 <button
                   key={l.key}
                   onClick={() => setPickedKey(l.key)}
-                  className="text-left px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-[var(--card-hover)] transition-colors"
-                  style={{ color: l.color }}
+                  className="text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--foreground)] hover:bg-[var(--card-hover)] transition-colors"
                 >
                   {l.label}
                 </button>
