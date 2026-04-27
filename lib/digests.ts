@@ -2217,9 +2217,19 @@ export async function sendAbOpenDigestCard(
   } catch (e) {
     console.warn('[digests] AB-open: user token refresh failed (image download may fail):', e);
   }
-  const built = await Promise.allSettled(
-    features.map(({ feature, libraUrl }) => buildAbOpenSection(feature, libraUrl, userAccessToken)),
-  );
+  // Build sections sequentially (rather than via Promise.all) so we
+  // don't fan out N concurrent PRD reads — each PRD already paginates
+  // through 1-2 get_blocks calls and Lark throttles aggressively on
+  // 99991400 when many features parse at once.
+  const built: Array<PromiseSettledResult<{ cardContent: string; cardImages: Array<{ image_key: string; alt?: string }>; postTitle: string; postParagraphs: PostParagraph[] }>> = [];
+  for (const { feature, libraUrl } of features) {
+    try {
+      const value = await buildAbOpenSection(feature, libraUrl, userAccessToken);
+      built.push({ status: 'fulfilled', value });
+    } catch (e) {
+      built.push({ status: 'rejected', reason: e });
+    }
+  }
   const sections: CardSection[] = [];
   for (let i = 0; i < built.length; i++) {
     const result = built[i];
