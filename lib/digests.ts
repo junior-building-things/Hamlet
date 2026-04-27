@@ -2191,6 +2191,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // 实验中 (AB Testing).
   const LINE_REVIEW_STATUS = '待线内评审';
   const AB_TESTING_STATUS = '实验中';
+  // Mutable across the loop so the changed flag controls whether we
+  // re-save state at the end. Loaded once from GCS digest state.
+  const abOpenNotified = new Set<string>(state.abOpenNotified ?? []);
+  let notifiedSetChanged = false;
   try {
     const prevCache = await readFeatureCache();
     const prevStatusMap = new Map<string, string>();
@@ -2214,21 +2218,26 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           headerTemplate: 'green',
         }).catch(e => console.warn(`[digests] Line Review card send failed for "${f.name}":`, e));
       }
-      // Detect transitions INTO AB Testing and send a draft "AB open"
-      // notification card (with a button) to the PM's personal group.
-      // The button currently re-sends the message back to the same group
-      // for testing — flip the destination once we're confident.
-      if (
-        f.overallStatusName === AB_TESTING_STATUS &&
-        prevStatus &&
-        prevStatus !== 'AB Testing' &&
-        prevStatus !== AB_TESTING_STATUS
-      ) {
-        console.log(`[digests] status transition: "${f.name}" ${prevStatus} → AB Testing`);
-        // Look up Libra link from the cached Feature record.
-        const libraUrl = prevCache?.features.find(c => (c.meegoIssueId ?? c.id) === f.workItemId)?.libraUrl ?? '';
-        sendAbTestingTransitionCard(f, libraUrl)
-          .catch(e => console.warn(`[digests] AB Testing card send failed for "${f.name}":`, e));
+      // Notify on AB Testing. Fires once per feature ever — covers both
+      // (a) the initial backfill of features already in 实验中 when this
+      // shipped, and (b) future fresh transitions into 实验中. Tracked
+      // by Meego workItemId in DigestState.abOpenNotified.
+      if (f.overallStatusName === AB_TESTING_STATUS) {
+        const alreadyNotified = abOpenNotified.has(f.workItemId);
+        if (!alreadyNotified) {
+          const reason = (prevStatus && prevStatus !== 'AB Testing' && prevStatus !== AB_TESTING_STATUS)
+            ? `transition from ${prevStatus}`
+            : 'backfill (already in AB Testing)';
+          console.log(`[digests] AB-open notify "${f.name}" — ${reason}`);
+          const libraUrl = prevCache?.features.find(c => (c.meegoIssueId ?? c.id) === f.workItemId)?.libraUrl ?? '';
+          // Mark notified IMMEDIATELY (before the network call) so a
+          // crash mid-send doesn't cause a duplicate next run; the
+          // user can manually clear the set if they want a re-send.
+          abOpenNotified.add(f.workItemId);
+          notifiedSetChanged = true;
+          sendAbTestingTransitionCard(f, libraUrl)
+            .catch(e => console.warn(`[digests] AB Testing card send failed for "${f.name}":`, e));
+        }
       }
     }
 
@@ -2640,6 +2649,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
   console.log(`[digests] Task 3 link fetch: ${linksFetched}/${nonEnded.length} processed (${linksSkippedCached} cached/cooldown, cap=${LINK_FETCH_MAX_PER_RUN}), ${linksFound} with links, ${linksWritten} written to Meego`);
 
+  if (notifiedSetChanged) {
+    state.abOpenNotified = [...abOpenNotified];
+    console.log(`[digests] abOpenNotified updated — total ${state.abOpenNotified.length} feature(s) notified`);
+  }
   await saveDigestState(state);
   console.log(`[digests] saved digest state with ${Object.keys(state.features).length} active feature entries, ${Object.keys(state.featureLinks ?? {}).length} link cache entries`);
   const severityOrder: Record<RiskLevel, number> = { red: 0, yellow: 1, green: 2 };

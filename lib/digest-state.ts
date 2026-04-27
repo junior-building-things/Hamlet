@@ -128,6 +128,13 @@ export interface DigestStateFile {
    * after the first successful refresh the env var is no longer needed.
    */
   larkUserRefreshToken?: string;
+  /**
+   * Meego work item IDs that have already received an AB-open notification
+   * card. Used so the backfill (notify every feature currently in 实验中)
+   * fires exactly once per feature, even though the same features stay in
+   * AB Testing for many digest runs in a row.
+   */
+  abOpenNotified?: string[];
 }
 
 /**
