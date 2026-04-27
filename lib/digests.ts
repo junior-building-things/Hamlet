@@ -12,6 +12,7 @@ import {
   searchAbReport,
   extractFigmaUrlFromPrd,
   readDocContent,
+  readDocContentWithToken,
   extractDocSections,
   extractAbSetupTable,
   extractSectionImageTokens,
@@ -2194,26 +2195,19 @@ async function summariseAbReport(
 ): Promise<string> {
   if (!abReportUrl) return '_(AB report URL not available — fill in)_';
   let content = '';
-  const tryRead = async () => readDocContent(abReportUrl);
   try {
-    content = await tryRead();
+    content = await readDocContent(abReportUrl);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // Bot doesn't have read access to the AB report doc. Try to grant
-    // it via the PM's user token, then retry once.
+    // Bot doesn't have read access. Retry the same fetch but using
+    // the PM's user token, which already has full Drive scope on the
+    // PM's docs. We keep the request to read-only — no permission
+    // grants on the bot identity.
     if ((msg.includes('1770032') || /forbidden/i.test(msg)) && userAccessToken) {
       try {
-        const { grantBotEditAccess } = await import('./lark');
-        const granted = await grantBotEditAccess(abReportUrl, userAccessToken);
-        if (granted) {
-          try {
-            content = await tryRead();
-          } catch (e2) {
-            console.warn(`[digests] AB-concluded: re-read after grant failed for "${featureName}":`, e2);
-          }
-        }
-      } catch (ge) {
-        console.warn(`[digests] AB-concluded: grant access failed for "${featureName}":`, ge);
+        content = await readDocContentWithToken(abReportUrl, userAccessToken);
+      } catch (e2) {
+        console.warn(`[digests] AB-concluded: user-token read failed for "${featureName}":`, e2);
       }
     }
     if (!content) {

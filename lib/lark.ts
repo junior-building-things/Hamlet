@@ -886,6 +886,29 @@ export async function readDocContent(docUrl: string): Promise<string> {
 }
 
 /**
+ * Like readDocContent, but reads using the supplied access token
+ * instead of the bot tenant token. Used when the bot doesn't have
+ * permission on a doc but the PM (who already does) is invoking
+ * the read on the bot's behalf.
+ */
+export async function readDocContentWithToken(docUrl: string, token: string): Promise<string> {
+  const docId = await resolveDocId(docUrl);
+  const blocks = await getDocBlocks(docId, token);
+  const lines: string[] = [];
+  for (const b of blocks) {
+    const text = blockText(b);
+    if (!text.trim()) continue;
+    if (HEADING_BLOCK_TYPES.has(b.block_type)) {
+      const level = b.block_type - 2;
+      lines.push(`${'#'.repeat(level)} ${text}`);
+    } else {
+      lines.push(text);
+    }
+  }
+  return lines.join('\n') || '(empty document)';
+}
+
+/**
  * Pull the body text under each named section from a markdown-ish doc
  * representation (the kind `readDocContent` produces — `#`/`##`/`###`
  * prefixes denote heading levels, plain lines are body content).
