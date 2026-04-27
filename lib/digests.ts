@@ -2676,12 +2676,14 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
               const matchesPair = (c: { from: string; to: string }) =>
                 c.from === mismatch.planned && c.to === mismatch.actual;
               const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-              // Cached entries written today are most likely placeholders
-              // from the older synthesis path that used "today" before the
-              // op-log date lookup was wired in. Refresh them so the date
-              // reflects when the slip actually happened.
-              const cachedEntry = list.find(matchesPair);
-              const alreadyCached = !!cachedEntry && cachedEntry.date !== today;
+              const matchingEntries = list.filter(matchesPair);
+              // Treat the cache as already-resolved only when there's
+              // exactly one matching entry AND its date isn't today
+              // (today-stamped entries are probably leftovers from the
+              // older synthesis path that didn't look up the op log).
+              // Multiple matching entries means earlier runs duplicated
+              // the pair across days — also a sign to refresh.
+              const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
               if (!alreadyCached) {
                 const launchedFieldKey = mismatch.platform === 'ios'
                   ? 'ios_actual_online_version'
@@ -2710,16 +2712,29 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
 
           // (iii) Server-launch slip: Server上线 node scheduled later
           // than the field_cde888 "Server 计划上线时间" planned date.
+          // Like the version mismatch path, dedupe by (from, to) and
+          // refresh today-stamped or duplicated entries with the
+          // op-log date for the most recent edit to either side.
           try {
             const serverDelay = await detectServerLaunchDelay(meegoUrl);
             if (serverDelay) {
-              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-              const synth = { date: today, from: serverDelay.planned, to: serverDelay.scheduled };
               const list = nextVersionChanges ?? [];
-              const seen = new Set(list.map(c => `${c.date}|${c.from}|${c.to}`));
-              const k = `${synth.date}|${synth.from}|${synth.to}`;
-              if (!seen.has(k)) {
-                nextVersionChanges = [...list, synth].sort((a, b) => a.date.localeCompare(b.date));
+              const matchesPair = (c: { from: string; to: string }) =>
+                c.from === serverDelay.planned && c.to === serverDelay.scheduled;
+              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+              const matchingEntries = list.filter(matchesPair);
+              const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
+              if (!alreadyCached) {
+                let date: string | null = null;
+                try {
+                  date = await findLatestFieldEditDate(meegoUrl, 'field_cde888');
+                } catch (e) {
+                  console.warn(`[digests] server-launch date lookup failed for ${cached.name}:`, e);
+                }
+                if (!date) date = today;
+                const cleaned = list.filter(c => !matchesPair(c));
+                nextVersionChanges = [...cleaned, { date, from: serverDelay.planned, to: serverDelay.scheduled }]
+                  .sort((a, b) => a.date.localeCompare(b.date));
                 versionChangesChanged = true;
               }
             }
