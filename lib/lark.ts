@@ -954,6 +954,11 @@ export function extractDocSections(
  * Header rows are filtered out heuristically (any row whose group
  * cell text doesn't start with "v" + digit).
  *
+ * Lark stores table cells in row-major order under `table.cells`. Cell
+ * blocks themselves carry an empty `table_cell: {}` — no row/col index
+ * — so positions are derived from cell ordering and the table's
+ * `table.property.column_size`.
+ *
  * Returns '' if the heading or table can't be located.
  */
 export async function extractAbSetupTable(docUrl: string, headingAliases: string[]): Promise<string> {
@@ -965,10 +970,6 @@ export async function extractAbSetupTable(docUrl: string, headingAliases: string
   if (blocks.length === 0) return '';
 
   const byId = new Map(blocks.map(b => [b.block_id, b]));
-  const parentOf = new Map<string, string>();
-  for (const b of blocks) {
-    for (const childId of b.children ?? []) parentOf.set(childId, b.block_id);
-  }
 
   const pageBlock = blocks.find(b => b.block_type === 1);
   if (!pageBlock?.children) return '';
@@ -978,7 +979,11 @@ export async function extractAbSetupTable(docUrl: string, headingAliases: string
   const aliases = headingAliases.map(a => a.toLowerCase());
   let foundHeading = false;
   let tableBlock: LarkBlock | undefined;
-  const isTable = (b: LarkBlock | undefined) => !!b && (b.table_cell === undefined && b.children !== undefined && b.children.some(cid => byId.get(cid)?.table_cell !== undefined));
+  // A table block has block_type 31 in Lark's docx schema. It carries
+  // its cell ids under both `children` and `table.cells`, plus a
+  // `table.property.column_size` that tells us how to slice them
+  // into rows.
+  const isTableBlock = (b: LarkBlock | undefined) => !!b && b.block_type === 31;
   for (const childId of pageBlock.children) {
     const block = byId.get(childId);
     if (!block) continue;
@@ -991,22 +996,20 @@ export async function extractAbSetupTable(docUrl: string, headingAliases: string
       // A different heading after we already found ours — stop.
       if (foundHeading) break;
     }
-    if (foundHeading && isTable(block)) {
+    if (foundHeading && isTableBlock(block)) {
       tableBlock = block;
       break;
     }
   }
   if (!tableBlock) return '';
 
-  // Build a row → col → cell map from the cells inside the table.
-  const cellsByRow = new Map<number, Map<number, LarkBlock>>();
-  for (const childId of tableBlock.children ?? []) {
-    const cell = byId.get(childId);
-    if (!cell?.table_cell) continue;
-    const { row_index, col_index } = cell.table_cell;
-    if (!cellsByRow.has(row_index)) cellsByRow.set(row_index, new Map());
-    cellsByRow.get(row_index)!.set(col_index, cell);
-  }
+  // Pull cell ids (row-major) and the column count from the table
+  // block's `table` property.
+  type TableProp = { table?: { cells?: string[]; property?: { column_size?: number; row_size?: number } } };
+  const tableMeta = (tableBlock as unknown as TableProp).table;
+  const cellIds = tableMeta?.cells ?? tableBlock.children ?? [];
+  const columnSize = tableMeta?.property?.column_size ?? 0;
+  if (cellIds.length === 0 || columnSize <= 0) return '';
 
   // Read the joined plain text of every paragraph block inside a cell
   // (cells can hold multiple paragraphs). Returns trimmed content.
@@ -1023,14 +1026,14 @@ export async function extractAbSetupTable(docUrl: string, headingAliases: string
     return out.join(' ').replace(/\s+/g, ' ').trim();
   }
 
-  const rows = [...cellsByRow.entries()].sort((a, b) => a[0] - b[0]);
   const lines: string[] = [];
-  for (const [, cols] of rows) {
-    const groupCell = cols.get(0);
-    const treatmentCell = cols.get(1);
-    if (!groupCell || !treatmentCell) continue;
-    const group = cellText(groupCell.block_id);
-    const treatment = cellText(treatmentCell.block_id);
+  const rowCount = Math.ceil(cellIds.length / columnSize);
+  for (let row = 0; row < rowCount; row++) {
+    const groupCellId = cellIds[row * columnSize + 0];
+    const treatmentCellId = cellIds[row * columnSize + 1];
+    if (!groupCellId || !treatmentCellId) continue;
+    const group = cellText(groupCellId);
+    const treatment = cellText(treatmentCellId);
     if (!group || !treatment) continue;
     // Filter out the header row: only keep rows whose group looks
     // like a variant (v0, v1, V2 (Control), etc.).
