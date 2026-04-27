@@ -14,6 +14,7 @@ import {
   readDocContent,
   extractDocSections,
   extractAbSetupTable,
+  PostParagraph,
   ChatMessage,
   CardSection,
   CardHeaderTemplate,
@@ -2096,17 +2097,48 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
       console.warn(`[digests] PRD section extraction failed for "${feature.name}":`, e);
     }
   }
-  const titleLine = `**:LetMeSee: ${feature.name} [📲 AB open]**`;
-  const version = feature.iosVersion ? ` (${feature.iosVersion})` : '';
-  const refs: string[] = [];
-  if (feature.prd) refs.push(`[PRD](${feature.prd})`);
-  if (libraUrl)    refs.push(`[Libra](${libraUrl})`);
-  const message = [
-    titleLine,
+  const versionSuffix = feature.iosVersion ? ` (${feature.iosVersion})` : '';
+  const refs: Array<{ label: string; url: string }> = [];
+  if (feature.prd) refs.push({ label: 'PRD',   url: feature.prd });
+  if (libraUrl)    refs.push({ label: 'Libra', url: libraUrl });
+
+  // Card body uses lark_md so it can render bold + clickable links +
+  // the :LetMeSee: workspace emoji shortcode. Title line repeats the
+  // header text with the emoji because the card header itself is
+  // plain_text and won't render shortcodes.
+  const cardBody = [
+    `**:LetMeSee: ${feature.name} [📲 AB open]**`,
     `**Background**: ${background}`,
-    `**A/B Setup${version}**: ${abSetup}`,
-    refs.length > 0 ? `**Reference**: ${refs.join(' | ')}` : '',
+    `**A/B Setup${versionSuffix}**: ${abSetup}`,
+    refs.length > 0
+      ? `**Reference**: ${refs.map(r => `[${r.label}](${r.url})`).join(' | ')}`
+      : '',
   ].filter(Boolean).join('\n');
+
+  // Post (rich text) variant — sent by the Send button. Title carries
+  // the feature name + tag; paragraphs carry the structured body so
+  // links remain clickable in the rich-text rendering.
+  const postTitle = `:LetMeSee: ${feature.name} [📲 AB open]`;
+  const postParagraphs: PostParagraph[] = [
+    [
+      { tag: 'text', text: 'Background: ', style: ['bold'] },
+      { tag: 'text', text: background },
+    ],
+    [
+      { tag: 'text', text: `A/B Setup${versionSuffix}: `, style: ['bold'] },
+      { tag: 'text', text: abSetup },
+    ],
+  ];
+  if (refs.length > 0) {
+    const inlines: Array<{ tag: 'text'; text: string; style?: string[] } | { tag: 'a'; text: string; href: string }> = [
+      { tag: 'text', text: 'Reference: ', style: ['bold'] },
+    ];
+    refs.forEach((r, i) => {
+      if (i > 0) inlines.push({ tag: 'text', text: ' | ' });
+      inlines.push({ tag: 'a', text: r.label, href: r.url });
+    });
+    postParagraphs.push(inlines);
+  }
 
   const token = await getLarkBotToken();
   if (!token) {
@@ -2114,19 +2146,27 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
     return;
   }
   const sections: CardSection[] = [
-    { content: message },
+    { content: cardBody },
     {
       content: '_Click below to forward this message. Currently sends to your personal group for testing._',
       buttons: [
         {
           text: 'Send to PM Group',
           type: 'primary',
-          value: { action: 'send_ab_open_to_pm_group', message },
+          value: {
+            action: 'send_ab_open_to_pm_group',
+            postTitle,
+            postParagraphs,
+          },
         },
       ],
     },
   ];
-  const id = await sendInteractiveCardToChat(AB_OPEN_PERSONAL_CHAT_ID, '', 'blue', sections, token);
+  // Yellow header so the card stands out as a transition notification.
+  // Header text is plain_text — no shortcode rendering — so it carries
+  // the feature name and visible-character tags only.
+  const headerText = `[📲 AB open] ${feature.name}`;
+  const id = await sendInteractiveCardToChat(AB_OPEN_PERSONAL_CHAT_ID, headerText, 'yellow', sections, token);
   console.log(`[digests] AB Testing transition card sent for "${feature.name}": message_id=${id ?? 'null'}`);
 }
 

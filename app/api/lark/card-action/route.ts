@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat, refreshUserToken } from '@/lib/lark';
+import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat, refreshUserToken, sendPostToChat, PostParagraph } from '@/lib/lark';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 import crypto from 'crypto';
 
@@ -128,10 +128,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (actionName === 'send_ab_open_to_pm_group') {
-    const message = String(actionValue?.message ?? '');
-    if (!message) {
+    const postTitle = String(actionValue?.postTitle ?? '');
+    const postParagraphs = Array.isArray(actionValue?.postParagraphs)
+      ? (actionValue.postParagraphs as PostParagraph[])
+      : null;
+    if (!postTitle || !postParagraphs) {
       return NextResponse.json({
-        toast: { type: 'error', content: 'Missing message' },
+        toast: { type: 'error', content: 'Missing post payload' },
       }, { status: 400 });
     }
     // Currently sends to the personal group (testing mode). Flip to
@@ -139,14 +142,13 @@ export async function POST(req: NextRequest) {
     const targetChatId = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
     try {
       const token = await getLarkBotToken();
-      const sections = [{ content: message }];
-      const id = await sendInteractiveCardToChat(targetChatId, '', 'blue', sections, token);
+      const id = await sendPostToChat(targetChatId, postTitle, postParagraphs, token);
       if (!id) {
         return NextResponse.json({
           toast: { type: 'error', content: 'Failed to send — bot may not have access' },
         }, { status: 500 });
       }
-      console.log(`[card-action] sent AB-open message to ${targetChatId}: msg_id=${id}`);
+      console.log(`[card-action] sent AB-open post to ${targetChatId}: msg_id=${id}`);
       return NextResponse.json({
         toast: { type: 'success', content: 'Sent ✓' },
       });
