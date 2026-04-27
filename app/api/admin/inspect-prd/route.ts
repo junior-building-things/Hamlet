@@ -60,8 +60,16 @@ async function getDocBlocks(docId: string, token: string): Promise<LarkBlock[]> 
   return data.data?.items ?? [];
 }
 
+const TEXT_BEARING_KEYS = ['text','heading1','heading2','heading3','heading4','heading5','heading6','heading7','heading8','heading9','bullet','ordered','code','quote','todo','callout'] as const;
 function blockText(b: LarkBlock): string {
-  return (b.text?.elements ?? []).map(e => e.text_run?.content ?? '').join('');
+  for (const key of TEXT_BEARING_KEYS) {
+    const container = b[key as string] as { elements?: Array<{ text_run?: { content?: string } }> } | undefined;
+    const elements = container?.elements;
+    if (elements && elements.length > 0) {
+      return elements.map(e => e.text_run?.content ?? '').join('');
+    }
+  }
+  return '';
 }
 
 export async function GET(req: NextRequest) {
