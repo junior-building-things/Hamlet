@@ -128,14 +128,17 @@ export async function POST(req: NextRequest) {
   }
 
   if (actionName === 'send_ab_open_to_pm_group') {
+    // postTitle may be empty by design — the bolded lead paragraph
+    // serves as the visual title. Only postParagraphs is required.
     const postTitle = String(actionValue?.postTitle ?? '');
     const postParagraphs = Array.isArray(actionValue?.postParagraphs)
       ? (actionValue.postParagraphs as PostParagraph[])
       : null;
-    if (!postTitle || !postParagraphs) {
+    if (!postParagraphs || postParagraphs.length === 0) {
+      console.warn(`[card-action] missing postParagraphs (titleLen=${postTitle.length})`);
       return NextResponse.json({
         toast: { type: 'error', content: 'Missing post payload' },
-      }, { status: 400 });
+      });
     }
     // Currently sends to the personal group (testing mode). Flip to
     // the real PM group oc_ea2940122b041a9c9ee4153596d6a15c when ready.
