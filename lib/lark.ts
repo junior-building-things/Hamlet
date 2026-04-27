@@ -2588,6 +2588,12 @@ export interface CardButton {
 export interface CardSection {
   content: string;           // lark_md content for the div block
   buttons?: CardButton[];    // optional action buttons under this section
+  /**
+   * Optional images to embed inside the section, rendered as Lark
+   * `img` elements between the content `div` and the action row.
+   * Each entry's `image_key` must come from `/im/v1/images` upload.
+   */
+  images?: Array<{ image_key: string; alt?: string }>;
 }
 
 /**
@@ -2612,6 +2618,15 @@ export async function sendInteractiveCardToChat(
       tag: 'div',
       text: { tag: 'lark_md', content: s.content },
     });
+    if (s.images && s.images.length > 0) {
+      for (const img of s.images) {
+        elements.push({
+          tag: 'img',
+          img_key: img.image_key,
+          alt: { tag: 'plain_text', content: img.alt ?? '' },
+        });
+      }
+    }
     if (s.buttons && s.buttons.length > 0) {
       elements.push({
         tag: 'action',

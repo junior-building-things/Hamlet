@@ -2064,7 +2064,12 @@ export async function buildAbOpenSection(
   feature: MeegoFeature,
   libraUrl: string,
   userAccessToken?: string,
-): Promise<{ cardContent: string; postTitle: string; postParagraphs: PostParagraph[] }> {
+): Promise<{
+  cardContent: string;
+  cardImages: Array<{ image_key: string; alt?: string }>;
+  postTitle: string;
+  postParagraphs: PostParagraph[];
+}> {
   let background = '_(Background section not found in PRD — fill in)_';
   let abSetup = '_(A/B Setup section not found in PRD — fill in)_';
   if (feature.prd) {
@@ -2101,9 +2106,13 @@ export async function buildAbOpenSection(
   if (feature.prd) refs.push({ label: 'PRD',   url: feature.prd });
   if (libraUrl)    refs.push({ label: 'Libra', url: libraUrl });
 
-  // Card section: bold lead line (no emoji), then the structured body.
+  // Prefix the feature name with [IM] (the team's product line tag),
+  // unless the name already starts with a bracketed tag.
+  const headlineName = /^\s*\[/.test(feature.name) ? feature.name : `[IM] ${feature.name}`;
+
+  // Card section: bold lead line, then the structured body.
   const cardContent = [
-    `**${feature.name} [📲 AB open]**`,
+    `**${headlineName} [📲 AB open]**`,
     `**Background**: ${background}`,
     `**A/B Setup${versionSuffix}**: ${abSetup}`,
     refs.length > 0
@@ -2115,7 +2124,7 @@ export async function buildAbOpenSection(
   // bolded lead paragraph IS the visual title.
   const postTitle = '';
   const postParagraphs: PostParagraph[] = [
-    [{ tag: 'text', text: `${feature.name} [📲 AB open]`, style: ['bold'] }],
+    [{ tag: 'text', text: `${headlineName} [📲 AB open]`, style: ['bold'] }],
     [
       { tag: 'text', text: 'Background: ', style: ['bold'] },
       { tag: 'text', text: background },
@@ -2137,9 +2146,10 @@ export async function buildAbOpenSection(
   }
 
   // Pull any images that live under the Background section in the
-  // PRD, re-upload them as IM message images, and append each as its
-  // own paragraph after the Reference line. Failures are silent — we
-  // log + skip individual images rather than failing the whole card.
+  // PRD, re-upload them as IM message images, and append each both
+  // to the card section AND as a paragraph in the post message.
+  // Failures are silent per image rather than failing the whole card.
+  const cardImages: Array<{ image_key: string; alt?: string }> = [];
   if (feature.prd) {
     try {
       const imageTokens = await extractSectionImageTokens(feature.prd, [
@@ -2154,17 +2164,13 @@ export async function buildAbOpenSection(
       ]);
       if (imageTokens.length > 0) {
         console.log(`[digests] AB-open: found ${imageTokens.length} image(s) in Background for "${feature.name}"`);
-        // Resolve the parent doc token once — uploadDocImageForMessage
-        // needs it for the Drive media `extra` param so the download
-        // succeeds for images embedded in a docx. We also pass the
-        // PM's user token so the download bypasses the bot's missing
-        // docs:document.media:download scope.
         const parentDocToken = await resolveDocIdFromUrl(feature.prd);
         const uploaded = await Promise.all(
           imageTokens.map(t => uploadDocImageForMessage(t, parentDocToken, userAccessToken)),
         );
         for (const img of uploaded) {
           if (!img) continue;
+          cardImages.push({ image_key: img.image_key });
           postParagraphs.push([
             { tag: 'img', image_key: img.image_key, width: img.width, height: img.height },
           ]);
@@ -2175,7 +2181,7 @@ export async function buildAbOpenSection(
     }
   }
 
-  return { cardContent, postTitle, postParagraphs };
+  return { cardContent, cardImages, postTitle, postParagraphs };
 }
 
 /**
@@ -2220,9 +2226,10 @@ export async function sendAbOpenDigestCard(
       console.warn(`[digests] AB-open section build failed for "${features[i].feature.name}":`, result.reason);
       continue;
     }
-    const { cardContent, postTitle, postParagraphs } = result.value;
+    const { cardContent, cardImages, postTitle, postParagraphs } = result.value;
     sections.push({
       content: cardContent,
+      images: cardImages,
       buttons: [
         {
           text: 'Send to PM Group',
