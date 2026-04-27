@@ -2072,6 +2072,10 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
           'what we are building and why?',
           'what we are building and why',
           'what we are building',
+          'what are we building?',
+          'what are we building and why?',
+          'what are we building and why',
+          'what are we building',
         ] },
         { canonical: 'AbSetup', aliases: AB_SETUP_ALIASES },
       ]);
