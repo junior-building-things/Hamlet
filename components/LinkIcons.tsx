@@ -254,10 +254,10 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
 
 // ─── Add-link button (shown after icons when figma/libra/ab is missing) ─────
 
-const ADDABLE_LINKS: Array<{ key: string; label: string; color: string }> = [
-  { key: 'figma', label: 'Figma', color: '#FF7362' },
-  { key: 'libra', label: 'Libra', color: '#0073F0' },
-  { key: 'ab', label: 'AB Report', color: '#108453' },
+const ADDABLE_LINKS: Array<{ key: string; label: string; color: string; icon: string; iconW: number; iconH: number }> = [
+  { key: 'figma', label: 'Figma', color: '#FF7362', icon: '/figma.svg', iconW: 10, iconH: 14 },
+  { key: 'libra', label: 'Libra', color: '#0073F0', icon: '/libra.png', iconW: 14, iconH: 14 },
+  { key: 'ab', label: 'AB Report', color: '#108453', icon: '/abreport.png', iconW: 14, iconH: 14 },
 ];
 
 function AddLinkButton({ feature, onLinkUpdate }: {
@@ -350,9 +350,10 @@ function AddLinkButton({ feature, onLinkUpdate }: {
                 <button
                   key={l.key}
                   onClick={() => setPickedKey(l.key)}
-                  className="text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--foreground)] hover:bg-[var(--card-hover)] transition-colors"
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--foreground)] hover:bg-[var(--card-hover)] transition-colors"
                 >
-                  {l.label}
+                  <Image src={l.icon} alt="" width={l.iconW} height={l.iconH} className="shrink-0" />
+                  <span>{l.label}</span>
                 </button>
               ))}
             </div>
