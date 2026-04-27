@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
 import Image from 'next/image';
-import { Pencil, Copy, Check } from 'lucide-react';
+import { Pencil, Copy, Check, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 interface LinkDef {
@@ -252,6 +252,120 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
   );
 }
 
+// ─── Add-link button (shown after icons when figma/libra/ab is missing) ─────
+
+const ADDABLE_LINKS: Array<{ key: string; label: string; color: string }> = [
+  { key: 'figma', label: 'Figma', color: '#FF7362' },
+  { key: 'libra', label: 'Libra', color: '#0073F0' },
+  { key: 'ab', label: 'AB Report', color: '#108453' },
+];
+
+function AddLinkButton({ feature, onLinkUpdate }: {
+  feature: Feature;
+  onLinkUpdate: (linkKey: string, newUrl: string) => void;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0 });
+  const [mounted, setMounted] = useState(false);
+  const ref = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout>>(null);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  // Filter to only links the feature is missing
+  const missingLinks = ADDABLE_LINKS.filter(l => {
+    if (l.key === 'figma') return !feature.figmaUrl;
+    if (l.key === 'libra') return !feature.libraUrl;
+    if (l.key === 'ab') return !feature.abReportUrl;
+    return false;
+  });
+
+  useEffect(() => {
+    if (pickedKey && inputRef.current) inputRef.current.focus();
+  }, [pickedKey]);
+
+  if (missingLinks.length === 0) return null;
+
+  function show() {
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+    if (ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      setAnchor({ top: r.top, left: r.left, width: r.width });
+    }
+    setShowMenu(true);
+  }
+  function scheduleHide() {
+    hideTimer.current = setTimeout(() => { setShowMenu(false); setPickedKey(null); setDraft(''); }, 150);
+  }
+  function commit() {
+    const trimmed = draft.trim();
+    if (trimmed && pickedKey) onLinkUpdate(pickedKey, trimmed);
+    setShowMenu(false);
+    setPickedKey(null);
+    setDraft('');
+  }
+
+  return (
+    <>
+      <button
+        ref={ref}
+        onMouseEnter={show}
+        onMouseLeave={scheduleHide}
+        className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--link-circle)] cursor-pointer hover:brightness-125 relative ml-[-4px]"
+        style={{ zIndex: 0 }}
+      >
+        <Plus className="w-3 h-3 text-[var(--muted)]" />
+      </button>
+      {showMenu && mounted && createPortal(
+        <div
+          className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-2 min-w-[140px]"
+          style={{
+            top: anchor.top - 8,
+            left: anchor.left + anchor.width / 2,
+            transform: 'translate(-50%, -100%)',
+            zIndex: 9999,
+          }}
+          onMouseEnter={show}
+          onMouseLeave={scheduleHide}
+        >
+          {pickedKey ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                if (e.key === 'Escape') { setPickedKey(null); setDraft(''); }
+              }}
+              className="w-[280px] text-xs bg-transparent border-none outline-none text-[var(--foreground)] px-1.5 py-1"
+              placeholder="Paste URL…"
+            />
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {missingLinks.map(l => (
+                <button
+                  key={l.key}
+                  onClick={() => setPickedKey(l.key)}
+                  className="text-left px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-[var(--card-hover)] transition-colors"
+                  style={{ color: l.color }}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 // ─── Public component ────────────────────────────────────────────────────────
 
 interface Props {
@@ -264,13 +378,14 @@ interface Props {
 export function LinkIcons({ feature, onPackageClick, onLinkUpdate }: Props) {
   const theme = useTheme();
   const links = buildLinks(feature, onPackageClick, theme);
-  if (links.length === 0) return <span className="text-gray-600 text-xs">—</span>;
+  if (links.length === 0 && !onLinkUpdate) return <span className="text-gray-600 text-xs">—</span>;
 
   return (
     <div className="flex items-center">
       {links.map((link, i) => (
         <LinkChip key={link.key} link={link} index={i} total={links.length} onLinkUpdate={onLinkUpdate} />
       ))}
+      {onLinkUpdate && <AddLinkButton feature={feature} onLinkUpdate={onLinkUpdate} />}
     </div>
   );
 }
