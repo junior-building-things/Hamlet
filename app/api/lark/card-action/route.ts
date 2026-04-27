@@ -144,11 +144,29 @@ export async function POST(req: NextRequest) {
     // the real PM group oc_ea2940122b041a9c9ee4153596d6a15c when ready.
     const targetChatId = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
     try {
-      const token = await getLarkBotToken();
-      const id = await sendPostToChat(targetChatId, postTitle, postParagraphs, token);
+      // Send AS THE PM (user token) so the message appears authored
+      // by them in the PM group, not by the bot. Falls back to the
+      // bot token if no user refresh token is available.
+      let sendToken: string | null = null;
+      try {
+        const state = await loadDigestState();
+        const refresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
+        if (refresh) {
+          const result = await refreshUserToken(refresh);
+          if (result) {
+            sendToken = result.accessToken;
+            state.larkUserRefreshToken = result.refreshToken;
+            await saveDigestState(state);
+          }
+        }
+      } catch (e) {
+        console.warn('[card-action] AB-open: user token refresh failed, falling back to bot token:', e);
+      }
+      if (!sendToken) sendToken = await getLarkBotToken();
+      const id = await sendPostToChat(targetChatId, postTitle, postParagraphs, sendToken);
       if (!id) {
         return NextResponse.json({
-          toast: { type: 'error', content: 'Failed to send — bot may not have access' },
+          toast: { type: 'error', content: 'Failed to send — sender may not be in chat' },
         }, { status: 500 });
       }
       console.log(`[card-action] sent AB-open post to ${targetChatId}: msg_id=${id}`);
