@@ -108,12 +108,29 @@ export async function GET(req: NextRequest) {
     const rawTableBlocks = blocks
       .filter(b => b.block_type === 31 || b.block_type === 32)
       .slice(0, 20);
+    // Dump the page's direct children list so we can see what the
+    // top-level walk in extractAbSetupTable actually encounters.
+    const page = blocks.find(b => b.block_type === 1);
+    const byId2 = new Map(blocks.map(b => [b.block_id, b]));
+    const pageChildrenSummary = (page?.children ?? []).map(cid => {
+      const b = byId2.get(cid);
+      if (!b) return { block_id: cid, missing: true };
+      return {
+        block_id: cid,
+        block_type: b.block_type,
+        text: blockText(b).slice(0, 80),
+        children_count: b.children?.length ?? 0,
+        is_table_cell: !!b.table_cell,
+      };
+    });
     return NextResponse.json({
       docId,
       blockCount: blocks.length,
       tableExtraction,
       blocks: summary,
       rawTableBlocks,
+      pageChildrenCount: page?.children?.length ?? 0,
+      pageChildrenSummary,
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
