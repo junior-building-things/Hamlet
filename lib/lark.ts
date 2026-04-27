@@ -1144,7 +1144,8 @@ export async function uploadDocImageForMessage(
     { headers: { Authorization: `Bearer ${tenantToken}` } },
   );
   if (!dlRes.ok) {
-    console.warn(`[lark] image download failed: ${dlRes.status} ${dlRes.statusText} token=${imageFileToken}`);
+    const body = await dlRes.text().catch(() => '');
+    console.warn(`[lark] image download failed: ${dlRes.status} ${dlRes.statusText} token=${imageFileToken} parent=${parentDocToken} body=${body.slice(0, 400)}`);
     return null;
   }
   const blob = await dlRes.blob();
