@@ -2186,11 +2186,14 @@ export async function buildAbOpenSection(
     }
   }
 
-  // @-mention the PM at the very bottom of the post — sent by the bot
-  // but a ping on the PM gives the same effect for readers (and makes
-  // it clear who's authoring the update). Sits below the image when
-  // there is one.
-  postParagraphs.push([{ tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID }]);
+  // @-mention the PM at the very bottom of the post, prefixed with
+  // "cc" (no space) so it reads as "cc@Thomas". Sent by the bot but
+  // pinging the PM gives the same effect for readers. Sits below the
+  // image when there is one.
+  postParagraphs.push([
+    { tag: 'text', text: 'cc' },
+    { tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID },
+  ]);
 
   return { cardContent, cardImages, postTitle, postParagraphs };
 }
