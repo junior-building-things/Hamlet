@@ -26,6 +26,7 @@ import {
 } from './lark';
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
+import { resolveDisplayStatus } from './meego';
 import { readFeatureCache, writeFeatureCache, patchFeaturesInCache } from './feature-cache';
 
 /** Append a new version to the history if it differs from the last entry. */
@@ -1568,11 +1569,11 @@ async function buildFeatureSectionContent(finding: RiskFinding): Promise<string>
     lines.push(`**Tech Owner:** ${escapeMd(techOwners)}`);
   }
 
-  // Generic status bucket — always "In Development" for in-dev features
-  // (regardless of mobile vs server pipeline).
-  const statusLabel = f.pipelineKind === 'server'
-    ? 'In Development'
-    : bucketStatus(f.currentNodeId, f.overallStatusKey);
+  // Use the same Chinese→English overall-status mapping that Hamlet's
+  // UI uses, so the digest card and Hamlet display the same label
+  // (e.g. "AB Testing" for 实验中) instead of the picked-active-node
+  // bucket (which would say "In Development" for the same feature).
+  const statusLabel = resolveDisplayStatus(f.overallStatusName);
   lines.push(`**Status:** ${statusLabel}`);
 
   // Deadline display: mobile features show their planned version + code freeze
@@ -3045,9 +3046,17 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         const delta: Partial<import('./types').Feature> = {};
         if (versionChangesChanged) delta.versionChanges = nextVersionChanges;
 
-        // Features in AB Testing should have NO riskLevel shown — but
-        // we still want any Delayed signal (versionChanges) to render.
+        // Features in AB Testing don't get a riskLevel in the cache
+        // (the UI Delayed badge keys off versionChanges directly), but
+        // we still want the digest card's RiskFinding to flip to
+        // red+Delayed so the daily message matches Hamlet.
         if (statusName === '实验中') {
+          const hasDelayAb = (nextVersionChanges?.length ?? 0) > 0;
+          if (hasDelayAb && finding) {
+            const latest = nextVersionChanges![nextVersionChanges!.length - 1];
+            finding.delay = { detail: `${latest.from} → ${latest.to}` };
+            finding.level = 'red';
+          }
           delta.riskLevel = undefined;
           delta.riskNotes = undefined;
           deltas.set(fId, delta);

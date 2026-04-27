@@ -68,7 +68,7 @@ const OVERALL_STATUS_MAP: Record<string, string> = {
   '已完成':        'Done',
 };
 
-function resolveDisplayStatus(overallStatusName: string): string {
+export function resolveDisplayStatus(overallStatusName: string): string {
   return OVERALL_STATUS_MAP[overallStatusName] ?? (overallStatusName || 'Unknown');
 }
 
