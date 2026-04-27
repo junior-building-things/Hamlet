@@ -13,6 +13,7 @@ import {
   extractFigmaUrlFromPrd,
   readDocContent,
   extractDocSections,
+  extractAbSetupTable,
   ChatMessage,
   CardSection,
   CardHeaderTemplate,
@@ -2043,6 +2044,21 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
   // cleanly without round-tripping a tuple via buildAbTestingMessage.
   let background = '_(Background section not found in PRD — fill in)_';
   let abSetup = '_(A/B Setup section not found in PRD — fill in)_';
+  const AB_SETUP_ALIASES = [
+    'ab set-up',
+    'a/b set-up',
+    'a/b testing setup',
+    'ab testing setup',
+    'a/b testing set-up',
+    'ab testing set-up',
+    'a/b setup',
+    'ab setup',
+    'experiment setup',
+    'a/b test setup',
+    'ab test setup',
+    'a/b 设置',
+    'ab实验设置',
+  ];
   if (feature.prd) {
     try {
       const md = await readDocContent(feature.prd);
@@ -2057,24 +2073,21 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
           'what we are building and why',
           'what we are building',
         ] },
-        { canonical: 'AbSetup', aliases: [
-          'ab set-up',
-          'a/b set-up',
-          'a/b testing setup',
-          'ab testing setup',
-          'a/b testing set-up',
-          'ab testing set-up',
-          'a/b setup',
-          'ab setup',
-          'experiment setup',
-          'a/b test setup',
-          'ab test setup',
-          'a/b 设置',
-          'ab实验设置',
-        ] },
+        { canonical: 'AbSetup', aliases: AB_SETUP_ALIASES },
       ]);
       if (sections.has('Background')) background = sections.get('Background')!;
       if (sections.has('AbSetup'))    abSetup    = sections.get('AbSetup')!;
+      // Prefer the table extractor for AB Setup — most PRDs put
+      // the variants in a 3-col table (Group | Treatment | Traffic),
+      // and the inline extractor flattens cells into one stream of
+      // text that's hard to read in the message. The table
+      // extractor only returns Group + Treatment.
+      try {
+        const fromTable = await extractAbSetupTable(feature.prd, AB_SETUP_ALIASES);
+        if (fromTable) abSetup = fromTable;
+      } catch (e) {
+        console.warn(`[digests] AB Setup table extraction failed for "${feature.name}":`, e);
+      }
     } catch (e) {
       console.warn(`[digests] PRD section extraction failed for "${feature.name}":`, e);
     }

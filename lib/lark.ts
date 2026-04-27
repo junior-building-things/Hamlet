@@ -943,6 +943,104 @@ export function extractDocSections(
 }
 
 /**
+ * Find the AB Setup table in a PRD and return a compact one-liner of
+ * each variant's treatment description, in the form
+ *   "v0 (Control) Online version (SA PGC...); v1 SA PGC + UGC..."
+ *
+ * The heading is matched by the same alias list used elsewhere ("AB
+ * set-up" / "A/B testing setup" / etc.). After the heading, the next
+ * Lark table block is treated as the variants table — column 0 is
+ * the group name (v0/v1/...), column 1 is the treatment description.
+ * Header rows are filtered out heuristically (any row whose group
+ * cell text doesn't start with "v" + digit).
+ *
+ * Returns '' if the heading or table can't be located.
+ */
+export async function extractAbSetupTable(docUrl: string, headingAliases: string[]): Promise<string> {
+  let docId: string;
+  try { docId = await resolveDocId(docUrl); } catch { return ''; }
+  const token  = await getAccessToken();
+  let blocks: LarkBlock[];
+  try { blocks = await getDocBlocks(docId, token); } catch { return ''; }
+  if (blocks.length === 0) return '';
+
+  const byId = new Map(blocks.map(b => [b.block_id, b]));
+  const parentOf = new Map<string, string>();
+  for (const b of blocks) {
+    for (const childId of b.children ?? []) parentOf.set(childId, b.block_id);
+  }
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) return '';
+
+  // Walk top-level blocks (children of the page) to find the heading
+  // and then the next table after it.
+  const aliases = headingAliases.map(a => a.toLowerCase());
+  let foundHeading = false;
+  let tableBlock: LarkBlock | undefined;
+  const isTable = (b: LarkBlock | undefined) => !!b && (b.table_cell === undefined && b.children !== undefined && b.children.some(cid => byId.get(cid)?.table_cell !== undefined));
+  for (const childId of pageBlock.children) {
+    const block = byId.get(childId);
+    if (!block) continue;
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      const text = blockText(block).toLowerCase().trim();
+      if (aliases.some(a => text === a || text.startsWith(a))) {
+        foundHeading = true;
+        continue;
+      }
+      // A different heading after we already found ours — stop.
+      if (foundHeading) break;
+    }
+    if (foundHeading && isTable(block)) {
+      tableBlock = block;
+      break;
+    }
+  }
+  if (!tableBlock) return '';
+
+  // Build a row → col → cell map from the cells inside the table.
+  const cellsByRow = new Map<number, Map<number, LarkBlock>>();
+  for (const childId of tableBlock.children ?? []) {
+    const cell = byId.get(childId);
+    if (!cell?.table_cell) continue;
+    const { row_index, col_index } = cell.table_cell;
+    if (!cellsByRow.has(row_index)) cellsByRow.set(row_index, new Map());
+    cellsByRow.get(row_index)!.set(col_index, cell);
+  }
+
+  // Read the joined plain text of every paragraph block inside a cell
+  // (cells can hold multiple paragraphs). Returns trimmed content.
+  function cellText(cellId: string): string {
+    const out: string[] = [];
+    function walk(blockId: string) {
+      const b = byId.get(blockId);
+      if (!b) return;
+      const t = blockText(b);
+      if (t) out.push(t);
+      for (const cid of b.children ?? []) walk(cid);
+    }
+    walk(cellId);
+    return out.join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  const rows = [...cellsByRow.entries()].sort((a, b) => a[0] - b[0]);
+  const lines: string[] = [];
+  for (const [, cols] of rows) {
+    const groupCell = cols.get(0);
+    const treatmentCell = cols.get(1);
+    if (!groupCell || !treatmentCell) continue;
+    const group = cellText(groupCell.block_id);
+    const treatment = cellText(treatmentCell.block_id);
+    if (!group || !treatment) continue;
+    // Filter out the header row: only keep rows whose group looks
+    // like a variant (v0, v1, V2 (Control), etc.).
+    if (!/^v\d/i.test(group)) continue;
+    lines.push(`${group} ${treatment}`);
+  }
+  return lines.join('; ');
+}
+
+/**
  * Edit a specific section (by heading) in a Lark doc, replacing its first
  * paragraph content with new text.
  */
