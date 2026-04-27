@@ -1133,25 +1133,32 @@ export async function extractSectionImageTokens(
 export async function uploadDocImageForMessage(
   imageFileToken: string,
   parentDocToken: string,
+  userAccessToken?: string,
 ): Promise<{ image_key: string; width?: number; height?: number } | null> {
   const tenantToken = await getAccessToken();
   // 1) Download the binary from Drive media API. The `extra` param
   // tells Lark which docx the image belongs to so it can verify
-  // access on our behalf.
+  // access on our behalf. The bot tenant token doesn't have the
+  // docs:document.media:download scope, so we prefer the PM's
+  // user_access_token (which has full doc permissions) when
+  // available, falling back to the bot token otherwise.
   const extra = encodeURIComponent(JSON.stringify({ doc_type: 'docx', doc_token: parentDocToken }));
+  const downloadAuthToken = userAccessToken || tenantToken;
   const dlRes = await fetch(
     `${LARK_BASE_URL}/open-apis/drive/v1/medias/${imageFileToken}/download?extra=${extra}`,
-    { headers: { Authorization: `Bearer ${tenantToken}` } },
+    { headers: { Authorization: `Bearer ${downloadAuthToken}` } },
   );
   if (!dlRes.ok) {
     const body = await dlRes.text().catch(() => '');
-    console.warn(`[lark] image download failed: ${dlRes.status} ${dlRes.statusText} token=${imageFileToken} parent=${parentDocToken} body=${body.slice(0, 400)}`);
+    console.warn(`[lark] image download failed: ${dlRes.status} ${dlRes.statusText} token=${imageFileToken} parent=${parentDocToken} usingUserToken=${!!userAccessToken} body=${body.slice(0, 400)}`);
     return null;
   }
   const blob = await dlRes.blob();
   if (blob.size === 0) return null;
 
-  // 2) Re-upload to IM messages so we can use it in a post message.
+  // 2) Re-upload to IM messages — must use the BOT tenant token here
+  // because the resulting image_key needs to be usable by the bot
+  // when it sends the post.
   const fd = new FormData();
   fd.append('image_type', 'message');
   fd.append('image', blob, 'image.png');

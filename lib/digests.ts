@@ -2063,6 +2063,7 @@ const AB_SETUP_ALIASES = [
 export async function buildAbOpenSection(
   feature: MeegoFeature,
   libraUrl: string,
+  userAccessToken?: string,
 ): Promise<{ cardContent: string; postTitle: string; postParagraphs: PostParagraph[] }> {
   let background = '_(Background section not found in PRD — fill in)_';
   let abSetup = '_(A/B Setup section not found in PRD — fill in)_';
@@ -2155,9 +2156,13 @@ export async function buildAbOpenSection(
         console.log(`[digests] AB-open: found ${imageTokens.length} image(s) in Background for "${feature.name}"`);
         // Resolve the parent doc token once — uploadDocImageForMessage
         // needs it for the Drive media `extra` param so the download
-        // succeeds for images embedded in a docx.
+        // succeeds for images embedded in a docx. We also pass the
+        // PM's user token so the download bypasses the bot's missing
+        // docs:document.media:download scope.
         const parentDocToken = await resolveDocIdFromUrl(feature.prd);
-        const uploaded = await Promise.all(imageTokens.map(t => uploadDocImageForMessage(t, parentDocToken)));
+        const uploaded = await Promise.all(
+          imageTokens.map(t => uploadDocImageForMessage(t, parentDocToken, userAccessToken)),
+        );
         for (const img of uploaded) {
           if (!img) continue;
           postParagraphs.push([
@@ -2187,8 +2192,26 @@ export async function sendAbOpenDigestCard(
     console.warn('[digests] no bot token; skipping AB Testing digest card');
     return;
   }
+  // Resolve the PM's user-access token once — needed so PRD image
+  // downloads succeed (the bot lacks docs:document.media:download).
+  let userAccessToken: string | undefined;
+  try {
+    const state = await loadDigestState();
+    const userRefreshToken = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
+    if (userRefreshToken) {
+      const result = await refreshUserToken(userRefreshToken);
+      if (result) {
+        userAccessToken = result.accessToken;
+        // Persist the rotated refresh token so the next run can chain.
+        state.larkUserRefreshToken = result.refreshToken;
+        await saveDigestState(state);
+      }
+    }
+  } catch (e) {
+    console.warn('[digests] AB-open: user token refresh failed (image download may fail):', e);
+  }
   const built = await Promise.allSettled(
-    features.map(({ feature, libraUrl }) => buildAbOpenSection(feature, libraUrl)),
+    features.map(({ feature, libraUrl }) => buildAbOpenSection(feature, libraUrl, userAccessToken)),
   );
   const sections: CardSection[] = [];
   for (let i = 0; i < built.length; i++) {
