@@ -271,7 +271,7 @@ function AddLinkButton({ feature, onLinkUpdate }: {
   const [mounted, setMounted] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const hideTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -287,18 +287,35 @@ function AddLinkButton({ feature, onLinkUpdate }: {
     if (pickedKey && inputRef.current) inputRef.current.focus();
   }, [pickedKey]);
 
+  // Click-outside to close — robust against re-renders, search filter changes,
+  // and other hover/mouseleave timing issues.
+  useEffect(() => {
+    if (!showMenu) return;
+    function handleDocClick(e: MouseEvent) {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target) || ref.current?.contains(target)) return;
+      setShowMenu(false);
+      setPickedKey(null);
+      setDraft('');
+    }
+    document.addEventListener('mousedown', handleDocClick);
+    return () => document.removeEventListener('mousedown', handleDocClick);
+  }, [showMenu]);
+
   if (missingLinks.length === 0) return null;
 
-  function show() {
-    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+  function toggle() {
+    if (showMenu) {
+      setShowMenu(false);
+      setPickedKey(null);
+      setDraft('');
+      return;
+    }
     if (ref.current) {
       const r = ref.current.getBoundingClientRect();
       setAnchor({ top: r.top, left: r.left, width: r.width });
     }
     setShowMenu(true);
-  }
-  function scheduleHide() {
-    hideTimer.current = setTimeout(() => { setShowMenu(false); setPickedKey(null); setDraft(''); }, 150);
   }
   function commit() {
     const trimmed = draft.trim();
@@ -312,8 +329,7 @@ function AddLinkButton({ feature, onLinkUpdate }: {
     <>
       <button
         ref={ref}
-        onMouseEnter={show}
-        onMouseLeave={scheduleHide}
+        onClick={toggle}
         className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--link-circle)] cursor-pointer hover:brightness-125 relative ml-[-4px]"
         style={{ zIndex: 0 }}
       >
@@ -321,6 +337,7 @@ function AddLinkButton({ feature, onLinkUpdate }: {
       </button>
       {showMenu && mounted && createPortal(
         <div
+          ref={menuRef}
           className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-2 min-w-[140px]"
           style={{
             top: anchor.top - 8,
@@ -328,8 +345,6 @@ function AddLinkButton({ feature, onLinkUpdate }: {
             transform: 'translate(-50%, -100%)',
             zIndex: 9999,
           }}
-          onMouseEnter={show}
-          onMouseLeave={scheduleHide}
         >
           {pickedKey ? (
             <input
