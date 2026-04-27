@@ -207,6 +207,24 @@ Original message: \${content}
 
 Reply with ONLY the follow-up text (no quotes, no explanation). The @mentions will be added automatically, so don't include @Name in your response.`;
 
+const HAMLET_AB_RESULTS_SUMMARY = `You are summarising the results of an A/B experiment for a TikTok feature called "\${featureName}". You will be given the full A/B report text below.
+
+Produce a 2-3 bullet point summary that captures the key metric movements. Each bullet should be one short line.
+
+Format guidelines:
+- First bullet: top-line health — say "App key metrics and DM metrics have normal fluctuations." if there's no significant impact. If there IS significant negative or positive movement on App-level or DM-level health metrics, call it out instead.
+- Second bullet: the headline positive impact, framed in plain English (e.g. "More users are sending stickers in DM"), followed by the most relevant 2-4 metric deltas. Each delta should include the metric name, the relative percentage change with sign, and the absolute before→after values in parentheses if available, comma-separated. Example: "Send Sticker uv/au +2.23% (0.1071->0.1095), Send Sticker pv/au +4.7%, Send Big Sticker uv/au +9.6% (0.0436->0.0479), Send Big Sticker pv/au +10.7%."
+- Third bullet (optional): a secondary positive impact specific to this feature (e.g. typing recommendation usage), in the same format. Only include if the metrics are clearly relevant to the feature; otherwise stop at two bullets.
+
+Rules:
+- Use - as the bullet marker.
+- No bold, no headings, no preamble, no closing line — just the bullets.
+- Don't repeat the feature name in the bullets.
+- If a metric value isn't in the report, omit the parenthetical absolute values rather than fabricating them.
+
+A/B report text:
+\${abReportContent}`;
+
 // ─── Junior prompts ─────────────────────────────────────────────────────────
 
 const JUNIOR_SYSTEM_PROMPT = `You are Junior, a friendly and capable AI assistant in a Lark group chat.
@@ -400,6 +418,16 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     description: 'Generate a friendly nudge for unanswered @-mentions',
     variables: ['agentDescription', 'mentionNames', 'content'],
     default: HAMLET_UNANSWERED_FOLLOWUP,
+  },
+  {
+    id: 'hamlet.ab_results_summary',
+    name: 'Hamlet — AB results summary',
+    service: 'hamlet',
+    fileRef: 'lib/digests.ts',
+    model: 'gemini-2.5-flash-lite',
+    description: 'Summarises a feature AB report into 2-3 bullet points for the AB-concluded card',
+    variables: ['featureName', 'abReportContent'],
+    default: HAMLET_AB_RESULTS_SUMMARY,
   },
 
   // Junior

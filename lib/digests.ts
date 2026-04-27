@@ -2167,6 +2167,240 @@ export async function buildAbOpenSection(
   return { cardContent, cardImages, postTitle, postParagraphs };
 }
 
+// Shared list of PRD heading aliases for the "What we are building"
+// section, reused by both AB-open and AB-concluded card builders.
+const BACKGROUND_ALIASES = [
+  'what we are building?',
+  'what we are building and why?',
+  'what we are building and why',
+  'what we are building',
+  'what are we building?',
+  'what are we building and why?',
+  'what are we building and why',
+  'what are we building',
+];
+
+/**
+ * Read the feature's AB report and run it through Gemini using the
+ * 'hamlet.ab_results_summary' prompt. Returns 2-3 bullet lines or a
+ * placeholder if anything fails (no AB report URL, can't read the
+ * doc, no Gemini key, etc.). The bullets are emitted as plain text;
+ * the card / post renderer wraps them as separate paragraphs.
+ */
+async function summariseAbReport(featureName: string, abReportUrl: string): Promise<string> {
+  if (!abReportUrl) return '_(AB report URL not available — fill in)_';
+  let content = '';
+  try {
+    content = await readDocContent(abReportUrl);
+  } catch (e) {
+    console.warn(`[digests] AB-concluded: read AB report failed for "${featureName}":`, e);
+    return '_(Could not read AB report — fill in)_';
+  }
+  if (!content) return '_(AB report is empty — fill in)_';
+
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey) return '_(Gemini not configured — fill in)_';
+  const { getPrompt: getPromptFn } = await import('./prompts');
+  const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
+  const def = getDefFn('hamlet.ab_results_summary');
+  const tmpl = await getPromptFn('hamlet.ab_results_summary', def?.default ?? '');
+  // Cap report content so we don't blow Gemini's input budget on
+  // very long reports — first 30k chars typically covers the
+  // headline tables + key metrics section.
+  const truncated = content.length > 30_000 ? content.slice(0, 30_000) + '\n…[truncated]' : content;
+  const prompt = renderFn(tmpl, { featureName, abReportContent: truncated });
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim();
+    return raw || '_(Gemini returned empty — fill in)_';
+  } catch (e) {
+    console.warn(`[digests] AB-concluded: Gemini summary failed for "${featureName}":`, e);
+    return '_(Gemini summary failed — fill in)_';
+  }
+}
+
+/**
+ * Build the per-feature card section + Send-button payload for one
+ * AB-concluded transition. Mirrors buildAbOpenSection but swaps:
+ *   - Title tag: [✅ AB concluded] instead of [📲 AB open]
+ *   - "A/B Results" (Gemini summary of AB report) instead of "A/B Setup"
+ *   - Reference links: AB Report | Libra (instead of PRD | Libra)
+ * Background image (from PRD "What we are building" section) and the
+ * trailing cc@Thomas mention are unchanged.
+ */
+export async function buildAbConcludedSection(
+  feature: MeegoFeature,
+  abReportUrl: string,
+  libraUrl: string,
+  userAccessToken?: string,
+): Promise<{
+  cardContent: string;
+  cardImages: Array<{ image_key: string; alt?: string }>;
+  postTitle: string;
+  postParagraphs: PostParagraph[];
+}> {
+  let background = '_(Background section not found in PRD — fill in)_';
+  if (feature.prd) {
+    try {
+      const md = await readDocContent(feature.prd);
+      const sections = extractDocSections(md, [
+        { canonical: 'Background', aliases: BACKGROUND_ALIASES },
+      ]);
+      if (sections.has('Background')) background = sections.get('Background')!;
+    } catch (e) {
+      console.warn(`[digests] AB-concluded: PRD section extraction failed for "${feature.name}":`, e);
+    }
+  }
+  const abResults = await summariseAbReport(feature.name, abReportUrl);
+
+  const refs: Array<{ label: string; url: string }> = [];
+  if (abReportUrl) refs.push({ label: 'AB Report', url: abReportUrl });
+  if (libraUrl)    refs.push({ label: 'Libra',     url: libraUrl });
+  const headlineName = `[IM] ${feature.name}`;
+
+  // Card section: bold lead line, then the structured body. The
+  // multi-line abResults (each line a bullet) is embedded directly
+  // into the lark_md content — Lark renders \n as a soft break.
+  const cardContent = [
+    `**${headlineName} [✅ AB concluded]**`,
+    `**Background**: ${background}`,
+    `**A/B Results**:`,
+    abResults,
+    refs.length > 0
+      ? `**Reference**: ${refs.map(r => `[${r.label}](${r.url})`).join(' | ')}`
+      : '',
+  ].filter(Boolean).join('\n');
+
+  // Post (rich text). Each AB-results bullet is its own paragraph
+  // so the rich-text rendering preserves the bullet shape.
+  const postTitle = '';
+  const postParagraphs: PostParagraph[] = [
+    [{ tag: 'text', text: `${headlineName} [✅ AB concluded]`, style: ['bold'] }],
+    [
+      { tag: 'text', text: 'Background: ', style: ['bold'] },
+      { tag: 'text', text: background },
+    ],
+    [{ tag: 'text', text: 'A/B Results:', style: ['bold'] }],
+  ];
+  for (const line of abResults.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    postParagraphs.push([{ tag: 'text', text: trimmed }]);
+  }
+  if (refs.length > 0) {
+    const inlines: Array<{ tag: 'text'; text: string; style?: string[] } | { tag: 'a'; text: string; href: string }> = [
+      { tag: 'text', text: 'Reference: ', style: ['bold'] },
+    ];
+    refs.forEach((r, i) => {
+      if (i > 0) inlines.push({ tag: 'text', text: ' | ' });
+      inlines.push({ tag: 'a', text: r.label, href: r.url });
+    });
+    postParagraphs.push(inlines);
+  }
+
+  // Same Background images as AB-open: lifted from the PRD's "What we
+  // are building" section, re-uploaded for use in IM.
+  const cardImages: Array<{ image_key: string; alt?: string }> = [];
+  if (feature.prd) {
+    try {
+      const imageTokens = await extractSectionImageTokens(feature.prd, BACKGROUND_ALIASES);
+      if (imageTokens.length > 0) {
+        const parentDocToken = await resolveDocIdFromUrl(feature.prd);
+        const uploaded = await Promise.all(
+          imageTokens.map(t => uploadDocImageForMessage(t, parentDocToken, userAccessToken)),
+        );
+        for (const img of uploaded) {
+          if (!img) continue;
+          cardImages.push({ image_key: img.image_key });
+          postParagraphs.push([
+            { tag: 'img', image_key: img.image_key, width: img.width, height: img.height },
+          ]);
+        }
+      }
+    } catch (e) {
+      console.warn(`[digests] AB-concluded image extraction failed for "${feature.name}":`, e);
+    }
+  }
+
+  // Trailing cc@Thomas mention (matches AB-open).
+  postParagraphs.push([
+    { tag: 'text', text: 'cc' },
+    { tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID },
+  ]);
+
+  return { cardContent, cardImages, postTitle, postParagraphs };
+}
+
+/**
+ * Send the AB-concluded digest card aggregating all features whose
+ * AB Brief meeting was just scheduled. Mirrors sendAbOpenDigestCard
+ * — green header, one section per feature, Send-to-PM-Group button
+ * routes through the same card-action handler.
+ */
+export async function sendAbConcludedDigestCard(
+  features: Array<{ feature: MeegoFeature; abReportUrl: string; libraUrl: string }>,
+): Promise<void> {
+  if (features.length === 0) return;
+  const token = await getLarkBotToken();
+  if (!token) {
+    console.warn('[digests] no bot token; skipping AB-concluded digest card');
+    return;
+  }
+  let userAccessToken: string | undefined;
+  try {
+    const state = await loadDigestState();
+    const userRefreshToken = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
+    if (userRefreshToken) {
+      const result = await refreshUserToken(userRefreshToken);
+      if (result) {
+        userAccessToken = result.accessToken;
+        state.larkUserRefreshToken = result.refreshToken;
+        await saveDigestState(state);
+      }
+    }
+  } catch (e) {
+    console.warn('[digests] AB-concluded: user token refresh failed:', e);
+  }
+  const built: Array<PromiseSettledResult<{ cardContent: string; cardImages: Array<{ image_key: string; alt?: string }>; postTitle: string; postParagraphs: PostParagraph[] }>> = [];
+  for (const { feature, abReportUrl, libraUrl } of features) {
+    try {
+      const value = await buildAbConcludedSection(feature, abReportUrl, libraUrl, userAccessToken);
+      built.push({ status: 'fulfilled', value });
+    } catch (e) {
+      built.push({ status: 'rejected', reason: e });
+    }
+  }
+  const sections: CardSection[] = [];
+  for (let i = 0; i < built.length; i++) {
+    const result = built[i];
+    if (result.status !== 'fulfilled') {
+      console.warn(`[digests] AB-concluded section build failed for "${features[i].feature.name}":`, result.reason);
+      continue;
+    }
+    const { cardContent, cardImages, postTitle, postParagraphs } = result.value;
+    sections.push({
+      content: cardContent,
+      images: cardImages,
+      buttons: [
+        {
+          text: 'Send to PM Group',
+          type: 'primary',
+          value: { action: 'send_ab_open_to_pm_group', postTitle, postParagraphs },
+        },
+      ],
+    });
+  }
+  if (sections.length === 0) return;
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore',
+  });
+  const headerText = `✅ AB Briefs Scheduled — ${today}`;
+  const id = await sendInteractiveCardToChat(AB_OPEN_PERSONAL_CHAT_ID, headerText, 'green', sections, token);
+  console.log(`[digests] AB-concluded digest card sent (${sections.length} feature${sections.length === 1 ? '' : 's'}): message_id=${id ?? 'null'}`);
+}
+
 /**
  * Send the daily AB-open digest card aggregating ALL features that
  * transitioned into 实验中 in this digest run. One card with a yellow
@@ -2871,6 +3105,56 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     console.log(
       `[digests] Q&A scan: ${scanned} chats scanned (${skippedEnded} ended, ${skippedNoBrief} no brief), ${unansweredFindings.length} with unanswered questions`,
     );
+  }
+
+  // Step 6c: AB-concluded scan — for each Junior feature chat, look
+  // for a recent calendar invite whose title contains "AB Brief". When
+  // we find one, queue the feature for the AB-concluded digest card
+  // (Gemini-summarised AB report + Send-to-PM-Group button).
+  // Dedup'd by Meego workItemId via `state.abConcludedNotified`.
+  if (botToken) {
+    const abConcluded = new Set<string>(state.abConcludedNotified ?? []);
+    let abConcludedChanged = false;
+    const abConcludedTransitions: Array<{ feature: MeegoFeature; abReportUrl: string; libraUrl: string }> = [];
+    const briefScanWindowMs = 14 * 24 * 60 * 60 * 1000; // 14 days
+    const briefSinceMs = Date.now() - briefScanWindowMs;
+    let scanned = 0;
+    let matched = 0;
+    for (const chat of juniorChats) {
+      if (!chat.meegoId || !chat.chatId) continue;
+      const feature = featureById.get(chat.meegoId);
+      if (!feature) continue;
+      if (abConcluded.has(feature.workItemId)) continue;
+      scanned++;
+      try {
+        const msgs = await readChatMessages(chat.chatId, briefSinceMs, botToken);
+        const hasBrief = msgs.some(m => {
+          const body = m.body?.content ?? '';
+          return /ab\s*brief/i.test(body);
+        });
+        if (!hasBrief) continue;
+        matched++;
+        abConcluded.add(feature.workItemId);
+        abConcludedChanged = true;
+        // Pull AB report URL from the cached link state (populated by
+        // Task 3 in Step 5 — searchAbReport across the PM's Drive).
+        const links = state.featureLinks?.[feature.workItemId];
+        const abReportUrl = links?.abReportUrl ?? '';
+        // Libra URL lives on the cached Feature.
+        const cachedFeature = (await readFeatureCache())?.features.find(c => (c.meegoIssueId ?? c.id) === feature.workItemId);
+        const libraUrl = cachedFeature?.libraUrl ?? '';
+        abConcludedTransitions.push({ feature, abReportUrl, libraUrl });
+        console.log(`[digests] AB-concluded queue "${feature.name}" — AB Brief invite detected`);
+      } catch (e) {
+        console.warn(`[digests] AB-concluded scan failed for ${feature.name}:`, e);
+      }
+    }
+    console.log(`[digests] AB-concluded scan: ${scanned} chats scanned, ${matched} matched`);
+    if (abConcludedChanged) state.abConcludedNotified = [...abConcluded];
+    if (abConcludedTransitions.length > 0) {
+      sendAbConcludedDigestCard(abConcludedTransitions)
+        .catch(e => console.warn('[digests] AB-concluded digest card send failed:', e));
+    }
   }
 
   // Step 6b: Compute risk + versionChanges deltas per cached feature and

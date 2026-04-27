@@ -135,6 +135,12 @@ export interface DigestStateFile {
    * AB Testing for many digest runs in a row.
    */
   abOpenNotified?: string[];
+  /**
+   * Meego work item IDs that have already received an AB-concluded
+   * notification card. Fires once per feature on the transition from
+   * 实验中 → 已完成 (AB Testing → Done).
+   */
+  abConcludedNotified?: string[];
 }
 
 /**
