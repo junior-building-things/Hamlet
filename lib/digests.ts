@@ -571,75 +571,43 @@ async function fetchMeegoFeature(workItemId: string, name: string, projectKey: s
  * Only called for already-filtered in-dev features to minimise MCP load.
  */
 async function resolveIosVersion(meegoUrl: string): Promise<string> {
-  let nodeRaw: string;
+  // Match Hamlet UI's logic (lib/meego.ts fetchFeature): pull all four
+  // version fields off the work item brief, take the lowest LAUNCHED
+  // version across iOS / Android; fall back to the lowest PLANNED if
+  // neither launched field is set yet.
+  let raw: string;
   try {
-    nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
+    raw = await callMeegoMcp('get_workitem_brief', {
+      url: meegoUrl,
+      fields: ['ios_actual_online_version', 'android_actual_online_version', 'field_08a9ca', 'field_c88970'],
+    });
   } catch {
     return '';
   }
+  let parsed: BriefJson;
+  try { parsed = JSON.parse(raw) as BriefJson; } catch { return '';}
+  const fields = parsed.work_item_fields ?? [];
 
-  interface NodeFormItem { field_key?: string; field_name?: string; value?: string; value_label?: string }
-  interface NodeEntry { basic?: { node_key?: string; name?: string }; form_items?: NodeFormItem[] }
-  let nodeData: { list?: NodeEntry[] };
-  try {
-    nodeData = JSON.parse(nodeRaw) as { list?: NodeEntry[] };
-  } catch {
-    return '';
-  }
+  const lowest = (versions: string[]): string => {
+    if (versions.length === 0) return '';
+    return [...versions].sort((a, b) => {
+      const [aMaj, aMin] = a.split('.').map(Number);
+      const [bMaj, bMin] = b.split('.').map(Number);
+      return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
+    })[0];
+  };
+  const get = (key: string): string[] =>
+    extractShortVersions(fields.find(f => f.key === key)?.value);
 
-  // Collect work item IDs from field_08a9ca (iOS) then field_c88970 (Android) as fallback
-  function collectVersionIds(fieldKey: string): number[] {
-    const ids: number[] = [];
-    for (const node of nodeData.list ?? []) {
-      for (const fi of node.form_items ?? []) {
-        if (fi.field_key !== fieldKey) continue;
-        try {
-          const parsed = JSON.parse(fi.value ?? '[]') as number[];
-          for (const id of parsed) if (!ids.includes(id)) ids.push(id);
-        } catch { /* skip */ }
-      }
-    }
-    return ids;
-  }
-
-  let versionIds = collectVersionIds('field_08a9ca');
-  if (versionIds.length === 0) versionIds = collectVersionIds('field_c88970');
-  if (versionIds.length === 0) return '';
-
-  // Resolve each version work item ID → version name → short form (e.g. 44.9)
-  const names: string[] = [];
-  for (const id of versionIds) {
-    try {
-      const versionRaw = await callMeegoMcp('get_workitem_brief', {
-        url: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/version/detail/${id}`,
-      });
-      // Version brief: look for work item name in the JSON or markdown
-      try {
-        const parsed = JSON.parse(versionRaw) as BriefJson;
-        const vname = parsed.work_item_attribute?.work_item_name;
-        if (vname) names.push(vname);
-      } catch {
-        // Fallback to markdown parsing for older-format responses
-        const nameMatch = versionRaw.match(/工作项名称\s*\|\s*([^|\n]+)/);
-        if (nameMatch) names.push(nameMatch[1].trim());
-      }
-    } catch { /* skip */ }
-  }
-
-  // Extract short numeric version (e.g. "44.9" from "TikTok-M-iOS-44.9.0") and pick the lowest
-  const shortNames = names
-    .map(n => {
-      const m = n.match(/(\d+\.\d+)(?:\.\d+)?$/);
-      return m ? m[1] : '';
-    })
-    .filter(Boolean);
-  if (shortNames.length === 0) return '';
-  shortNames.sort((a, b) => {
-    const [aMaj, aMin] = a.split('.').map(Number);
-    const [bMaj, bMin] = b.split('.').map(Number);
-    return (aMaj - bMaj) || ((aMin ?? 0) - (bMin ?? 0));
-  });
-  return shortNames[0];
+  const launched = lowest([
+    ...get('ios_actual_online_version'),
+    ...get('android_actual_online_version'),
+  ]);
+  if (launched) return launched;
+  return lowest([
+    ...get('field_08a9ca'),
+    ...get('field_c88970'),
+  ]);
 }
 
 // ─── Server planned launch date resolution ───────────────────────────────
