@@ -858,15 +858,23 @@ export async function readDocContent(docUrl: string): Promise<string> {
 }
 
 /**
- * Pull the body text under each named heading from a markdown-ish doc
+ * Pull the body text under each named section from a markdown-ish doc
  * representation (the kind `readDocContent` produces — `#`/`##`/`###`
  * prefixes denote heading levels, plain lines are body content).
  *
- * Returns a Map of the canonical (input-cased) heading name → joined
- * body text. Headings are matched case-insensitively, and any of the
- * supplied alias forms in `aliases` count as a hit for the canonical
- * name. Bodies are trimmed and capped at `maxChars` to keep downstream
- * card content compact.
+ * Recognises THREE patterns for section starts:
+ *   1. Heading line:      `## Background` / `### 背景`
+ *   2. Inline bold label: `**Background**: …`
+ *   3. Inline plain label:`Background: …` (must lead the line, may be
+ *                         preceded by bullet markers `•`, `-`, `*`)
+ *
+ * For headings, the body is every following non-heading line until the
+ * next heading. For inline labels, the body is the rest of the same
+ * line PLUS any following non-label, non-heading lines until the next
+ * trigger — so multi-paragraph descriptions still come through.
+ *
+ * Returns a Map of canonical name → joined body text. `maxChars` caps
+ * each body to keep downstream card content compact.
  */
 export function extractDocSections(
   markdown: string,
@@ -875,11 +883,20 @@ export function extractDocSections(
 ): Map<string, string> {
   const out = new Map<string, string>();
   const lines = markdown.split('\n');
-  // Pre-normalise alias lookups → canonical name.
+  // Build the alias → canonical map and a single regex that matches any
+  // alias as an inline label (with or without bold + leading bullet).
   const aliasMap = new Map<string, string>();
   for (const s of sections) {
     for (const a of s.aliases) aliasMap.set(a.toLowerCase(), s.canonical);
   }
+  const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const aliasUnion = [...aliasMap.keys()].map(escape).join('|');
+  // Optional leading whitespace + bullet glyph + optional bold + alias
+  // + optional bold close + optional version-style "(43.9)" + colon.
+  const inlineLabelRe = new RegExp(
+    `^[\\s]*[•*\\-]?[\\s]*(?:\\*\\*)?(${aliasUnion})(?:\\*\\*)?[\\s]*(?:\\([^)]*\\))?[\\s]*[::][\\s]*(.*)$`,
+    'i',
+  );
   let activeCanonical: string | null = null;
   let activeBody: string[] = [];
   const flush = () => {
@@ -893,12 +910,12 @@ export function extractDocSections(
   };
   for (const raw of lines) {
     const line = raw.trim();
+    if (!line) continue;
+    // Pattern 1: heading line.
     const headingMatch = line.match(/^(#+)\s*(.*)$/);
     if (headingMatch) {
       flush();
       const headingText = headingMatch[2].toLowerCase();
-      // Match if the heading exactly equals or starts with any alias
-      // (so "Background and context" still counts as Background).
       activeCanonical = null;
       for (const [alias, canonical] of aliasMap) {
         if (headingText === alias || headingText.startsWith(alias)) {
@@ -908,7 +925,18 @@ export function extractDocSections(
       }
       continue;
     }
-    if (activeCanonical && line) activeBody.push(line);
+    // Pattern 2/3: inline label at line start.
+    const inlineMatch = line.match(inlineLabelRe);
+    if (inlineMatch) {
+      flush();
+      const alias = inlineMatch[1].toLowerCase();
+      activeCanonical = aliasMap.get(alias) ?? null;
+      const rest = inlineMatch[2].trim();
+      if (rest) activeBody.push(rest);
+      continue;
+    }
+    // Continuation body for the active section.
+    if (activeCanonical) activeBody.push(line);
   }
   flush();
   return out;
