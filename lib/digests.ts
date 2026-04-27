@@ -14,6 +14,8 @@ import {
   readDocContent,
   extractDocSections,
   extractAbSetupTable,
+  extractSectionImageTokens,
+  uploadDocImageForMessage,
   PostParagraph,
   ChatMessage,
   CardSection,
@@ -2131,6 +2133,38 @@ export async function buildAbOpenSection(
     });
     postParagraphs.push(inlines);
   }
+
+  // Pull any images that live under the Background section in the
+  // PRD, re-upload them as IM message images, and append each as its
+  // own paragraph after the Reference line. Failures are silent — we
+  // log + skip individual images rather than failing the whole card.
+  if (feature.prd) {
+    try {
+      const imageTokens = await extractSectionImageTokens(feature.prd, [
+        'what we are building?',
+        'what we are building and why?',
+        'what we are building and why',
+        'what we are building',
+        'what are we building?',
+        'what are we building and why?',
+        'what are we building and why',
+        'what are we building',
+      ]);
+      if (imageTokens.length > 0) {
+        console.log(`[digests] AB-open: found ${imageTokens.length} image(s) in Background for "${feature.name}"`);
+        const uploaded = await Promise.all(imageTokens.map(t => uploadDocImageForMessage(t)));
+        for (const img of uploaded) {
+          if (!img) continue;
+          postParagraphs.push([
+            { tag: 'img', image_key: img.image_key, width: img.width, height: img.height },
+          ]);
+        }
+      }
+    } catch (e) {
+      console.warn(`[digests] AB-open image extraction failed for "${feature.name}":`, e);
+    }
+  }
+
   return { cardContent, postTitle, postParagraphs };
 }
 

@@ -135,6 +135,8 @@ interface LarkBlock {
   callout?:    ElementsContainer;
   table_cell?: { row_index: number; col_index: number };
   table?:      unknown;
+  /** Image block (block_type 27). `token` is a Drive media file_token. */
+  image?:      { token?: string; width?: number; height?: number };
   [key: string]: unknown;
 }
 
@@ -1056,6 +1058,105 @@ export async function extractAbSetupTable(docUrl: string, headingAliases: string
     lines.push(`${group} ${treatment}`);
   }
   return lines.join('; ');
+}
+
+/**
+ * Walk the page-level blocks of a doc looking for a heading whose text
+ * matches one of the supplied aliases. Once found, collect the Drive
+ * media file_tokens of every image block (block_type 27) that appears
+ * BEFORE the next same-or-higher-level heading. Recurses into the
+ * children of intermediate blocks (so images nested inside callouts
+ * or lists are picked up too).
+ *
+ * Returns the file_tokens in document order, deduplicated.
+ */
+export async function extractSectionImageTokens(
+  docUrl: string,
+  headingAliases: string[],
+): Promise<string[]> {
+  let docId: string;
+  try { docId = await resolveDocId(docUrl); } catch { return []; }
+  const token  = await getAccessToken();
+  let blocks: LarkBlock[];
+  try { blocks = await getDocBlocks(docId, token); } catch { return []; }
+  if (blocks.length === 0) return [];
+
+  const byId = new Map(blocks.map(b => [b.block_id, b]));
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) return [];
+
+  const aliases = headingAliases.map(a => a.toLowerCase());
+  let foundHeadingLevel: number | undefined;
+  const tokens: string[] = [];
+
+  // Recursively collect image file_tokens from a block subtree.
+  const collectImages = (rootId: string) => {
+    const visit = (blockId: string) => {
+      const b = byId.get(blockId);
+      if (!b) return;
+      if (b.block_type === 27 && b.image?.token) tokens.push(b.image.token);
+      for (const cid of b.children ?? []) visit(cid);
+    };
+    visit(rootId);
+  };
+
+  for (const childId of pageBlock.children) {
+    const block = byId.get(childId);
+    if (!block) continue;
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      const text = blockText(block).toLowerCase().trim();
+      if (aliases.some(a => text === a || text.startsWith(a))) {
+        foundHeadingLevel = block.block_type;
+        continue;
+      }
+      if (foundHeadingLevel !== undefined && block.block_type <= foundHeadingLevel) break;
+    }
+    if (foundHeadingLevel !== undefined) collectImages(childId);
+  }
+
+  // Dedupe while preserving order.
+  return [...new Set(tokens)];
+}
+
+/**
+ * Download an image referenced by a Lark Drive media `file_token`,
+ * then re-upload it via `/im/v1/images` so it can be embedded in a
+ * Lark `post` message via `{tag: 'img', image_key, …}`. Returns the
+ * resulting `image_key` or null on any failure (network, auth, image
+ * format, etc. — the caller should silently skip the image rather
+ * than blowing up the parent message).
+ */
+export async function uploadDocImageForMessage(
+  docFileToken: string,
+): Promise<{ image_key: string; width?: number; height?: number } | null> {
+  const tenantToken = await getAccessToken();
+  // 1) Download the binary from Drive media API.
+  const dlRes = await fetch(
+    `${LARK_BASE_URL}/open-apis/drive/v1/medias/${docFileToken}/download`,
+    { headers: { Authorization: `Bearer ${tenantToken}` } },
+  );
+  if (!dlRes.ok) {
+    console.warn(`[lark] image download failed: ${dlRes.status} ${dlRes.statusText} token=${docFileToken}`);
+    return null;
+  }
+  const blob = await dlRes.blob();
+  if (blob.size === 0) return null;
+
+  // 2) Re-upload to IM messages so we can use it in a post message.
+  const fd = new FormData();
+  fd.append('image_type', 'message');
+  fd.append('image', blob, 'image.png');
+  const upRes = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/images`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantToken}` },
+    body: fd,
+  });
+  const upData = await upRes.json() as { code: number; msg?: string; data?: { image_key?: string } };
+  if (upData.code !== 0 || !upData.data?.image_key) {
+    console.warn(`[lark] image reupload failed: code=${upData.code} msg=${upData.msg}`);
+    return null;
+  }
+  return { image_key: upData.data.image_key };
 }
 
 /**
@@ -2356,7 +2457,8 @@ export async function sendDmByEmail(
 export type PostInline =
   | { tag: 'text'; text: string; style?: string[] }
   | { tag: 'a'; text: string; href: string }
-  | { tag: 'at'; user_id: string };
+  | { tag: 'at'; user_id: string }
+  | { tag: 'img'; image_key: string; width?: number; height?: number };
 
 /** A `post` paragraph is an array of inline elements. Empty array = blank line. */
 export type PostParagraph = PostInline[];
