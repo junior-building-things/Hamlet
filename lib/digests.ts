@@ -2106,9 +2106,10 @@ export async function buildAbOpenSection(
   if (feature.prd) refs.push({ label: 'PRD',   url: feature.prd });
   if (libraUrl)    refs.push({ label: 'Libra', url: libraUrl });
 
-  // Prefix the feature name with [IM] (the team's product line tag),
-  // unless the name already starts with a bracketed tag.
-  const headlineName = /^\s*\[/.test(feature.name) ? feature.name : `[IM] ${feature.name}`;
+  // Always prefix the feature name with [IM] (the team's product
+  // line tag), even when the name already starts with another
+  // bracketed tag like [Half-Day PRD].
+  const headlineName = `[IM] ${feature.name}`;
 
   // Card section: bold lead line, then the structured body.
   const cardContent = [
