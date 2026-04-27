@@ -109,3 +109,20 @@ export async function getCodeFreezeDate(version: string): Promise<Date | null> {
 
   return calendarCache.get(version) ?? null;
 }
+
+/**
+ * Get the entire version → code freeze date map. Used by the API
+ * endpoint that exposes the calendar to the Hamlet client so the
+ * Version badge can show "merge date for THIS version" on hover.
+ */
+export async function getAllCodeFreezeDates(): Promise<Record<string, string>> {
+  if (!calendarCache || Date.now() - calendarFetchedAt > CACHE_TTL) {
+    calendarCache = await fetchCalendar();
+    calendarFetchedAt = Date.now();
+  }
+  const out: Record<string, string> = {};
+  for (const [version, date] of calendarCache) {
+    out[version] = date.toISOString().slice(0, 10); // YYYY-MM-DD
+  }
+  return out;
+}

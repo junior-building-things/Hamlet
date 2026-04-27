@@ -21,13 +21,45 @@ function versionColor(version: string) {
   return VERSION_COLORS[Math.abs(hash) % VERSION_COLORS.length];
 }
 
-export function VersionBadge({ version, versionHistory }: { version?: string; versionHistory?: string[] }) {
+// Module-level cache: fetched once per page load, shared across all
+// VersionBadge instances. Promise so concurrent first renders dedupe.
+let mergeCalendarPromise: Promise<Record<string, string>> | null = null;
+function loadMergeCalendar(): Promise<Record<string, string>> {
+  if (!mergeCalendarPromise) {
+    mergeCalendarPromise = fetch('/api/merge-calendar')
+      .then(r => r.ok ? r.json() : {})
+      .catch(() => ({}));
+  }
+  return mergeCalendarPromise;
+}
+
+function formatMergeDate(iso: string): string {
+  // Render "23 Apr" in Singapore time so the tooltip is succinct.
+  const d = new Date(iso + 'T00:00:00+08:00');
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' });
+}
+
+export function VersionBadge({ version }: { version?: string; versionHistory?: string[] }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0 });
   const [mounted, setMounted] = useState(false);
+  const [mergeDate, setMergeDate] = useState<string | null>(null);
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Resolve merge date for THIS version once the calendar loads.
+  useEffect(() => {
+    if (!version) return;
+    let cancelled = false;
+    loadMergeCalendar().then(map => {
+      if (cancelled) return;
+      const iso = map[version];
+      setMergeDate(iso ? formatMergeDate(iso) : null);
+    });
+    return () => { cancelled = true; };
+  }, [version]);
 
   const show = useCallback(() => {
     if (ref.current) {
@@ -40,8 +72,6 @@ export function VersionBadge({ version, versionHistory }: { version?: string; ve
 
   if (!version) return null;
   const config = versionColor(version);
-  const hasHistory = versionHistory && versionHistory.length > 1;
-  const trail = hasHistory ? versionHistory.join(' → ') : undefined;
 
   return (
     <>
@@ -53,7 +83,7 @@ export function VersionBadge({ version, versionHistory }: { version?: string; ve
       >
         {version}
       </span>
-      {trail && showTooltip && mounted && createPortal(
+      {mergeDate && showTooltip && mounted && createPortal(
         <div
           className="fixed px-2.5 py-1.5 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-xl text-[11px] text-[var(--foreground)] whitespace-nowrap pointer-events-none"
           style={{
@@ -63,7 +93,7 @@ export function VersionBadge({ version, versionHistory }: { version?: string; ve
             zIndex: 9999,
           }}
         >
-          {trail}
+          Merge: {mergeDate}
           <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
         </div>,
         document.body,
