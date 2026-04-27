@@ -975,9 +975,12 @@ export async function extractAbSetupTable(docUrl: string, headingAliases: string
   if (!pageBlock?.children) return '';
 
   // Walk top-level blocks (children of the page) to find the heading
-  // and then the next table after it.
+  // and then the next table after it. Subheadings between the matched
+  // heading and the table are allowed (lower in the page hierarchy
+  // = higher block_type number, since heading1=3, heading2=4, …);
+  // only a heading at the SAME-or-higher level terminates the scan.
   const aliases = headingAliases.map(a => a.toLowerCase());
-  let foundHeading = false;
+  let foundHeadingLevel: number | undefined;
   let tableBlock: LarkBlock | undefined;
   // A table block has block_type 31 in Lark's docx schema. It carries
   // its cell ids under both `children` and `table.cells`, plus a
@@ -990,13 +993,12 @@ export async function extractAbSetupTable(docUrl: string, headingAliases: string
     if (HEADING_BLOCK_TYPES.has(block.block_type)) {
       const text = blockText(block).toLowerCase().trim();
       if (aliases.some(a => text === a || text.startsWith(a))) {
-        foundHeading = true;
+        foundHeadingLevel = block.block_type;
         continue;
       }
-      // A different heading after we already found ours — stop.
-      if (foundHeading) break;
+      if (foundHeadingLevel !== undefined && block.block_type <= foundHeadingLevel) break;
     }
-    if (foundHeading && isTableBlock(block)) {
+    if (foundHeadingLevel !== undefined && isTableBlock(block)) {
       tableBlock = block;
       break;
     }
