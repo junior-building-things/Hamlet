@@ -2079,7 +2079,7 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
       console.warn(`[digests] PRD section extraction failed for "${feature.name}":`, e);
     }
   }
-  const titleLine = `**[LetMeSee] ${feature.name} [📲 AB open]**`;
+  const titleLine = `**:LetMeSee: ${feature.name} [📲 AB open]**`;
   const version = feature.iosVersion ? ` (${feature.iosVersion})` : '';
   const refs: string[] = [];
   if (feature.prd) refs.push(`[PRD](${feature.prd})`);
