@@ -2187,14 +2187,39 @@ const BACKGROUND_ALIASES = [
  * doc, no Gemini key, etc.). The bullets are emitted as plain text;
  * the card / post renderer wraps them as separate paragraphs.
  */
-async function summariseAbReport(featureName: string, abReportUrl: string): Promise<string> {
+async function summariseAbReport(
+  featureName: string,
+  abReportUrl: string,
+  userAccessToken?: string,
+): Promise<string> {
   if (!abReportUrl) return '_(AB report URL not available — fill in)_';
   let content = '';
+  const tryRead = async () => readDocContent(abReportUrl);
   try {
-    content = await readDocContent(abReportUrl);
+    content = await tryRead();
   } catch (e) {
-    console.warn(`[digests] AB-concluded: read AB report failed for "${featureName}":`, e);
-    return '_(Could not read AB report — fill in)_';
+    const msg = e instanceof Error ? e.message : String(e);
+    // Bot doesn't have read access to the AB report doc. Try to grant
+    // it via the PM's user token, then retry once.
+    if ((msg.includes('1770032') || /forbidden/i.test(msg)) && userAccessToken) {
+      try {
+        const { grantBotEditAccess } = await import('./lark');
+        const granted = await grantBotEditAccess(abReportUrl, userAccessToken);
+        if (granted) {
+          try {
+            content = await tryRead();
+          } catch (e2) {
+            console.warn(`[digests] AB-concluded: re-read after grant failed for "${featureName}":`, e2);
+          }
+        }
+      } catch (ge) {
+        console.warn(`[digests] AB-concluded: grant access failed for "${featureName}":`, ge);
+      }
+    }
+    if (!content) {
+      console.warn(`[digests] AB-concluded: read AB report failed for "${featureName}":`, e);
+      return '_(Could not read AB report — fill in)_';
+    }
   }
   if (!content) return '_(AB report is empty — fill in)_';
 
@@ -2253,7 +2278,7 @@ export async function buildAbConcludedSection(
       console.warn(`[digests] AB-concluded: PRD section extraction failed for "${feature.name}":`, e);
     }
   }
-  const abResults = await summariseAbReport(feature.name, abReportUrl);
+  const abResults = await summariseAbReport(feature.name, abReportUrl, userAccessToken);
 
   const refs: Array<{ label: string; url: string }> = [];
   if (abReportUrl) refs.push({ label: 'AB Report', url: abReportUrl });
