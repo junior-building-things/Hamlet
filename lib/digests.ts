@@ -2058,6 +2058,12 @@ export async function sendAbTestingTransitionCard(feature: MeegoFeature, libraUr
           'what we are building',
         ] },
         { canonical: 'AbSetup', aliases: [
+          'ab set-up',
+          'a/b set-up',
+          'a/b testing setup',
+          'ab testing setup',
+          'a/b testing set-up',
+          'ab testing set-up',
           'a/b setup',
           'ab setup',
           'experiment setup',
