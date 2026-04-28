@@ -1972,27 +1972,43 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
     const lines: string[] = [`**${escapeMd(f.name)}**`];
     for (const q of finding.questions) {
       const sourceLabel = q.source === 'prd_comment' ? 'PRD comment' : 'Chat';
-      // DEBUG: drop the <at> tag to test if it's breaking callback
-      // buttons (200340 on Let Jr. Reply). Render plain @name only
-      // when we have one, otherwise no asker tag.
+      // Render the asker as a Lark @mention via open_id — Lark's
+      // client resolves the display name + avatar from the id.
       let fromTag = '';
-      if (q.senderName) {
+      if (q.senderOpenId && q.senderOpenId.startsWith('ou_')) {
+        fromTag = ` from <at id="${q.senderOpenId}"></at>`;
+      } else if (q.senderName) {
         fromTag = ` from @${q.senderName}`;
       }
       const preview = (q.text || '(no text)').replace(/\s+/g, ' ').trim();
       const safePreview = escapeMd(preview);
       lines.push(`- ${sourceLabel}${fromTag}: ${safePreview}`);
     }
-    // DEBUG: drop URL buttons entirely so we test Let Jr. Reply
-    // alone in the action row. Once we identify the trigger we can
-    // add Open PRD / Open Group back.
     const buttons: CardButton[] = [];
+    if (f.prd) buttons.push({ text: 'Open PRD', type: 'default', url: f.prd });
+    if (f.chatId) {
+      buttons.push({
+        text: 'Open Group',
+        type: 'default',
+        url: `https://applink.larkoffice.com/client/chat/open?openChatId=${f.chatId}`,
+      });
+    }
     const q = finding.questions[0];
     if (q && (q.source === 'prd_comment' || q.source === 'chat')) {
       buttons.push({
         text: 'Let Jr. Reply',
         type: 'primary',
-        value: { action: 'letjr_reply' },
+        value: {
+          action: 'letjr_reply',
+          featureName: f.name,
+          prdUrl: f.prd ?? '',
+          chatId: f.chatId ?? '',
+          questionText: q.text,
+          askerOpenId: q.senderOpenId,
+          questionSource: q.source,
+          commentId: q.source === 'prd_comment' ? q.messageId : '',
+          chatMessageId: q.source === 'chat' ? q.messageId : '',
+        },
       });
     }
     sections.push({ content: lines.join('\n'), buttons: buttons.length > 0 ? buttons : undefined });
@@ -3675,15 +3691,27 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
 
   // Step 8: Send unanswered Q&A digest (only if there are findings) —
   // interactive card to the same PM group chat.
+  //
+  // Send with the Hamlet/Junior bot token (NOT Rio's token) so card-
+  // action button clicks (Let Jr. Reply) route to Hamlet's
+  // `/api/lark/card-action` endpoint. Lark routes button callbacks
+  // back to whichever app sent the card; Rio's app doesn't have a
+  // matching callback handler, which surfaces as 200340 in the
+  // client when the user clicks.
   let unansweredSent = false;
-  if (rioToken && unansweredFindings.length > 0) {
-    const card = buildUnansweredDigestCard(unansweredFindings);
-    const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
-    console.log('[digests] unanswered digest:\n' + preview);
-    const id = await sendInteractiveCardToChat(
-      targetChatId, card.title, card.template, card.sections, rioToken,
-    );
-    unansweredSent = id !== null;
+  if (unansweredFindings.length > 0) {
+    const sendToken = botToken || rioToken;
+    if (!sendToken) {
+      console.log('[digests] no token to send unanswered digest — skipping');
+    } else {
+      const card = buildUnansweredDigestCard(unansweredFindings);
+      const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
+      console.log('[digests] unanswered digest:\n' + preview);
+      const id = await sendInteractiveCardToChat(
+        targetChatId, card.title, card.template, card.sections, sendToken,
+      );
+      unansweredSent = id !== null;
+    }
   } else {
     console.log('[digests] no unanswered questions — skipping Q&A digest');
   }
