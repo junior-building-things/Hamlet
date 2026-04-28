@@ -467,7 +467,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     const STATUS_DROPDOWN_ORDER = [
       'AB Testing', 'Merged', 'QA Testing', 'Development', 'Tech Design',
       'PRD Walkthrough', 'RD Allocation', 'Dependency Check',
-      'PRD/Design Prep', 'Done',
+      'Line Review', 'PRD/Design Prep', 'Done',
     ];
     const present = new Set(features.map(f => f.status).filter(Boolean));
     const ordered = STATUS_DROPDOWN_ORDER.filter(s => present.has(s));
@@ -560,7 +560,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     const STATUS_GROUP_ORDER: Record<string, number> = {
       'AB Testing': 1, 'Merged': 2, 'QA Testing': 3, 'Development': 4,
       'Tech Design': 5, 'PRD Walkthrough': 6, 'RD Allocation': 7,
-      'Dependency Check': 8, 'PRD/Design Prep': 9, 'Done': 10,
+      'Dependency Check': 8, 'Line Review': 9, 'PRD/Design Prep': 10, 'Done': 11,
     };
     const keys = [...buckets.keys()].sort((a, b) => {
       if (!a) return 1;   // empty/unknown always last
