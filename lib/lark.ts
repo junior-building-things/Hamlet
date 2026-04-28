@@ -1744,6 +1744,34 @@ export async function listMessageReactions(
 }
 
 /**
+ * Resolve a Lark user identifier (open_id or user_id) to a display
+ * name. Returns '' if the lookup fails. Uses the contact API; the
+ * caller is responsible for caching across calls.
+ */
+export async function resolveUserName(
+  id: string,
+  idType: 'open_id' | 'user_id',
+): Promise<string> {
+  if (!id) return '';
+  const token = await getAccessToken();
+  try {
+    const res = await fetch(
+      `${LARK_BASE_URL}/open-apis/contact/v3/users/${id}?user_id_type=${idType}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const data = await parseJson(res, 'get_user_name') as {
+      code: number;
+      data?: { user?: { en_name?: string; name?: string; nickname?: string } };
+    };
+    if (data.code !== 0) return '';
+    const u = data.data?.user;
+    return u?.en_name || u?.name || u?.nickname || '';
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Resolve a Lark `open_id` to its corresponding `user_id` (a.k.a.
  * employee ID). Returns null if the lookup fails. Doc-comment user
  * references use `user_id`, so this is needed to match the owner

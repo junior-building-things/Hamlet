@@ -20,6 +20,7 @@ import {
   resolveDocIdFromUrl,
   listDocCommentsDetailed,
   resolveUserIdFromOpenId,
+  resolveUserName,
   listMessageReactions,
   PostParagraph,
   ChatMessage,
@@ -211,6 +212,8 @@ export interface RiskFinding {
 
 export interface UnansweredQuestion {
   senderOpenId: string;
+  /** Display name of the asker (resolved at scan time, empty if lookup failed). */
+  senderName?: string;
   mentionNames: string[];
   text: string;
   messageId: string;
@@ -1640,6 +1643,22 @@ export async function buildRiskDigestCard(findings: RiskFinding[]): Promise<{
 const UNANSWERED_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Per-digest-run cache of user name lookups. Keyed by `${idType}:${id}`
+ * so we don't repeat the contact API call for the same user across
+ * features. Populated lazily by `lookupUserName`.
+ */
+const userNameCache = new Map<string, string>();
+
+async function lookupUserName(id: string, idType: 'open_id' | 'user_id'): Promise<string> {
+  if (!id) return '';
+  const key = `${idType}:${id}`;
+  if (userNameCache.has(key)) return userNameCache.get(key)!;
+  const name = await resolveUserName(id, idType);
+  userNameCache.set(key, name);
+  return name;
+}
+
+/**
  * Use Gemini to decide whether any of `laterReplies` actually answers
  * the original `question`. The thread-activity gate (parent_id /
  * root_id matching for chat, additional reply_list entries for PRD
@@ -1813,9 +1832,12 @@ export async function collectUnansweredForFeature(
     }
 
     const text = chatMessageText(msg);
+    const senderOpenId = msg.sender?.sender_id?.open_id ?? '';
+    const senderName = senderOpenId ? await lookupUserName(senderOpenId, 'open_id') : '';
 
     unanswered.push({
-      senderOpenId: msg.sender?.sender_id?.open_id ?? '',
+      senderOpenId,
+      senderName,
       mentionNames: (msg.mentions ?? []).map(m => m.name),
       text: text.slice(0, 280),
       messageId: msg.message_id,
@@ -1886,14 +1908,16 @@ export async function collectUnansweredCommentsForFeature(
       );
       if (answered) continue;
     }
-    const previewParts: string[] = [];
-    if (t.quote) previewParts.push(`"${t.quote}"`);
-    if (original.text) previewParts.push(original.text);
-    const preview = previewParts.join(' — ').slice(0, 280);
+    // For PRD comments, drop the quoted text from the preview — the
+    // bullet should show the actual question, not the snippet of doc
+    // the comment was anchored to.
+    const preview = (original.text || '(no text)').slice(0, 500);
+    const senderName = await lookupUserName(original.userId, 'user_id');
     out.push({
       senderOpenId: original.userId,
+      senderName,
       mentionNames: [],
-      text: preview || '(no text)',
+      text: preview,
       messageId: t.commentId,
       timestamp: original.createTime,
       source: 'prd_comment',
@@ -1943,17 +1967,30 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
 
     const lines: string[] = [];
     lines.push(`**${escapeMd(f.name)}**${linkSuffix}`);
+    const todaySgt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
     for (const q of finding.questions) {
-      const time = q.timestamp > 0
-        ? new Date(q.timestamp).toLocaleString('en-US', {
-            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore',
-          })
-        : '';
+      let timeLabel = '';
+      if (q.timestamp > 0) {
+        const dt = new Date(q.timestamp);
+        const date = dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+        const hhmm = dt.toLocaleTimeString('en-GB', {
+          hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore',
+        });
+        if (date === todaySgt) {
+          timeLabel = `Today ${hhmm}`;
+        } else {
+          const md = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Singapore' });
+          timeLabel = `${md} ${hhmm}`;
+        }
+      }
+      const sourceLabel = q.source === 'prd_comment' ? 'PRD comment' : 'chat';
+      const fromName = q.senderName ? ` from @${q.senderName}` : '';
+      const sourceTag = ` [${sourceLabel}${fromName}]`;
+      // Strip lark_md formatting characters from the preview so they
+      // don't render as italics/bold inside the card.
       const preview = (q.text || '(no text)').replace(/\s+/g, ' ').trim();
-      // Sanitize the preview for lark_md (escape * and _).
       const safePreview = escapeMd(preview);
-      const sourceTag = q.source === 'prd_comment' ? ' [PRD comment]' : '';
-      lines.push(`  • ${time}${sourceTag}: "${safePreview}"`);
+      lines.push(`* ${timeLabel}${sourceTag}: ${safePreview}`);
     }
     sections.push({ content: lines.join('\n') });
   }
