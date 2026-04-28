@@ -141,6 +141,28 @@ export interface DigestStateFile {
    * 实验中 → 已完成 (AB Testing → Done).
    */
   abConcludedNotified?: string[];
+  /**
+   * "Let Jr. Reply" proposals awaiting the owner's 👍 reaction. Keyed
+   * by the message_id of the proposed-reply message Junior posted in
+   * the digest chat. When the owner reacts 👍, the entry is consumed:
+   * the same `replyText` is sent to `destination` (the PRD comment
+   * thread or the feature group chat) tagging `askerOpenId`.
+   */
+  pendingLetJrReplies?: Record<string, {
+    replyText: string;
+    askerOpenId: string;
+    destination: 'prd_comment' | 'chat';
+    /** PRD URL when destination='prd_comment'. */
+    prdUrl?: string;
+    /** Lark drive comment_id when destination='prd_comment'. */
+    commentId?: string;
+    /** Feature group chat_id when destination='chat'. */
+    chatId?: string;
+    /** Thread parent message_id when destination='chat' (so we reply in-thread). */
+    chatParentMessageId?: string;
+    /** When the proposal was posted; entries older than 24h are pruned. */
+    proposedAtIso: string;
+  }>;
 }
 
 /**
@@ -222,6 +244,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const abConcludedNotified = Array.isArray(obj.abConcludedNotified)
     ? (obj.abConcludedNotified as unknown[]).map(String)
     : undefined;
+  const pendingLetJrReplies = (obj.pendingLetJrReplies && typeof obj.pendingLetJrReplies === 'object')
+    ? (obj.pendingLetJrReplies as DigestStateFile['pendingLetJrReplies'])
+    : undefined;
 
   return {
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
@@ -234,6 +259,7 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     larkUserRefreshToken,
     abOpenNotified,
     abConcludedNotified,
+    pendingLetJrReplies,
   };
 }
 

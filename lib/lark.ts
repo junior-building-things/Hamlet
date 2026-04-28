@@ -1694,6 +1694,40 @@ export async function listDocComments(
 }
 
 /**
+ * Send a reply to an existing Lark IM message — posts in the same
+ * thread (creating one if the parent isn't already in a thread).
+ * Returns the new message_id, or null on failure. `content` is a
+ * lark_md string sent as msg_type='text'.
+ */
+export async function replyToMessage(
+  parentMessageId: string,
+  content: string,
+  token: string,
+): Promise<string | null> {
+  if (!parentMessageId) return null;
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/im/v1/messages/${parentMessageId}/reply`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        msg_type: 'text',
+        content: JSON.stringify({ text: content }),
+        reply_in_thread: true,
+      }),
+    },
+  );
+  const data = await parseJson(res, 'reply_message') as {
+    code: number; msg?: string; data?: { message_id?: string };
+  };
+  if (data.code !== 0) {
+    console.warn(`[lark] reply_message failed: code=${data.code} msg=${data.msg}`);
+    return null;
+  }
+  return data.data?.message_id ?? null;
+}
+
+/**
  * List the emoji reactions on a Lark chat message. Each entry has
  * the reactor's `open_id` (under operator.operator_id when their
  * type is 'user') and the emoji type. Returns [] on any error so

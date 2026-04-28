@@ -1994,6 +1994,28 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
         url: `https://applink.larkoffice.com/client/chat/open?openChatId=${f.chatId}`,
       });
     }
+    // Let Jr. Reply: card-action triggers Gemini to draft a reply
+    // for the first / most recent question, posts it as a thread
+    // reply to the digest card, and tracks the proposal so a 👍
+    // reaction from the owner forwards it to the destination.
+    const q = finding.questions[0];
+    if (q && (q.source === 'prd_comment' || q.source === 'chat')) {
+      buttons.push({
+        text: 'Let Jr. Reply',
+        type: 'primary',
+        value: {
+          action: 'letjr_reply',
+          featureName: f.name,
+          prdUrl: f.prd ?? '',
+          chatId: f.chatId ?? '',
+          questionText: q.text,
+          askerOpenId: q.senderOpenId,
+          questionSource: q.source,
+          commentId: q.source === 'prd_comment' ? q.messageId : '',
+          chatMessageId: q.source === 'chat' ? q.messageId : '',
+        },
+      });
+    }
     sections.push({ content: lines.join('\n'), buttons: buttons.length > 0 ? buttons : undefined });
   }
 
