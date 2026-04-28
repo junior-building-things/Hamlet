@@ -206,16 +206,20 @@ const inputCls = 'w-full bg-[var(--card)] border border-[var(--border)] text-[va
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, onFeatureCreated }: Props) {
+export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNodeCompleted, onFeatureCreated }: Props) {
 
   // ── Edit-mode state ──
   const [completing, setCompleting]       = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [creating,    setCreating]    = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  // After a successful create the modal stays open so the user can
-  // see the created feature's links. We capture them here.
-  const [createdFeature, setCreatedFeature] = useState<{ name: string; meegoUrl?: string; prd?: string } | null>(null);
+  // After a successful create we stash the full Feature here and
+  // SHADOW the `feature` prop with it. That way the edit-mode JSX
+  // below renders the just-created feature exactly the same as it
+  // would for an existing one — links, status, all the field
+  // sections — no need to teach the add view about edit content.
+  const [createdFeature, setCreatedFeature] = useState<Feature | null>(null);
+  const feature = createdFeature ?? featureProp;
 
   // ── Add-mode state ──
   const [form, setForm] = useState({
@@ -334,7 +338,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
         console.error('PRD creation failed:', data.prdError);
         toast.error(`PRD creation failed: ${data.prdError}`);
       }
-      onSave({
+      const newFeature: Feature = {
         id:              data.id ?? `feature_${Date.now()}`,
         name:            form.name.trim(),
         description:     '',
@@ -347,8 +351,9 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
         meegoIssueId:    data.id,
         meegoProjectKey: TIKTOK_PROJECT_KEY,
         prd:             data.prd,
-      });
-      setCreatedFeature({ name: form.name.trim(), meegoUrl: data.meegoUrl, prd: data.prd });
+      };
+      onSave(newFeature);
+      setCreatedFeature(newFeature);
       toast.success(`"${form.name.trim()}" created`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Create failed';
@@ -391,7 +396,10 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
   // ── Add mode ──────────────────────────────────────────────────────────────
 
-  if (mode === 'add') {
+  // Add mode: show the form until the create succeeds; once it does,
+  // `createdFeature` is set and we fall through to the edit-mode UI
+  // (which uses `feature`, now shadowed by createdFeature).
+  if (mode === 'add' && !createdFeature) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -545,35 +553,20 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
             </div>
 
-            <div className="px-6 pt-2 pb-0 shrink-0">
-              {createError && (
+            {createError && (
+              <div className="px-6 pt-2 pb-0 shrink-0">
                 <p className="text-xs text-red-500 mb-2">{createError}</p>
-              )}
-              {createdFeature && (
-                <div className="mb-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                  <div className="text-xs text-emerald-700 font-medium flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Created &ldquo;{createdFeature.name}&rdquo;
-                  </div>
-                  <div className="text-xs text-[var(--muted)] mt-1 flex items-center gap-3 flex-wrap">
-                    {createdFeature.meegoUrl && (
-                      <a href={createdFeature.meegoUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">Meego ↗</a>
-                    )}
-                    {createdFeature.prd && (
-                      <a href={createdFeature.prd} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">PRD ↗</a>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-[var(--border)] shrink-0">
               <button type="button" onClick={onClose} disabled={creating}
                 className="px-5 py-2 bg-[var(--card-hover)] text-[var(--foreground)] hover:opacity-80 disabled:opacity-50 text-sm font-semibold rounded-lg transition-colors">
-                {createdFeature ? 'Close' : 'Cancel'}
+                Cancel
               </button>
-              <button type="submit" disabled={!form.name.trim() || creating || !!createdFeature}
+              <button type="submit" disabled={!form.name.trim() || creating}
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2">
                 {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {creating ? 'Creating…' : createdFeature ? 'Created ✓' : 'Create Feature'}
+                {creating ? 'Creating…' : 'Create Feature'}
               </button>
             </div>
           </form>
