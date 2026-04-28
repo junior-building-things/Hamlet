@@ -178,8 +178,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ toast: { type: 'error', content: 'Missing question' } });
     }
 
-    // The card the button was clicked on — we'll thread the proposal
-    // off this message. Lark v2 puts it in event.context.open_message_id.
+    // Lark card callbacks have a ~3s response budget — readDocContent
+    // + Gemini + replyToMessage easily takes 10-30s. Kick the heavy
+    // work off as a fire-and-forget background promise and respond
+    // immediately so the user sees a "Drafting…" toast instead of
+    // Lark's "200340 timed out" error. Cloud Run keeps the container
+    // alive long enough for the promise to finish.
     const eventCtx = (body.event as { context?: { open_message_id?: string } } | undefined)?.context;
     const parentMessageId = eventCtx?.open_message_id ?? '';
     if (!parentMessageId) {
@@ -187,25 +191,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ toast: { type: 'error', content: 'No parent message' } });
     }
 
-    try {
-      // Pull PRD content for context (best-effort).
-      let prdContent = '';
-      if (prdUrl) {
-        try {
-          prdContent = await readDocContent(prdUrl);
-        } catch (e) {
-          console.warn('[card-action] letjr_reply: PRD read failed:', e);
+    void (async () => {
+      try {
+        let prdContent = '';
+        if (prdUrl) {
+          try { prdContent = await readDocContent(prdUrl); }
+          catch (e) { console.warn('[card-action] letjr_reply: PRD read failed:', e); }
         }
-      }
-
-      // Generate the proposed reply with Gemini.
-      const apiKey = process.env.GOOGLE_AI_API_KEY;
-      let replyText = '_(Couldn\'t generate a reply — Gemini not configured)_';
-      if (apiKey) {
-        try {
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-          const prompt = `You are a helpful PM assistant drafting a reply to a question about a feature. Be concise (2-4 sentences), friendly, and specific. If the PRD answers the question, cite the relevant detail. If you genuinely can't tell from the PRD, say so honestly and suggest who might know.
+        const apiKey = process.env.GOOGLE_AI_API_KEY;
+        let replyText = '_(Couldn\'t generate a reply — Gemini not configured)_';
+        if (apiKey) {
+          try {
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+            const prompt = `You are a helpful PM assistant drafting a reply to a question about a feature. Be concise (2-4 sentences), friendly, and specific. If the PRD answers the question, cite the relevant detail. If you genuinely can't tell from the PRD, say so honestly and suggest who might know.
 
 Feature: ${featureName}
 Source of question: ${questionSource === 'prd_comment' ? 'PRD comment' : 'feature group chat'}
@@ -215,48 +214,43 @@ PRD content (truncated):
 ${prdContent.slice(0, 8000) || '(PRD not available)'}
 
 Reply text only — no quotes, no preamble. Start directly with the answer.`;
-          const result = await model.generateContent(prompt);
-          replyText = result.response.text().trim();
-        } catch (e) {
-          console.warn('[card-action] letjr_reply: Gemini failed:', e);
+            const result = await model.generateContent(prompt);
+            replyText = result.response.text().trim();
+          } catch (e) {
+            console.warn('[card-action] letjr_reply: Gemini failed:', e);
+          }
         }
-      }
-
-      // Post the proposal as a thread reply to the digest card.
-      const botToken = await getLarkBotToken();
-      const proposal = `${replyText}\n\n_Looks ok? React with 👍 and I'll send it._`;
-      const proposalMsgId = await replyToMessage(parentMessageId, proposal, botToken);
-      if (!proposalMsgId) {
-        return NextResponse.json({
-          toast: { type: 'error', content: 'Failed to post proposal' },
-        });
-      }
-
-      // Track the proposal so the reaction-event handler can find it.
-      try {
-        const state = await loadDigestState();
-        if (!state.pendingLetJrReplies) state.pendingLetJrReplies = {};
-        state.pendingLetJrReplies[proposalMsgId] = {
-          replyText,
-          askerOpenId,
-          destination: questionSource === 'prd_comment' ? 'prd_comment' : 'chat',
-          prdUrl: prdUrl || undefined,
-          commentId: commentId || undefined,
-          chatId: chatId || undefined,
-          chatParentMessageId: chatMessageId || undefined,
-          proposedAtIso: new Date().toISOString(),
-        };
-        await saveDigestState(state);
+        const botToken = await getLarkBotToken();
+        const proposal = `${replyText}\n\n_Looks ok? React with 👍 and I'll send it._`;
+        const proposalMsgId = await replyToMessage(parentMessageId, proposal, botToken);
+        if (!proposalMsgId) {
+          console.warn('[card-action] letjr_reply: replyToMessage returned null');
+          return;
+        }
+        try {
+          const state = await loadDigestState();
+          if (!state.pendingLetJrReplies) state.pendingLetJrReplies = {};
+          state.pendingLetJrReplies[proposalMsgId] = {
+            replyText,
+            askerOpenId,
+            destination: questionSource === 'prd_comment' ? 'prd_comment' : 'chat',
+            prdUrl: prdUrl || undefined,
+            commentId: commentId || undefined,
+            chatId: chatId || undefined,
+            chatParentMessageId: chatMessageId || undefined,
+            proposedAtIso: new Date().toISOString(),
+          };
+          await saveDigestState(state);
+        } catch (e) {
+          console.warn('[card-action] letjr_reply: state save failed:', e);
+        }
+        console.log(`[card-action] letjr_reply drafted for "${featureName}" — proposal msg_id=${proposalMsgId}`);
       } catch (e) {
-        console.warn('[card-action] letjr_reply: state save failed:', e);
+        console.warn('[card-action] letjr_reply background work failed:', e);
       }
+    })();
 
-      console.log(`[card-action] letjr_reply drafted for "${featureName}" — proposal msg_id=${proposalMsgId}`);
-      return NextResponse.json({ toast: { type: 'success', content: 'Drafted ✓' } });
-    } catch (e) {
-      console.warn('[card-action] letjr_reply failed:', e);
-      return NextResponse.json({ toast: { type: 'error', content: 'Failed to draft' } });
-    }
+    return NextResponse.json({ toast: { type: 'info', content: 'Drafting…' } });
   }
 
   console.log('[card-action] no matching action:', actionName, 'type:', body.type);
