@@ -1821,15 +1821,17 @@ export async function collectUnansweredForFeature(
 
     // (b) Thread-activity + Gemini check.
     const laterMsgs = findLaterThreadMessages(msg, messages);
+    const questionTextDiag = chatMessageText(msg);
+    // Diagnostic: log every unanswered candidate so we can see whether
+    // thread replies were found (laterMsgs > 0) or missed entirely.
+    console.log(
+      `[digests] Q&A "${feature.name}" msg=${msg.message_id} parent=${msg.parent_id ?? '(none)'} root=${msg.root_id ?? '(none)'} totalMsgs=${messages.length} laterMsgs=${laterMsgs.length} q="${questionTextDiag.slice(0, 100)}"`,
+    );
     if (laterMsgs.length > 0) {
       const questionText = chatMessageText(msg);
       const replyTexts = laterMsgs.map(chatMessageText).filter(t => t.length > 0);
-      // Diagnostic: log what we're feeding Gemini for any chat
-      // question that has thread activity. Helps debug cases where a
-      // question keeps getting flagged as unanswered despite obvious
-      // thread replies.
       console.log(
-        `[digests] Q&A "${feature.name}" msg=${msg.message_id} q="${questionText.slice(0, 100)}" laterMsgs=${laterMsgs.length} replyTexts=${replyTexts.length} sample=${JSON.stringify(replyTexts.slice(0, 3).map(r => r.slice(0, 120)))}`,
+        `[digests]   replyTexts=${replyTexts.length} sample=${JSON.stringify(replyTexts.slice(0, 3).map(r => r.slice(0, 120)))}`,
       );
       if (replyTexts.length > 0) {
         const answered = await isAnsweredByGemini(
