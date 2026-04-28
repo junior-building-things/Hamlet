@@ -2925,7 +2925,15 @@ export async function sendInteractiveCardToChat(
             type: b.type,
           };
           if (b.url) action.url = b.url;
-          if (b.value) action.value = b.value;
+          // Callback buttons: provide BOTH the legacy `value` field
+          // AND the v2 `behaviors` array. Recent Lark clients require
+          // behaviors=[{type:'callback', value:…}] on callback
+          // buttons; clients that haven't migrated still honor the
+          // legacy `value` field. Sending both is a no-op overlap.
+          if (b.value) {
+            action.value = b.value;
+            action.behaviors = [{ type: 'callback', value: b.value }];
+          }
           return action;
         }),
       });
