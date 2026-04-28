@@ -216,6 +216,12 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const larkUserRefreshToken = typeof obj.larkUserRefreshToken === 'string'
     ? obj.larkUserRefreshToken
     : undefined;
+  const abOpenNotified = Array.isArray(obj.abOpenNotified)
+    ? (obj.abOpenNotified as unknown[]).map(String)
+    : undefined;
+  const abConcludedNotified = Array.isArray(obj.abConcludedNotified)
+    ? (obj.abConcludedNotified as unknown[]).map(String)
+    : undefined;
 
   return {
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
@@ -226,6 +232,8 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     watchlist,
     featureLinks,
     larkUserRefreshToken,
+    abOpenNotified,
+    abConcludedNotified,
   };
 }
 
