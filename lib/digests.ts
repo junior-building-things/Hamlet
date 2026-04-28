@@ -1969,8 +1969,7 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
 
   for (const finding of findings) {
     const f = finding.feature;
-    const lines: string[] = [`**${escapeMd(f.name)}**`];
-    for (const q of finding.questions) {
+    finding.questions.forEach((q, qIdx) => {
       const sourceLabel = q.source === 'prd_comment' ? 'PRD comment' : 'Chat';
       // Render the asker as a Lark @mention via open_id — Lark's
       // client resolves the display name + avatar from the id.
@@ -1982,36 +1981,41 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
       }
       const preview = (q.text || '(no text)').replace(/\s+/g, ' ').trim();
       const safePreview = escapeMd(preview);
-      lines.push(`- ${sourceLabel}${fromTag}: ${safePreview}`);
-    }
-    const buttons: CardButton[] = [];
-    if (f.prd) buttons.push({ text: 'Open PRD', type: 'default', url: f.prd });
-    if (f.chatId) {
-      buttons.push({
-        text: 'Open Group',
-        type: 'default',
-        url: `https://applink.larkoffice.com/client/chat/open?openChatId=${f.chatId}`,
-      });
-    }
-    const q = finding.questions[0];
-    if (q && (q.source === 'prd_comment' || q.source === 'chat')) {
-      buttons.push({
-        text: 'Let me Reply',
-        type: 'primary',
-        value: {
-          action: 'letjr_reply',
-          featureName: f.name,
-          prdUrl: f.prd ?? '',
-          chatId: f.chatId ?? '',
-          questionText: q.text,
-          askerOpenId: q.senderOpenId,
-          questionSource: q.source,
-          commentId: q.source === 'prd_comment' ? q.messageId : '',
-          chatMessageId: q.source === 'chat' ? q.messageId : '',
-        },
-      });
-    }
-    sections.push({ content: lines.join('\n'), buttons: buttons.length > 0 ? buttons : undefined });
+      // Fold the feature name into the first question's section so
+      // every question gets its own action row without an extra
+      // header section bloating the divider count.
+      const lines: string[] = [];
+      if (qIdx === 0) lines.push(`**${escapeMd(f.name)}**`);
+      lines.push(`${sourceLabel}${fromTag}: ${safePreview}`);
+
+      const buttons: CardButton[] = [];
+      if (f.prd) buttons.push({ text: 'Open PRD', type: 'default', url: f.prd });
+      if (f.chatId) {
+        buttons.push({
+          text: 'Open Group',
+          type: 'default',
+          url: `https://applink.larkoffice.com/client/chat/open?openChatId=${f.chatId}`,
+        });
+      }
+      if (q.source === 'prd_comment' || q.source === 'chat') {
+        buttons.push({
+          text: 'Let me Reply',
+          type: 'primary',
+          value: {
+            action: 'letjr_reply',
+            featureName: f.name,
+            prdUrl: f.prd ?? '',
+            chatId: f.chatId ?? '',
+            questionText: q.text,
+            askerOpenId: q.senderOpenId,
+            questionSource: q.source,
+            commentId: q.source === 'prd_comment' ? q.messageId : '',
+            chatMessageId: q.source === 'chat' ? q.messageId : '',
+          },
+        });
+      }
+      sections.push({ content: lines.join('\n'), buttons: buttons.length > 0 ? buttons : undefined });
+    });
   }
 
   return { title, template, sections };
