@@ -579,22 +579,28 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       work_item_fields?: Array<{ key?: string; name?: string; value?: unknown }>;
     };
     workItemName = briefJson.work_item_attribute?.work_item_name ?? '';
-    // Extract all role members from JSON for owner fields + pocEmails + avatars
+    // Extract all role members from JSON for owner fields + pocEmails + avatars.
+    // Meego project schemas use a mix of clean keys (e.g. "PM") and custom
+    // ones (e.g. "role_e8ce24" for TPM, "UI" for UX Designer, "UX_Writer"
+    // for Content Designer). Match on either key or display name so we
+    // pick up the role regardless of which form the project uses.
     const roleMembers = briefJson.work_item_attribute?.role_members ?? [];
-    const getRoleOwner = (roleKey: string, roleName?: string): string => {
-      const role = roleMembers.find(r => r.key === roleKey || (roleName && r.name === roleName));
+    const getRoleOwner = (...candidates: string[]): string => {
+      const role = roleMembers.find(r =>
+        candidates.some(c => r.key === c || r.name === c)
+      );
       return role?.members?.map(m => m.name).filter(Boolean).join(', ') ?? '';
     };
     jsonPmOwner = getRoleOwner('PM');
-    jsonTpmOwner = getRoleOwner('TPM');
+    jsonTpmOwner = getRoleOwner('TPM', 'role_e8ce24');
     jsonTechOwner = getRoleOwner('Tech_Owner', 'Tech owner');
     jsonIosOwner = getRoleOwner('iOS');
     jsonAndroidOwner = getRoleOwner('Android');
     jsonServerOwner = getRoleOwner('Server');
     jsonQaOwner = getRoleOwner('QA');
     jsonDaOwner = getRoleOwner('DA');
-    jsonUiuxOwner = getRoleOwner('UI_UX', 'UI&UX');
-    jsonContentDesigner = getRoleOwner('Content_Designer', 'Content Designer');
+    jsonUiuxOwner = getRoleOwner('UI_UX', 'UI&UX', 'UI');
+    jsonContentDesigner = getRoleOwner('Content_Designer', 'Content Designer', 'UX_Writer');
     owner = jsonPmOwner.split(',')[0]?.trim() ?? '';
     // Build pocEmails from all role members
     for (const role of roleMembers) {

@@ -705,39 +705,6 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
               <AvatarInfoField label="Server"           value={feature?.serverOwner} />
               <AvatarInfoField label="Tech Owner"       value={feature?.techOwner} />
             </div>
-            {(() => {
-              // "Other POCs" — names appearing in pocEmails but not in any of
-              // the canonical 10 role fields above (e.g. Apple BD, Privacy BP,
-              // Localization, Line Master, Security QA). De-dupe by first name.
-              if (!feature?.pocEmails) return null;
-              const claimed = new Set<string>();
-              const claim = (val?: string) => {
-                if (!val) return;
-                for (const n of val.split(',').map(n => n.trim()).filter(Boolean)) {
-                  const first = n.split(/\s+/)[0];
-                  if (first) claimed.add(first);
-                }
-              };
-              claim(feature.pmOwner); claim(feature.tpmOwner); claim(feature.uiuxOwner);
-              claim(feature.contentDesigner); claim(feature.daOwner); claim(feature.qaOwner);
-              claim(feature.androidOwner); claim(feature.iosOwner); claim(feature.serverOwner);
-              claim(feature.techOwner);
-              const others = Object.keys(feature.pocEmails).filter(name => !claimed.has(name));
-              if (others.length === 0) return null;
-              return (
-                <div className="mt-4">
-                  <span className="text-[11px] text-gray-500 font-medium">Other POCs</span>
-                  <div className="flex flex-col gap-1 mt-1">
-                    {others.map(name => (
-                      <div key={name} className="flex items-center gap-1.5">
-                        <UserAvatar name={name} url={AV[name]} size={5} />
-                        <span className="text-sm text-[var(--foreground)]">{name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
           </div>
 
         </div>
