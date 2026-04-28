@@ -2001,20 +2001,13 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
     // reaction from the owner forwards it to the destination.
     const q = finding.questions[0];
     if (q && (q.source === 'prd_comment' || q.source === 'chat')) {
+      // DEBUG: minimal value to test whether Lark client rejects on
+      // payload contents (200340). If bare {action} clicks through,
+      // we'll add the other fields back one by one.
       buttons.push({
         text: 'Let Jr. Reply',
         type: 'primary',
-        value: {
-          action: 'letjr_reply',
-          featureName: f.name,
-          prdUrl: f.prd ?? '',
-          chatId: f.chatId ?? '',
-          questionText: q.text,
-          askerOpenId: q.senderOpenId,
-          questionSource: q.source,
-          commentId: q.source === 'prd_comment' ? q.messageId : '',
-          chatMessageId: q.source === 'chat' ? q.messageId : '',
-        },
+        value: { action: 'letjr_reply' },
       });
     }
     sections.push({ content: lines.join('\n'), buttons: buttons.length > 0 ? buttons : undefined });
