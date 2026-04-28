@@ -18,6 +18,8 @@ import {
   extractSectionImageTokens,
   uploadDocImageForMessage,
   resolveDocIdFromUrl,
+  listDocCommentsDetailed,
+  resolveUserIdFromOpenId,
   PostParagraph,
   ChatMessage,
   CardSection,
@@ -212,6 +214,12 @@ export interface UnansweredQuestion {
   text: string;
   messageId: string;
   timestamp: number;
+  /**
+   * Where the question came from. Defaults to 'chat' for back-
+   * compatibility; 'prd_comment' marks Lark doc comment threads
+   * that the digest now also surfaces.
+   */
+  source?: 'chat' | 'prd_comment';
 }
 
 export interface UnansweredFinding {
@@ -1719,6 +1727,7 @@ export async function collectUnansweredForFeature(
       text: text.slice(0, 280),
       messageId: msg.message_id,
       timestamp: Number(msg.create_time ?? 0) * 1000,
+      source: 'chat',
     });
   }
 
@@ -1726,6 +1735,64 @@ export async function collectUnansweredForFeature(
   // Newest first so the most recent question is on top.
   unanswered.sort((a, b) => b.timestamp - a.timestamp);
   return { feature, questions: unanswered.slice(0, MAX_QUESTIONS_PER_FEATURE) };
+}
+
+/**
+ * Scan a feature's PRD for unanswered comment threads. Mirrors the
+ * chat-based check: a thread counts as unanswered when it isn't
+ * resolved AND was created/touched in the last 24h AND the owner
+ * (Thomas) hasn't posted any reply in the thread. We optionally
+ * tighten further to threads that explicitly @-mention the owner.
+ */
+export async function collectUnansweredCommentsForFeature(
+  feature: MeegoFeature,
+  ownerUserId: string,
+  sinceMs: number,
+  opts: { mentionOnly?: boolean } = {},
+): Promise<UnansweredQuestion[]> {
+  if (!feature.prd) return [];
+  let threads: Awaited<ReturnType<typeof listDocCommentsDetailed>>;
+  try {
+    threads = await listDocCommentsDetailed(feature.prd);
+  } catch (e) {
+    console.warn(`[digests] PRD comments fetch failed for "${feature.name}":`, e);
+    return [];
+  }
+  const out: UnansweredQuestion[] = [];
+  for (const t of threads) {
+    if (t.isSolved) continue;
+    if (t.replies.length === 0) continue;
+    const original = t.replies[0];
+    // The thread should have been created or last updated recently —
+    // either the original is fresh, or someone replied recently.
+    const lastTouchMs = Math.max(t.updateTime, ...t.replies.map(r => r.createTime));
+    if (lastTouchMs < sinceMs) continue;
+    // Skip threads where the owner has already replied.
+    const ownerReplied = t.replies.some(r => r.userId === ownerUserId);
+    if (ownerReplied) continue;
+    // Skip threads the owner started (they're the asker, not the askee).
+    if (original.userId === ownerUserId) continue;
+    // Optional stricter filter: only threads that @-mention the owner.
+    if (opts.mentionOnly) {
+      const mentionsOwner = t.replies.some(r => r.mentionedUserIds.includes(ownerUserId));
+      if (!mentionsOwner) continue;
+    }
+    const previewParts: string[] = [];
+    if (t.quote) previewParts.push(`"${t.quote}"`);
+    if (original.text) previewParts.push(original.text);
+    const preview = previewParts.join(' — ').slice(0, 280);
+    out.push({
+      senderOpenId: original.userId,
+      mentionNames: [],
+      text: preview || '(no text)',
+      messageId: t.commentId,
+      timestamp: original.createTime,
+      source: 'prd_comment',
+    });
+  }
+  // Newest first, capped at MAX_QUESTIONS_PER_FEATURE.
+  out.sort((a, b) => b.timestamp - a.timestamp);
+  return out.slice(0, MAX_QUESTIONS_PER_FEATURE);
 }
 
 /**
@@ -1776,7 +1843,8 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
       const preview = (q.text || '(no text)').replace(/\s+/g, ' ').trim();
       // Sanitize the preview for lark_md (escape * and _).
       const safePreview = escapeMd(preview);
-      lines.push(`  • ${time}: "${safePreview}"`);
+      const sourceTag = q.source === 'prd_comment' ? ' [PRD comment]' : '';
+      lines.push(`  • ${time}${sourceTag}: "${safePreview}"`);
     }
     sections.push({ content: lines.join('\n') });
   }
@@ -3096,7 +3164,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   const featureById = new Map<string, MeegoFeature>(features.map(f => [f.workItemId, f]));
 
   const sinceMs = Date.now() - UNANSWERED_WINDOW_MS;
-  const unansweredFindings: UnansweredFinding[] = [];
+  // workItemId → finding so chat + PRD-comment results merge into a
+  // single section per feature in the card.
+  const unansweredByFeature = new Map<string, UnansweredFinding>();
   if (ownerOpenId && botToken) {
     let scanned = 0;
     let skippedNoBrief = 0;
@@ -3116,15 +3186,67 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         const finding = await collectUnansweredForFeature(
           feature, chat.chatId, sinceMs, ownerOpenId, botToken,
         );
-        if (finding) unansweredFindings.push(finding);
+        if (finding) unansweredByFeature.set(feature.workItemId, finding);
       } catch (e) {
         console.warn(`[digests] Q&A scan failed for ${feature.name}:`, e);
       }
     }
     console.log(
-      `[digests] Q&A scan: ${scanned} chats scanned (${skippedEnded} ended, ${skippedNoBrief} no brief), ${unansweredFindings.length} with unanswered questions`,
+      `[digests] Q&A scan: ${scanned} chats scanned (${skippedEnded} ended, ${skippedNoBrief} no brief), ${unansweredByFeature.size} with unanswered questions`,
     );
+
+    // Step 6b: PRD-comment scan. For every cached feature with a PRD
+    // URL whose status isn't 'end', look up the doc comment threads
+    // and surface any thread the owner hasn't replied to. Merges into
+    // the same per-feature finding so the card has one section per
+    // feature regardless of whether the questions came from chat or
+    // doc comments.
+    let ownerUserId: string | null = null;
+    try {
+      ownerUserId = await resolveUserIdFromOpenId(ownerOpenId);
+    } catch (e) {
+      console.warn('[digests] failed to resolve owner user_id (PRD-comment scan disabled):', e);
+    }
+    if (ownerUserId) {
+      const cache = await readFeatureCache();
+      if (cache) {
+        let prdScanned = 0;
+        let prdWithUnanswered = 0;
+        for (const cached of cache.features) {
+          const fId = cached.meegoIssueId ?? cached.id;
+          const meegoFeature = featureById.get(fId);
+          // Skip ended features and ones we don't have a brief for
+          // (we can still scan their PRD, but the finding needs a
+          // MeegoFeature for the card link metadata).
+          if (!meegoFeature) continue;
+          if (meegoFeature.overallStatusKey === 'end') continue;
+          if (!cached.prd) continue;
+          prdScanned++;
+          try {
+            const commentQs = await collectUnansweredCommentsForFeature(
+              meegoFeature, ownerUserId, sinceMs,
+            );
+            if (commentQs.length === 0) continue;
+            prdWithUnanswered++;
+            const existing = unansweredByFeature.get(fId);
+            if (existing) {
+              existing.questions = [...existing.questions, ...commentQs]
+                .sort((a, b) => b.timestamp - a.timestamp)
+                .slice(0, MAX_QUESTIONS_PER_FEATURE);
+            } else {
+              unansweredByFeature.set(fId, { feature: meegoFeature, questions: commentQs });
+            }
+          } catch (e) {
+            console.warn(`[digests] PRD-comment scan failed for "${meegoFeature.name}":`, e);
+          }
+        }
+        console.log(
+          `[digests] PRD-comment scan: ${prdScanned} PRDs scanned, ${prdWithUnanswered} with unanswered comments`,
+        );
+      }
+    }
   }
+  const unansweredFindings: UnansweredFinding[] = [...unansweredByFeature.values()];
 
   // Step 6c: AB-concluded scan — for each Junior feature chat, look
   // for a recent calendar invite whose title contains "AB Brief". When

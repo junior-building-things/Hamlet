@@ -1694,6 +1694,133 @@ export async function listDocComments(
 }
 
 /**
+ * Resolve a Lark `open_id` to its corresponding `user_id` (a.k.a.
+ * employee ID). Returns null if the lookup fails. Doc-comment user
+ * references use `user_id`, so this is needed to match the owner
+ * across the open_id-based mention list and the user_id-based
+ * comment author / mention fields.
+ */
+export async function resolveUserIdFromOpenId(openId: string): Promise<string | null> {
+  if (!openId) return null;
+  const token = await getAccessToken();
+  try {
+    const res = await fetch(
+      `${LARK_BASE_URL}/open-apis/contact/v3/users/${openId}?user_id_type=open_id`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const data = await parseJson(res, 'get_user_id') as {
+      code: number; data?: { user?: { user_id?: string } };
+    };
+    if (data.code !== 0) return null;
+    return data.data?.user?.user_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** A single reply (or the original comment itself) inside a comment thread. */
+export interface DocCommentReply {
+  replyId: string;
+  userId: string;
+  createTime: number;       // unix ms
+  text: string;             // joined plain text of all elements
+  mentionedUserIds: string[];
+}
+
+/** Detailed Lark doc comment thread shape, used by the unanswered-Q&A digest. */
+export interface DocCommentThread {
+  commentId: string;
+  isSolved: boolean;
+  isWhole: boolean;                // true → whole-doc comment (no quote)
+  quote: string;                   // the quoted text the comment is anchored to
+  createTime: number;              // ms; first reply (= the original comment)
+  updateTime: number;              // ms
+  authorUserId: string;            // user_id of the original commenter
+  replies: DocCommentReply[];      // first entry IS the original comment
+}
+
+/**
+ * Detailed listing of comments on a Lark doc — preserves create/update
+ * timestamps, resolution status, the original commenter's user_id, and
+ * the @-mention list inside each reply. Used by the unanswered-Q&A
+ * digest to surface PRD comments that the PM hasn't responded to.
+ */
+export async function listDocCommentsDetailed(docUrl: string): Promise<DocCommentThread[]> {
+  const docId = await resolveDocId(docUrl);
+  const token = await getAccessToken();
+  const out: DocCommentThread[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 5; page++) {
+    const params = new URLSearchParams({ file_type: 'docx', page_size: '50' });
+    if (pageToken) params.set('page_token', pageToken);
+    const res = await fetch(
+      `${LARK_BASE_URL}/open-apis/drive/v1/files/${docId}/comments?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    type RawElement = {
+      type?: string;
+      text_run?: { text?: string };
+      mention_user?: { user_id?: string };
+    };
+    type RawReply = {
+      reply_id?: string;
+      user_id?: string;
+      create_time?: number;
+      update_time?: number;
+      content?: { elements?: RawElement[] };
+    };
+    type RawItem = {
+      comment_id?: string;
+      user_id?: string;
+      create_time?: number;
+      update_time?: number;
+      is_solved?: boolean;
+      is_whole?: boolean;
+      quote?: string;
+      reply_list?: { replies?: RawReply[]; page_token?: string; has_more?: boolean };
+    };
+    const data = await parseJson(res, 'list_comments_detailed') as {
+      code: number; msg?: string;
+      data?: { items?: RawItem[]; has_more?: boolean; page_token?: string };
+    };
+    if (data.code !== 0) throw new Error(`Lark list comments error ${data.code}: ${data.msg}`);
+    for (const it of data.data?.items ?? []) {
+      const replies: DocCommentReply[] = (it.reply_list?.replies ?? []).map(r => {
+        const elems = r.content?.elements ?? [];
+        const text = elems.map(e => e.text_run?.text ?? '').join('').trim();
+        const mentionedUserIds = elems
+          .filter(e => e.type === 'mention_user' && e.mention_user?.user_id)
+          .map(e => e.mention_user!.user_id!);
+        // Lark create_time on doc comments is in seconds, not ms.
+        const ct = Number(r.create_time ?? 0);
+        return {
+          replyId: r.reply_id ?? '',
+          userId: r.user_id ?? '',
+          createTime: ct > 1e12 ? ct : ct * 1000,
+          text,
+          mentionedUserIds,
+        };
+      });
+      const ct = Number(it.create_time ?? 0);
+      const ut = Number(it.update_time ?? 0);
+      out.push({
+        commentId: it.comment_id ?? '',
+        isSolved: !!it.is_solved,
+        isWhole: !!it.is_whole,
+        quote: it.quote ?? '',
+        createTime: ct > 1e12 ? ct : ct * 1000,
+        updateTime: ut > 1e12 ? ut : ut * 1000,
+        authorUserId: it.user_id ?? '',
+        replies,
+      });
+    }
+    if (!data.data?.has_more || !data.data.page_token) break;
+    pageToken = data.data.page_token;
+  }
+  return out;
+}
+
+/**
  * Reply to an existing comment on a Lark doc.
  */
 export async function replyToComment(
