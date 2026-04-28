@@ -1638,6 +1638,48 @@ export async function buildRiskDigestCard(findings: RiskFinding[]): Promise<{
  */
 const UNANSWERED_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Use Gemini to decide whether any of `laterReplies` actually answers
+ * the original `question`. The thread-activity gate (parent_id /
+ * root_id matching for chat, additional reply_list entries for PRD
+ * comments) only proves there's activity AFTER the question — it
+ * doesn't prove a real answer. Many "replies" are follow-ups,
+ * restatements, or unrelated chatter.
+ *
+ * Returns true if Gemini says the question is answered. On any
+ * failure (no API key, network error, parse failure) returns true
+ * so we trust the thread-activity rule and don't flood the digest
+ * with false positives.
+ */
+async function isAnsweredByGemini(
+  question: string,
+  laterReplies: string[],
+  contextLabel: string,
+): Promise<boolean> {
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey || laterReplies.length === 0) return true;
+  const prompt = `Original question/request: "${question.replace(/"/g, '\\"')}"
+
+Later messages in the same thread, in chronological order:
+${laterReplies.map((r, i) => `(${i + 1}) "${r.replace(/"/g, '\\"').slice(0, 500)}"`).join('\n')}
+
+Did any of the later messages actually answer or directly address the original question/request? Treat reactions, restatements, follow-up questions, or unrelated chatter as NOT answers. Only count messages that provide a real response.
+
+Reply with ONLY "yes" or "no", no other text.`;
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim().toLowerCase();
+    const answered = raw.startsWith('y');
+    console.log(`[digests] Gemini answer-check (${contextLabel}): ${answered ? 'answered' : 'unanswered'} (raw=${JSON.stringify(raw).slice(0, 60)})`);
+    return answered;
+  } catch (e) {
+    console.warn(`[digests] Gemini answer-check failed (${contextLabel}), defaulting to "answered":`, e);
+    return true;
+  }
+}
+
 /** Hard cap on questions per feature in the card so a busy chat doesn't blow up the message. */
 const MAX_QUESTIONS_PER_FEATURE = 5;
 
@@ -1654,16 +1696,46 @@ const MAX_QUESTIONS_PER_FEATURE = 5;
  * answer even though it's not a direct reply to Thomas's message.
  */
 function isQuestionAnswered(question: ChatMessage, all: ChatMessage[]): boolean {
+  return findLaterThreadMessages(question, all).length > 0;
+}
+
+/**
+ * Return all messages that come AFTER `question` in the same thread:
+ *   - direct replies (`parent_id === question.message_id`)
+ *   - thread members (`root_id === question.message_id`)
+ *   - if the question is itself a thread reply, any later message in
+ *     the same thread (shared `root_id`, later `create_time`)
+ *
+ * Sorted by create_time ascending. Used both for the structural
+ * "has any later activity" gate and for the Gemini answer check.
+ */
+function findLaterThreadMessages(question: ChatMessage, all: ChatMessage[]): ChatMessage[] {
   const qId = question.message_id;
   const qRoot = question.root_id ?? '';
   const qTime = Number(question.create_time ?? 0);
+  const out: ChatMessage[] = [];
   for (const m of all) {
     if (m.message_id === qId) continue;
-    if (m.parent_id === qId) return true;
-    if (m.root_id === qId) return true;
-    if (qRoot && m.root_id === qRoot && Number(m.create_time ?? 0) > qTime) return true;
+    const mt = Number(m.create_time ?? 0);
+    const matches =
+      m.parent_id === qId ||
+      m.root_id === qId ||
+      (qRoot !== '' && m.root_id === qRoot && mt > qTime);
+    if (matches) out.push(m);
   }
-  return false;
+  out.sort((a, b) => Number(a.create_time ?? 0) - Number(b.create_time ?? 0));
+  return out;
+}
+
+function chatMessageText(m: ChatMessage): string {
+  try {
+    const parsed = JSON.parse(m.body?.content ?? '{}') as { text?: string };
+    let text = (parsed.text ?? '').trim();
+    for (const mention of m.mentions ?? []) text = text.replace(mention.key, '').trim();
+    return text;
+  } catch {
+    return (m.body?.content ?? '').trim();
+  }
 }
 
 /**
@@ -1704,22 +1776,31 @@ export async function collectUnansweredForFeature(
   console.log(`[digests] Q&A "${feature.name}": ${mentionMsgs.length} msgs mentioning owner`);
   if (mentionMsgs.length === 0) return null;
 
-  // Drop the ones that have a reply.
+  // Drop the ones that have a real answer. The structural thread-
+  // activity check (parent_id / root_id matching) only proves there's
+  // SOMETHING after the question — Gemini decides whether any of
+  // those follow-ups is actually an answer.
   const unanswered: UnansweredQuestion[] = [];
   for (const msg of mentionMsgs) {
-    if (isQuestionAnswered(msg, messages)) continue;
+    const laterMsgs = findLaterThreadMessages(msg, messages);
+    if (laterMsgs.length > 0) {
+      const questionText = chatMessageText(msg);
+      const replyTexts = laterMsgs.map(chatMessageText).filter(t => t.length > 0);
+      if (replyTexts.length > 0) {
+        const answered = await isAnsweredByGemini(
+          questionText,
+          replyTexts,
+          `chat "${feature.name}" msg=${msg.message_id}`,
+        );
+        if (answered) continue;
+      } else {
+        // No textual replies (just reactions etc.) → still treat as answered
+        // to match the prior structural rule.
+        continue;
+      }
+    }
 
-    let text = '';
-    try {
-      const parsed = JSON.parse(msg.body?.content ?? '{}') as { text?: string };
-      text = (parsed.text ?? '').trim();
-    } catch {
-      text = msg.body?.content ?? '';
-    }
-    // Strip the mention key tokens from the body for a cleaner preview.
-    for (const mention of msg.mentions ?? []) {
-      text = text.replace(mention.key, '').trim();
-    }
+    const text = chatMessageText(msg);
 
     unanswered.push({
       senderOpenId: msg.sender?.sender_id?.open_id ?? '',
@@ -1776,6 +1857,22 @@ export async function collectUnansweredCommentsForFeature(
     if (opts.mentionOnly) {
       const mentionsOwner = t.replies.some(r => r.mentionedUserIds.includes(ownerUserId));
       if (!mentionsOwner) continue;
+    }
+    // If there are OTHER non-owner replies in the thread, ask Gemini
+    // whether any of them actually answers the original comment. The
+    // owner can't have replied (we'd have skipped above), so any
+    // later reply is from a different participant — they may or may
+    // not have addressed the question.
+    const laterReplies = t.replies.slice(1).filter(r => r.text.length > 0);
+    if (laterReplies.length > 0) {
+      const questionText = (t.quote ? `"${t.quote}" — ` : '') + (original.text || '');
+      const replyTexts = laterReplies.map(r => r.text);
+      const answered = await isAnsweredByGemini(
+        questionText,
+        replyTexts,
+        `prd "${feature.name}" comment=${t.commentId}`,
+      );
+      if (answered) continue;
     }
     const previewParts: string[] = [];
     if (t.quote) previewParts.push(`"${t.quote}"`);
