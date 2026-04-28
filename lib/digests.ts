@@ -1990,10 +1990,17 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
         }
       }
       const sourceLabel = q.source === 'prd_comment' ? 'PRD comment' : 'chat';
-      const fromName = q.senderName ? ` from @${q.senderName}` : '';
-      const sourceTag = ` [${sourceLabel}${fromName}]`;
-      // Strip lark_md formatting characters from the preview so they
-      // don't render as italics/bold inside the card.
+      // Render the asker as a Lark @mention via open_id — Lark's
+      // client resolves the display name + avatar without the bot
+      // needing the contact-read scope. Falls back to the cached
+      // senderName (or no name) if open_id isn't available.
+      let fromTag = '';
+      if (q.senderOpenId && q.senderOpenId.startsWith('ou_')) {
+        fromTag = ` from <at id="${q.senderOpenId}"></at>`;
+      } else if (q.senderName) {
+        fromTag = ` from @${q.senderName}`;
+      }
+      const sourceTag = ` [${sourceLabel}${fromTag}]`;
       const preview = (q.text || '(no text)').replace(/\s+/g, ' ').trim();
       const safePreview = escapeMd(preview);
       lines.push(`* ${timeLabel}${sourceTag}: ${safePreview}`);
