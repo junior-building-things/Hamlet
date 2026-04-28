@@ -1802,14 +1802,17 @@ export async function collectUnansweredForFeature(
   // Newest first — per-chat dedup means the freshest unanswered wins.
   mentionMsgs.sort((a, b) => Number(b.create_time ?? 0) - Number(a.create_time ?? 0));
 
-  // Decision rules (per-question):
+  // Decision rules (per-question), in order:
   //   (a) Owner reacted with any emoji on the question → answered.
   //   (1) Any thread reply on the question → answered (regardless of
-  //       reply content).
-  //   (2) No thread reply AND no later messages in the chat → unanswered.
-  //   (3) No thread reply, but later messages exist → ask Gemini whether
-  //       the question is still outstanding given the whole conversation
-  //       that came after.
+  //       reply content). A reply in the thread is a strong signal.
+  //   (2) Otherwise, ask Gemini one question with the whole subsequent
+  //       chat conversation (possibly empty). Gemini returns one of:
+  //         - not_a_question: tagged message isn't actually asking
+  //           anything (FYIs, statements). Skip.
+  //         - addressed: question was answered by the later messages.
+  //           Skip.
+  //         - outstanding: still needs the owner's response. Flag.
   // Per-chat dedup: surface at most one unanswered question per chat
   // per digest (the most recent surviving candidate).
   for (const msg of mentionMsgs) {
@@ -1833,36 +1836,16 @@ export async function collectUnansweredForFeature(
       continue;
     }
 
-    // No thread reply. Look at later messages in the same chat
-    // (any depth, any sender).
+    // (2) Gemini check with whole subsequent chat (may be empty).
     const qTime = Number(msg.create_time ?? 0);
     const laterChat = messages
       .filter(m => m.message_id !== msg.message_id && Number(m.create_time ?? 0) > qTime)
       .sort((a, b) => Number(a.create_time ?? 0) - Number(b.create_time ?? 0));
-
-    // (2) No thread reply, no later messages → unanswered.
-    if (laterChat.length === 0) {
-      console.log(`[digests] ${qLabel} → unanswered (no thread, no later msgs)`);
-      const flagged = await buildUnansweredQuestion(msg);
-      return { feature, questions: [flagged] };
-    }
-
-    // (3) No thread reply, but later messages → Gemini judges using full
-    // subsequent conversation.
     const questionText = chatMessageText(msg);
     const laterTexts = laterChat.map(chatMessageText).filter(t => t.length > 0);
-    if (laterTexts.length === 0) {
-      // Later messages are all non-text (stickers etc.) — still unanswered.
-      console.log(`[digests] ${qLabel} → unanswered (no thread, later msgs all non-text)`);
-      const flagged = await buildUnansweredQuestion(msg);
-      return { feature, questions: [flagged] };
-    }
     const outstanding = await isOutstandingByGemini(questionText, laterTexts, qLabel);
-    if (!outstanding) {
-      console.log(`[digests] ${qLabel} → addressed by later conversation`);
-      continue;
-    }
-    console.log(`[digests] ${qLabel} → outstanding per Gemini`);
+    if (!outstanding) continue;
+
     const flagged = await buildUnansweredQuestion(msg);
     return { feature, questions: [flagged] };
   }
@@ -1897,17 +1880,22 @@ async function isOutstandingByGemini(
   contextLabel: string,
 ): Promise<boolean> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey || laterConversation.length === 0) return true;
+  // Without a key we can't run the gate — default to "outstanding" so we
+  // don't silently swallow real questions.
+  if (!apiKey) return true;
   // Cap to avoid massive prompts on busy chats.
   const capped = laterConversation.slice(0, 50);
+  const conversationBlock = capped.length === 0
+    ? '(no subsequent messages in the chat)'
+    : capped.map((r, i) => `(${i + 1}) "${r.replace(/"/g, '\\"').slice(0, 500)}"`).join('\n');
   const prompt = `A team member tagged the chat owner in this message in a feature group chat:
 "${question.replace(/"/g, '\\"').slice(0, 800)}"
 
 Subsequent messages in the same chat, chronological order:
-${capped.map((r, i) => `(${i + 1}) "${r.replace(/"/g, '\\"').slice(0, 500)}"`).join('\n')}
+${conversationBlock}
 
 Decide one of three labels:
-- "not_a_question": the tagged message is not actually asking a question or requesting a decision/action from the owner. Examples: status updates, FYI shares, links being passed along, statements of fact.
+- "not_a_question": the tagged message is not actually asking a question or requesting a decision/action from the owner. Examples: status updates, FYI shares, links being passed along, statements of fact, observations, conclusions.
 - "addressed": the tagged message IS a question or request, AND it was directly addressed/answered by a subsequent message. Reactions, restatements, follow-up questions, and unrelated chatter do NOT count as addressing it.
 - "outstanding": the tagged message IS a question or request that has NOT been addressed yet — the owner still needs to respond.
 
