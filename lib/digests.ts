@@ -1984,26 +1984,12 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
       const safePreview = escapeMd(preview);
       lines.push(`- ${sourceLabel}${fromTag}: ${safePreview}`);
     }
-    // Per-feature action buttons: jump to the PRD doc and/or the
-    // feature's Lark group chat. Skip whichever URL we don't have.
+    // DEBUG: drop URL buttons entirely so we test Let Jr. Reply
+    // alone in the action row. Once we identify the trigger we can
+    // add Open PRD / Open Group back.
     const buttons: CardButton[] = [];
-    if (f.prd) buttons.push({ text: 'Open PRD', type: 'default', url: f.prd });
-    if (f.chatId) {
-      buttons.push({
-        text: 'Open Group',
-        type: 'default',
-        url: `https://applink.larkoffice.com/client/chat/open?openChatId=${f.chatId}`,
-      });
-    }
-    // Let Jr. Reply: card-action triggers Gemini to draft a reply
-    // for the first / most recent question, posts it as a thread
-    // reply to the digest card, and tracks the proposal so a 👍
-    // reaction from the owner forwards it to the destination.
     const q = finding.questions[0];
     if (q && (q.source === 'prd_comment' || q.source === 'chat')) {
-      // DEBUG: minimal value to test whether Lark client rejects on
-      // payload contents (200340). If bare {action} clicks through,
-      // we'll add the other fields back one by one.
       buttons.push({
         text: 'Let Jr. Reply',
         type: 'primary',
