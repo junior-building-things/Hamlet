@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
       }
     })();
 
-    return NextResponse.json({ toast: { type: 'info', content: 'Drafting…' } });
+    return NextResponse.json({ toast: { type: 'success', content: 'Drafting…' } });
   }
 
   console.log('[card-action] no matching action:', actionName, 'type:', body.type);
