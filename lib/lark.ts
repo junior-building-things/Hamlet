@@ -1694,6 +1694,56 @@ export async function listDocComments(
 }
 
 /**
+ * List the emoji reactions on a Lark chat message. Each entry has
+ * the reactor's `open_id` (under operator.operator_id when their
+ * type is 'user') and the emoji type. Returns [] on any error so
+ * callers can treat "no reactions" the same as "couldn't fetch".
+ */
+export async function listMessageReactions(
+  messageId: string,
+  token: string,
+): Promise<Array<{ openId: string; emoji: string }>> {
+  if (!messageId) return [];
+  const out: Array<{ openId: string; emoji: string }> = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 5; page++) {
+    const params = new URLSearchParams({ page_size: '100' });
+    if (pageToken) params.set('page_token', pageToken);
+    let data: {
+      code: number;
+      data?: {
+        items?: Array<{
+          operator?: { operator_id?: string; operator_type?: string };
+          reaction_type?: { emoji_type?: string };
+        }>;
+        has_more?: boolean;
+        page_token?: string;
+      };
+    };
+    try {
+      const res = await fetch(
+        `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}/reactions?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      data = await res.json() as typeof data;
+    } catch {
+      return out;
+    }
+    if (data.code !== 0) return out;
+    for (const item of data.data?.items ?? []) {
+      // Only user reactions count — bots/auto operators are noise.
+      if (item.operator?.operator_type && item.operator.operator_type !== 'user') continue;
+      const openId = item.operator?.operator_id;
+      if (!openId) continue;
+      out.push({ openId, emoji: item.reaction_type?.emoji_type ?? '' });
+    }
+    if (!data.data?.has_more || !data.data.page_token) break;
+    pageToken = data.data.page_token;
+  }
+  return out;
+}
+
+/**
  * Resolve a Lark `open_id` to its corresponding `user_id` (a.k.a.
  * employee ID). Returns null if the lookup fails. Doc-comment user
  * references use `user_id`, so this is needed to match the owner

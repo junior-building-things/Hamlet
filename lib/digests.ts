@@ -20,6 +20,7 @@ import {
   resolveDocIdFromUrl,
   listDocCommentsDetailed,
   resolveUserIdFromOpenId,
+  listMessageReactions,
   PostParagraph,
   ChatMessage,
   CardSection,
@@ -1776,14 +1777,25 @@ export async function collectUnansweredForFeature(
   console.log(`[digests] Q&A "${feature.name}": ${mentionMsgs.length} msgs mentioning owner`);
   if (mentionMsgs.length === 0) return null;
 
-  // Drop the ones that have a real answer. The structural thread-
-  // activity check (parent_id / root_id matching) only proves there's
-  // SOMETHING after the question — Gemini decides whether any of
-  // those follow-ups is actually an answer. Stickers / files / other
-  // non-text follow-ups don't count as answers (Gemini gets nothing
-  // to read), so we leave the question flagged.
+  // Drop the ones that have a real answer. Three signals are checked
+  // in order, cheapest first:
+  //   (a) The owner reacted with an emoji on the question (cheap;
+  //       one Lark API call). Counts as acknowledgement.
+  //   (b) Thread activity (parent_id / root_id matching) — and if
+  //       so, Gemini decides whether the follow-ups actually answer.
+  // Stickers / files / other non-text follow-ups don't count
+  // (Gemini gets nothing to read), so we leave the question flagged.
   const unanswered: UnansweredQuestion[] = [];
   for (const msg of mentionMsgs) {
+    // (a) Owner reaction check.
+    let ownerReacted = false;
+    try {
+      const reactions = await listMessageReactions(msg.message_id, token);
+      ownerReacted = reactions.some(r => r.openId === ownerOpenId);
+    } catch { /* fall through to thread check */ }
+    if (ownerReacted) continue;
+
+    // (b) Thread-activity + Gemini check.
     const laterMsgs = findLaterThreadMessages(msg, messages);
     if (laterMsgs.length > 0) {
       const questionText = chatMessageText(msg);
