@@ -2555,10 +2555,63 @@ async function summariseAbReport(
 }
 
 /**
+ * Read the feature's PRD and ask Gemini to return the first bullet from
+ * the "Next Steps" section, verbatim. Returns '' on any failure or when
+ * the section / bullets are missing — caller decides whether to skip or
+ * show a placeholder.
+ */
+async function getFirstNextStep(
+  featureName: string,
+  prdUrl: string,
+  userAccessToken?: string,
+): Promise<string> {
+  if (!prdUrl) return '';
+  let content = '';
+  try {
+    content = await readDocContent(prdUrl);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if ((msg.includes('1770032') || /forbidden/i.test(msg)) && userAccessToken) {
+      try {
+        content = await readDocContentWithToken(prdUrl, userAccessToken);
+      } catch (e2) {
+        console.warn(`[digests] AB-concluded: PRD next-step user-token read failed for "${featureName}":`, e2);
+      }
+    }
+    if (!content) {
+      console.warn(`[digests] AB-concluded: PRD next-step read failed for "${featureName}":`, e);
+      return '';
+    }
+  }
+  if (!content) return '';
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey) return '';
+  const { getPrompt: getPromptFn, getPromptModel: getModelFn } = await import('./prompts');
+  const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
+  const def = getDefFn('hamlet.first_next_step');
+  const tmpl = await getPromptFn('hamlet.first_next_step', def?.default ?? '');
+  const modelName = await getModelFn('hamlet.first_next_step', def?.model ?? 'gemini-2.5-flash-lite');
+  const truncated = content.length > 30_000 ? content.slice(0, 30_000) + '\n…[truncated]' : content;
+  const prompt = renderFn(tmpl, { featureName, prdContent: truncated });
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim();
+    if (!raw || raw === '(none)') return '';
+    return raw;
+  } catch (e) {
+    console.warn(`[digests] AB-concluded: Gemini next-step extraction failed for "${featureName}":`, e);
+    return '';
+  }
+}
+
+/**
  * Build the per-feature card section + Send-button payload for one
  * AB-concluded transition. Mirrors buildAbOpenSection but swaps:
  *   - Title tag: [✅ AB concluded] instead of [📲 AB open]
  *   - "A/B Results" (Gemini summary of AB report) instead of "A/B Setup"
+ *   - "Next Steps" line (first bullet of PRD's Next Steps section)
  *   - Reference links: AB Report | Libra (instead of PRD | Libra)
  * Background image (from PRD "What we are building" section) and the
  * trailing cc@Thomas mention are unchanged.
@@ -2586,7 +2639,10 @@ export async function buildAbConcludedSection(
       console.warn(`[digests] AB-concluded: PRD section extraction failed for "${feature.name}":`, e);
     }
   }
-  const abResults = await summariseAbReport(feature.name, abReportUrl, userAccessToken);
+  const [abResults, nextStep] = await Promise.all([
+    summariseAbReport(feature.name, abReportUrl, userAccessToken),
+    getFirstNextStep(feature.name, feature.prd ?? '', userAccessToken),
+  ]);
 
   const refs: Array<{ label: string; url: string }> = [];
   if (abReportUrl) refs.push({ label: 'AB Report', url: abReportUrl });
@@ -2601,6 +2657,7 @@ export async function buildAbConcludedSection(
     `**Background**: ${background}`,
     `**A/B Results**:`,
     abResults,
+    nextStep ? `**Next Steps**: ${nextStep}` : '',
     refs.length > 0
       ? `**Reference**: ${refs.map(r => `[${r.label}](${r.url})`).join(' | ')}`
       : '',
@@ -2621,6 +2678,12 @@ export async function buildAbConcludedSection(
     const trimmed = line.trim();
     if (!trimmed) continue;
     postParagraphs.push([{ tag: 'text', text: trimmed }]);
+  }
+  if (nextStep) {
+    postParagraphs.push([
+      { tag: 'text', text: 'Next Steps: ', style: ['bold'] },
+      { tag: 'text', text: nextStep },
+    ]);
   }
   if (refs.length > 0) {
     const inlines: Array<{ tag: 'text'; text: string; style?: string[] } | { tag: 'a'; text: string; href: string }> = [
