@@ -315,6 +315,35 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             }
             setFeatures(cacheData.features);
             setLoading(false);
+            // Backfill avatars for people who only show up in
+            // pocEmails but never had their avatar written into
+            // any feature.avatars (PMs / DAs / TPMs). Sends one
+            // batched request per page load so the Lark contact
+            // API is hit just once.
+            const missing: Record<string, string> = {};
+            for (const f of cacheData.features) {
+              const pocEmails = f.pocEmails ?? {};
+              for (const [name, email] of Object.entries(pocEmails)) {
+                if (!AV[name] && email && !missing[name]) missing[name] = email;
+              }
+            }
+            if (Object.keys(missing).length > 0) {
+              fetch('/api/avatars/resolve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emails: missing }),
+              })
+                .then(r => r.ok ? r.json() : null)
+                .then((d: { avatars?: Record<string, string> } | null) => {
+                  if (d?.avatars && Object.keys(d.avatars).length > 0) {
+                    Object.assign(AV, d.avatars);
+                    // Force a re-render so FeatureModal options
+                    // pick up the new avatars on next open.
+                    setFeatures(prev => [...prev]);
+                  }
+                })
+                .catch(() => {});
+            }
             return;
           }
         }
