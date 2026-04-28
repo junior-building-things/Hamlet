@@ -115,17 +115,13 @@ export default function Home() {
   // ── Add-modal callbacks ────────────────────────────────────────────────────
 
   /**
-   * Insert the just-created feature into the list and pin it. Modal
-   * stays open so the user can see the success banner with Meego /
-   * PRD links — they close it manually via Cancel / X.
+   * Insert the just-created feature into the list. The list's normal
+   * sort places it according to its status; no pinning, no scroll.
+   * Modal stays open so the user can see the success banner with
+   * Meego / PRD links — they close it manually via Cancel / X.
    */
   function handleTempAdded(feature: Feature) {
-    setFeatures(prev => [feature, ...prev]);
-    setPinnedId(feature.id);
-    setTimeout(() => {
-      document.getElementById('main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 100);
-    setTimeout(() => setPinnedId(prev => prev === feature.id ? null : prev), 30_000);
+    setFeatures(prev => [...prev, feature]);
   }
 
   /** Replace temp feature with the real one, or remove it on failure */
