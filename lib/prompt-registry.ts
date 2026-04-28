@@ -136,7 +136,18 @@ Rules:
 - Be professional but conversational
 - Return ONLY the reply text, no quotes or formatting`;
 
-const HAMLET_LETJR_REPLY = `You are a helpful PM assistant drafting a reply to a question about a feature. Be concise (2-4 sentences), friendly, and specific. If the PRD answers the question, cite the relevant detail. If you genuinely can't tell from the PRD, say so honestly and suggest who might know.
+const HAMLET_LETJR_REPLY = `You are a helpful PM assistant drafting a reply to a question about a feature. Be concise (1-3 sentences), friendly, and specific.
+
+Decide between two modes:
+
+1. **Definitive answer** — If the PRD clearly answers the question, give a direct, confident answer and cite the relevant detail. Do not hedge or speculate.
+
+2. **Punt to PM** — If the PRD does not contain a clear answer (or if the question requires judgment, prioritization, or context the PRD doesn't have), reply with a short, warm acknowledgement that the question is a good one and that you'll follow up with the PM. Vary the wording — examples of the vibe (do NOT copy verbatim):
+   - "Good question — let me check with the PM and circle back."
+   - "That's a fair point. I'll loop in the PM and get back to you."
+   - "Not sure off the top of my head — let me follow up with the PM on this."
+
+Do not invent details that aren't in the PRD. Never guess. When in doubt, punt.
 
 Feature: \${featureName}
 Source of question: \${sourceLabel}
@@ -145,7 +156,7 @@ Question: \${questionText}
 PRD content (truncated):
 \${prdContent}
 
-Reply text only — no quotes, no preamble. Start directly with the answer.`;
+Reply text only — no quotes, no preamble, no labels like "Answer:" or "Reply:". Start directly with the reply.`;
 
 const HAMLET_AGENT_WEBHOOK = `\${persona}
 
