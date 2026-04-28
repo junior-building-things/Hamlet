@@ -2591,8 +2591,18 @@ async function getFirstNextStep(
   const def = getDefFn('hamlet.first_next_step');
   const tmpl = await getPromptFn('hamlet.first_next_step', def?.default ?? '');
   const modelName = await getModelFn('hamlet.first_next_step', def?.model ?? 'gemini-2.5-flash-lite');
-  const truncated = content.length > 30_000 ? content.slice(0, 30_000) + '\n…[truncated]' : content;
+  // Next Steps is almost always at the END of an AB report. If we have
+  // to truncate, keep the head (for context) + the last 60k (so the end
+  // section is preserved). Total cap 100k chars — comfortably under
+  // gemini-2.5-flash-lite's 1M-token context.
+  let truncated: string;
+  if (content.length <= 100_000) {
+    truncated = content;
+  } else {
+    truncated = content.slice(0, 40_000) + '\n…[middle truncated]…\n' + content.slice(-60_000);
+  }
   const prompt = renderFn(tmpl, { featureName, abReportContent: truncated });
+  console.log(`[digests] AB-concluded: first_next_step "${featureName}" report=${content.length}c, sent=${truncated.length}c, tail=${JSON.stringify(content.slice(-400))}`);
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
