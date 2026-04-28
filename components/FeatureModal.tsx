@@ -5,6 +5,7 @@ import { X, Loader2, CheckCircle2, WandSparkles } from 'lucide-react';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
+import { PackageModal } from './PackageModal';
 import { AV } from '@/lib/avatars';
 
 interface Props {
@@ -220,6 +221,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
   // sections — no need to teach the add view about edit content.
   const [createdFeature, setCreatedFeature] = useState<Feature | null>(null);
   const feature = createdFeature ?? featureProp;
+  const [showPackages, setShowPackages] = useState(false);
 
   // ── Add-mode state ──
   const [form, setForm] = useState({
@@ -338,6 +340,12 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
         console.error('PRD creation failed:', data.prdError);
         toast.error(`PRD creation failed: ${data.prdError}`);
       }
+      // Look up the human-readable label for each selected option so the
+      // post-create modal renders Project Details / POC Details exactly
+      // like the "click an existing feature" view (which gets these
+      // populated from cached data).
+      const lookup = (opts: AvatarOption[], val: string) =>
+        opts.find(o => o.value === val)?.label;
       const newFeature: Feature = {
         id:              data.id ?? `feature_${Date.now()}`,
         name:            form.name.trim(),
@@ -351,6 +359,19 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
         meegoIssueId:    data.id,
         meegoProjectKey: TIKTOK_PROJECT_KEY,
         prd:             data.prd,
+        quarterlyCycle:  QUARTERLY_CYCLES.find(q => q.id === form.quarterlyCycle)?.label,
+        businessLine:    BUSINESS_LINES.find(b => b.id === form.businessLine)?.label,
+        socialComponent: SOCIAL_COMPONENTS.find(s => s.id === form.socialComponent)?.label,
+        pmOwner:         lookup(PM_OPTIONS, form.pm),
+        tpmOwner:        lookup(TPM_OPTIONS, form.tpm),
+        uiuxOwner:       lookup(UIUX_OWNERS(), form.uiux),
+        contentDesigner: lookup(CONTENT_OPTIONS(), form.contentDesigner),
+        daOwner:         lookup(DA_OPTIONS(), form.da),
+        qaOwner:         lookup(QA_OPTIONS(), form.qa),
+        androidOwner:    lookup(ANDROID_OWNERS(), form.android),
+        iosOwner:        lookup(IOS_OWNERS(), form.ios),
+        serverOwner:     lookup(SERVER_OWNERS(), form.server),
+        techOwner:       lookup(TECH_OWNERS(), form.techOwner),
       };
       onSave(newFeature);
       setCreatedFeature(newFeature);
@@ -592,7 +613,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
             </button>
           </div>
           {isMeego && (
-            <div className="flex items-center gap-4 mt-1.5">
+            <div className="flex items-center gap-4 mt-1.5 flex-wrap">
               <a href={feature?.meegoUrl} target="_blank" rel="noopener noreferrer"
                 className="text-xs flex items-center gap-1 hover:brightness-125 transition-all" style={{ color: '#B291F7' }}>
                 <Image src="/meego.png" alt="" width={16} height={16} className="shrink-0" /> Meego
@@ -615,11 +636,23 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
                   <Image src="/figma.svg" alt="" width={10} height={14} className="shrink-0" /> Figma
                 </a>
               )}
+              {feature?.libraUrl && (
+                <a href={feature.libraUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs flex items-center gap-1 hover:brightness-125 transition-all" style={{ color: '#0073F0' }}>
+                  <Image src="/libra.png" alt="" width={14} height={14} className="shrink-0" /> Libra
+                </a>
+              )}
               {feature?.abReportUrl && (
                 <a href={feature.abReportUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-xs flex items-center gap-1 hover:brightness-125 transition-all" style={{ color: '#F59E0B' }}>
-                  <Image src="/ab.png" alt="" width={14} height={14} className="shrink-0" /> AB
+                  className="text-xs flex items-center gap-1 hover:brightness-125 transition-all" style={{ color: '#108453' }}>
+                  <Image src="/abreport.png" alt="" width={14} height={14} className="shrink-0" /> AB Report
                 </a>
+              )}
+              {(feature?.packageQrUrl || feature?.iosPackageQrUrl) && (
+                <button type="button" onClick={() => setShowPackages(true)}
+                  className="text-xs text-[var(--foreground)] hover:brightness-125 flex items-center gap-1 transition-all">
+                  <Image src="/qr.svg" alt="" width={14} height={14} className="shrink-0" /> Packages
+                </button>
               )}
             </div>
           )}
@@ -652,6 +685,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
             <SectionHeader title="Project Details" />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-4">
               <InfoField label="Priority"         value={feature?.priority} />
+              <InfoField label="Quarterly Cycle"  value={feature?.quarterlyCycle} />
               <InfoField label="Business Line"    value={feature?.businessLine} />
               <InfoField label="Social Component" value={feature?.socialComponent} />
             </div>
@@ -671,6 +705,39 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
               <AvatarInfoField label="Server"           value={feature?.serverOwner} />
               <AvatarInfoField label="Tech Owner"       value={feature?.techOwner} />
             </div>
+            {(() => {
+              // "Other POCs" — names appearing in pocEmails but not in any of
+              // the canonical 10 role fields above (e.g. Apple BD, Privacy BP,
+              // Localization, Line Master, Security QA). De-dupe by first name.
+              if (!feature?.pocEmails) return null;
+              const claimed = new Set<string>();
+              const claim = (val?: string) => {
+                if (!val) return;
+                for (const n of val.split(',').map(n => n.trim()).filter(Boolean)) {
+                  const first = n.split(/\s+/)[0];
+                  if (first) claimed.add(first);
+                }
+              };
+              claim(feature.pmOwner); claim(feature.tpmOwner); claim(feature.uiuxOwner);
+              claim(feature.contentDesigner); claim(feature.daOwner); claim(feature.qaOwner);
+              claim(feature.androidOwner); claim(feature.iosOwner); claim(feature.serverOwner);
+              claim(feature.techOwner);
+              const others = Object.keys(feature.pocEmails).filter(name => !claimed.has(name));
+              if (others.length === 0) return null;
+              return (
+                <div className="mt-4">
+                  <span className="text-[11px] text-gray-500 font-medium">Other POCs</span>
+                  <div className="flex flex-col gap-1 mt-1">
+                    {others.map(name => (
+                      <div key={name} className="flex items-center gap-1.5">
+                        <UserAvatar name={name} url={AV[name]} size={5} />
+                        <span className="text-sm text-[var(--foreground)]">{name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
         </div>
@@ -682,6 +749,22 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
           </button>
         </div>
       </div>
+
+      {showPackages && feature && (feature.packageQrUrl || feature.iosPackageQrUrl) && (
+        <PackageModal
+          androidQrUrl={feature.packageQrUrl}
+          androidDownloadUrl={feature.packageDownloadUrl}
+          androidPackageName={feature.packageName}
+          androidBuildTime={feature.packageBuildTime}
+          iosQrUrl={feature.iosPackageQrUrl}
+          iosDownloadUrl={feature.iosPackageDownloadUrl}
+          iosPackageName={feature.iosPackageName}
+          iosBuildTime={feature.iosPackageBuildTime}
+          featureName={feature.name}
+          defaultTab={feature.iosPackageQrUrl && !feature.packageQrUrl ? 'ios' : 'android'}
+          onClose={() => setShowPackages(false)}
+        />
+      )}
     </div>
   );
 }
