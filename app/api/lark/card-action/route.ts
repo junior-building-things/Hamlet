@@ -202,18 +202,18 @@ export async function POST(req: NextRequest) {
         let replyText = '_(Couldn\'t generate a reply — Gemini not configured)_';
         if (apiKey) {
           try {
+            const { getPrompt } = await import('@/lib/prompts');
+            const { renderPrompt, getPromptDef } = await import('@/lib/prompt-registry');
+            const promptDef = getPromptDef('hamlet.letjr_reply');
+            const template = await getPrompt('hamlet.letjr_reply', promptDef?.default ?? '');
+            const prompt = renderPrompt(template, {
+              featureName,
+              sourceLabel: questionSource === 'prd_comment' ? 'PRD comment' : 'feature group chat',
+              questionText,
+              prdContent: prdContent.slice(0, 8000) || '(PRD not available)',
+            });
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-            const prompt = `You are a helpful PM assistant drafting a reply to a question about a feature. Be concise (2-4 sentences), friendly, and specific. If the PRD answers the question, cite the relevant detail. If you genuinely can't tell from the PRD, say so honestly and suggest who might know.
-
-Feature: ${featureName}
-Source of question: ${questionSource === 'prd_comment' ? 'PRD comment' : 'feature group chat'}
-Question: ${questionText}
-
-PRD content (truncated):
-${prdContent.slice(0, 8000) || '(PRD not available)'}
-
-Reply text only — no quotes, no preamble. Start directly with the answer.`;
             const result = await model.generateContent(prompt);
             replyText = result.response.text().trim();
           } catch (e) {

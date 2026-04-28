@@ -136,6 +136,17 @@ Rules:
 - Be professional but conversational
 - Return ONLY the reply text, no quotes or formatting`;
 
+const HAMLET_LETJR_REPLY = `You are a helpful PM assistant drafting a reply to a question about a feature. Be concise (2-4 sentences), friendly, and specific. If the PRD answers the question, cite the relevant detail. If you genuinely can't tell from the PRD, say so honestly and suggest who might know.
+
+Feature: \${featureName}
+Source of question: \${sourceLabel}
+Question: \${questionText}
+
+PRD content (truncated):
+\${prdContent}
+
+Reply text only — no quotes, no preamble. Start directly with the answer.`;
+
 const HAMLET_AGENT_WEBHOOK = `\${persona}
 
 A team member sent you this \${chatType} message:
@@ -368,6 +379,16 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     description: 'Generates AI replies to PRD comments based on instruction',
     variables: ['quote', 'content', 'existingReplies', 'docContext', 'replyText'],
     default: HAMLET_PRD_COMMENT_REPLY,
+  },
+  {
+    id: 'hamlet.letjr_reply',
+    name: 'Hamlet — Let Jr. Reply draft',
+    service: 'hamlet',
+    fileRef: 'app/api/lark/card-action/route.ts',
+    model: 'gemini-2.5-flash-lite',
+    description: 'Drafts a reply to an unanswered PRD comment / chat question for the "Let Jr. Reply" button',
+    variables: ['featureName', 'sourceLabel', 'questionText', 'prdContent'],
+    default: HAMLET_LETJR_REPLY,
   },
   {
     id: 'hamlet.agent_webhook',
