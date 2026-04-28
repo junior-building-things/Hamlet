@@ -1900,22 +1900,31 @@ async function isOutstandingByGemini(
   if (!apiKey || laterConversation.length === 0) return true;
   // Cap to avoid massive prompts on busy chats.
   const capped = laterConversation.slice(0, 50);
-  const prompt = `A team member raised this question in a feature group chat (tagging the chat owner):
+  const prompt = `A team member tagged the chat owner in this message in a feature group chat:
 "${question.replace(/"/g, '\\"').slice(0, 800)}"
 
 Subsequent messages in the same chat, chronological order:
 ${capped.map((r, i) => `(${i + 1}) "${r.replace(/"/g, '\\"').slice(0, 500)}"`).join('\n')}
 
-Was the question above directly addressed or answered by any subsequent message? Treat reactions, restatements, follow-up questions, or unrelated chatter as NOT answers.
+Decide one of three labels:
+- "not_a_question": the tagged message is not actually asking a question or requesting a decision/action from the owner. Examples: status updates, FYI shares, links being passed along, statements of fact.
+- "addressed": the tagged message IS a question or request, AND it was directly addressed/answered by a subsequent message. Reactions, restatements, follow-up questions, and unrelated chatter do NOT count as addressing it.
+- "outstanding": the tagged message IS a question or request that has NOT been addressed yet — the owner still needs to respond.
 
-Reply with ONLY one word: "addressed" or "outstanding". No other text.`;
+Reply with ONLY one word: "not_a_question", "addressed", or "outstanding". No other text.`;
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
     const result = await model.generateContent(prompt);
     const raw = result.response.text().trim().toLowerCase();
-    const outstanding = raw.startsWith('o');
-    console.log(`[digests] Gemini outstanding-check (${contextLabel}): ${outstanding ? 'outstanding' : 'addressed'} (raw=${JSON.stringify(raw).slice(0, 60)})`);
+    // Only "outstanding" flags the message; both "not_a_question" and
+    // "addressed" mean we should skip it.
+    const outstanding = raw.startsWith('outstanding');
+    const verdict = raw.startsWith('not') ? 'not_a_question'
+      : raw.startsWith('addressed') ? 'addressed'
+      : raw.startsWith('outstanding') ? 'outstanding'
+      : `unknown(${raw.slice(0, 30)})`;
+    console.log(`[digests] Gemini outstanding-check (${contextLabel}): ${verdict}`);
     return outstanding;
   } catch (e) {
     console.warn(`[digests] Gemini outstanding-check failed (${contextLabel}), defaulting to "outstanding":`, e);
