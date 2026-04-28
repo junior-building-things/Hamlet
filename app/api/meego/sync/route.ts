@@ -189,6 +189,20 @@ export async function POST(req: NextRequest) {
       }).catch(e => console.warn('[sync] cache update failed:', e));
     }
 
+    // Fire-and-forget: ask Junior to send a "PRD Ready" card to the
+    // compliance chat if this feature has just moved past Requirements
+    // Prep (Junior dedupes via GCS so calling repeatedly is safe).
+    const juniorUrl = process.env.JUNIOR_URL;
+    const cronSecret = process.env.JUNIOR_CRON_SECRET;
+    const projectKey = meegoUrl.match(/meego\.larkoffice\.com\/([^/]+)\/story/)?.[1];
+    if (juniorUrl && cronSecret && projectKey && meegoId) {
+      fetch(`${juniorUrl}/api/check-prd-ready`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cronSecret}` },
+        body: JSON.stringify({ project: projectKey, id: meegoId }),
+      }).catch(e => console.warn('[sync] check-prd-ready call failed:', e));
+    }
+
     return NextResponse.json({ ...result, pocAvatars });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Sync failed';
