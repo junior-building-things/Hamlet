@@ -2598,6 +2598,7 @@ async function getFirstNextStep(
     const model = genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
+    console.log(`[digests] AB-concluded: first_next_step for "${featureName}": ${JSON.stringify(raw).slice(0, 300)}`);
     if (!raw || raw === '(none)') return '';
     return raw;
   } catch (e) {
