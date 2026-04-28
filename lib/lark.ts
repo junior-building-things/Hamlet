@@ -2916,27 +2916,33 @@ export async function sendInteractiveCardToChat(
       }
     }
     if (s.buttons && s.buttons.length > 0) {
-      elements.push({
-        tag: 'action',
-        actions: s.buttons.map(b => {
-          const action: Record<string, unknown> = {
-            tag: 'button',
-            text: { tag: 'plain_text', content: b.text },
-            type: b.type,
-          };
-          if (b.url) action.url = b.url;
-          // Callback buttons: provide BOTH the legacy `value` field
-          // AND the v2 `behaviors` array. Recent Lark clients require
-          // behaviors=[{type:'callback', value:…}] on callback
-          // buttons; clients that haven't migrated still honor the
-          // legacy `value` field. Sending both is a no-op overlap.
-          if (b.value) {
-            action.value = b.value;
-            action.behaviors = [{ type: 'callback', value: b.value }];
-          }
-          return action;
-        }),
-      });
+      // Split URL buttons and callback buttons into separate action
+      // rows. Mixing them in one row appears to break Lark client
+      // callbacks (200340 "card returns illegal data" — the click
+      // never even leaves the client).
+      const urlButtons = s.buttons.filter(b => b.url);
+      const callbackButtons = s.buttons.filter(b => !b.url && b.value);
+      const buildAction = (b: CardButton): Record<string, unknown> => {
+        const action: Record<string, unknown> = {
+          tag: 'button',
+          text: { tag: 'plain_text', content: b.text },
+          type: b.type,
+        };
+        if (b.url) action.url = b.url;
+        if (b.value) {
+          // Provide BOTH legacy `value` and v2 `behaviors` so old +
+          // new Lark clients both pick up the callback.
+          action.value = b.value;
+          action.behaviors = [{ type: 'callback', value: b.value }];
+        }
+        return action;
+      };
+      if (urlButtons.length > 0) {
+        elements.push({ tag: 'action', actions: urlButtons.map(buildAction) });
+      }
+      if (callbackButtons.length > 0) {
+        elements.push({ tag: 'action', actions: callbackButtons.map(buildAction) });
+      }
     }
     if (i < sections.length - 1) {
       elements.push({ tag: 'hr' });
