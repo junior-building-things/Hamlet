@@ -1784,8 +1784,7 @@ export async function collectUnansweredForFeature(
   try {
     // includeThreadReplies: Lark's v1 list-messages API only returns
     // top-level messages; thread replies must be fetched separately.
-    // Without this, findLaterThreadMessages can't see any answers and
-    // every question with thread-only replies looks unanswered.
+    // Without this, findLaterThreadMessages can't see any answers.
     messages = await readChatMessages(chatId, sinceMs, token, { includeThreadReplies: true });
   } catch (e) {
     console.warn(`[digests] failed to read messages for ${feature.name}:`, e);
@@ -1793,77 +1792,135 @@ export async function collectUnansweredForFeature(
   }
   if (messages.length === 0) return null;
 
-  // Filter to messages where Thomas is in the @mentions list. Any sender,
-  // any thread depth.
+  // Candidates: any message in the window that @-mentions the owner.
   const mentionMsgs = messages.filter(m =>
     (m.mentions ?? []).some(mention => mentionOpenId(mention) === ownerOpenId),
   );
   console.log(`[digests] Q&A "${feature.name}": ${mentionMsgs.length} msgs mentioning owner`);
   if (mentionMsgs.length === 0) return null;
 
-  // Drop the ones that have a real answer. Three signals are checked
-  // in order, cheapest first:
-  //   (a) The owner reacted with an emoji on the question (cheap;
-  //       one Lark API call). Counts as acknowledgement.
-  //   (b) Thread activity (parent_id / root_id matching) — and if
-  //       so, Gemini decides whether the follow-ups actually answer.
-  // Stickers / files / other non-text follow-ups don't count
-  // (Gemini gets nothing to read), so we leave the question flagged.
-  const unanswered: UnansweredQuestion[] = [];
+  // Newest first — per-chat dedup means the freshest unanswered wins.
+  mentionMsgs.sort((a, b) => Number(b.create_time ?? 0) - Number(a.create_time ?? 0));
+
+  // Decision rules (per-question):
+  //   (a) Owner reacted with any emoji on the question → answered.
+  //   (1) Any thread reply on the question → answered (regardless of
+  //       reply content).
+  //   (2) No thread reply AND no later messages in the chat → unanswered.
+  //   (3) No thread reply, but later messages exist → ask Gemini whether
+  //       the question is still outstanding given the whole conversation
+  //       that came after.
+  // Per-chat dedup: surface at most one unanswered question per chat
+  // per digest (the most recent surviving candidate).
   for (const msg of mentionMsgs) {
-    // (a) Owner reaction check.
+    const qLabel = `chat "${feature.name}" msg=${msg.message_id}`;
+
+    // (a) Owner reaction → acknowledged.
     let ownerReacted = false;
     try {
       const reactions = await listMessageReactions(msg.message_id, token);
       ownerReacted = reactions.some(r => r.openId === ownerOpenId);
-    } catch { /* fall through to thread check */ }
-    if (ownerReacted) continue;
-
-    // (b) Thread-activity + Gemini check.
-    const laterMsgs = findLaterThreadMessages(msg, messages);
-    const questionTextDiag = chatMessageText(msg);
-    // Diagnostic: log every unanswered candidate so we can see whether
-    // thread replies were found (laterMsgs > 0) or missed entirely.
-    console.log(
-      `[digests] Q&A "${feature.name}" msg=${msg.message_id} parent=${msg.parent_id ?? '(none)'} root=${msg.root_id ?? '(none)'} totalMsgs=${messages.length} laterMsgs=${laterMsgs.length} q="${questionTextDiag.slice(0, 100)}"`,
-    );
-    if (laterMsgs.length > 0) {
-      const questionText = chatMessageText(msg);
-      const replyTexts = laterMsgs.map(chatMessageText).filter(t => t.length > 0);
-      console.log(
-        `[digests]   replyTexts=${replyTexts.length} sample=${JSON.stringify(replyTexts.slice(0, 3).map(r => r.slice(0, 120)))}`,
-      );
-      if (replyTexts.length > 0) {
-        const answered = await isAnsweredByGemini(
-          questionText,
-          replyTexts,
-          `chat "${feature.name}" msg=${msg.message_id}`,
-        );
-        if (answered) continue;
-      }
-      // No textual replies (just stickers etc.) → fall through and
-      // keep the question flagged as unanswered.
+    } catch { /* fall through */ }
+    if (ownerReacted) {
+      console.log(`[digests] ${qLabel} → answered (owner reacted)`);
+      continue;
     }
 
-    const text = chatMessageText(msg);
-    const senderOpenId = msg.sender?.sender_id?.open_id ?? '';
-    const senderName = senderOpenId ? await lookupUserName(senderOpenId, 'open_id') : '';
+    // (1) Any thread reply → answered.
+    const threadReplies = findLaterThreadMessages(msg, messages);
+    if (threadReplies.length > 0) {
+      console.log(`[digests] ${qLabel} → answered (${threadReplies.length} thread replies)`);
+      continue;
+    }
 
-    unanswered.push({
-      senderOpenId,
-      senderName,
-      mentionNames: (msg.mentions ?? []).map(m => m.name),
-      text: text.slice(0, 280),
-      messageId: msg.message_id,
-      timestamp: Number(msg.create_time ?? 0) * 1000,
-      source: 'chat',
-    });
+    // No thread reply. Look at later messages in the same chat
+    // (any depth, any sender).
+    const qTime = Number(msg.create_time ?? 0);
+    const laterChat = messages
+      .filter(m => m.message_id !== msg.message_id && Number(m.create_time ?? 0) > qTime)
+      .sort((a, b) => Number(a.create_time ?? 0) - Number(b.create_time ?? 0));
+
+    // (2) No thread reply, no later messages → unanswered.
+    if (laterChat.length === 0) {
+      console.log(`[digests] ${qLabel} → unanswered (no thread, no later msgs)`);
+      const flagged = await buildUnansweredQuestion(msg);
+      return { feature, questions: [flagged] };
+    }
+
+    // (3) No thread reply, but later messages → Gemini judges using full
+    // subsequent conversation.
+    const questionText = chatMessageText(msg);
+    const laterTexts = laterChat.map(chatMessageText).filter(t => t.length > 0);
+    if (laterTexts.length === 0) {
+      // Later messages are all non-text (stickers etc.) — still unanswered.
+      console.log(`[digests] ${qLabel} → unanswered (no thread, later msgs all non-text)`);
+      const flagged = await buildUnansweredQuestion(msg);
+      return { feature, questions: [flagged] };
+    }
+    const outstanding = await isOutstandingByGemini(questionText, laterTexts, qLabel);
+    if (!outstanding) {
+      console.log(`[digests] ${qLabel} → addressed by later conversation`);
+      continue;
+    }
+    console.log(`[digests] ${qLabel} → outstanding per Gemini`);
+    const flagged = await buildUnansweredQuestion(msg);
+    return { feature, questions: [flagged] };
   }
 
-  if (unanswered.length === 0) return null;
-  // Newest first so the most recent question is on top.
-  unanswered.sort((a, b) => b.timestamp - a.timestamp);
-  return { feature, questions: unanswered.slice(0, MAX_QUESTIONS_PER_FEATURE) };
+  return null;
+}
+
+async function buildUnansweredQuestion(msg: ChatMessage): Promise<UnansweredQuestion> {
+  const text = chatMessageText(msg);
+  const senderOpenId = msg.sender?.sender_id?.open_id ?? '';
+  const senderName = senderOpenId ? await lookupUserName(senderOpenId, 'open_id') : '';
+  return {
+    senderOpenId,
+    senderName,
+    mentionNames: (msg.mentions ?? []).map(m => m.name),
+    text: text.slice(0, 280),
+    messageId: msg.message_id,
+    timestamp: Number(msg.create_time ?? 0) * 1000,
+    source: 'chat',
+  };
+}
+
+/**
+ * Ask Gemini whether a question is still outstanding given all messages
+ * that came after it in the same chat. Returns true when Gemini says
+ * the question is unanswered. Defaults to true on any failure (better
+ * to over-flag than miss).
+ */
+async function isOutstandingByGemini(
+  question: string,
+  laterConversation: string[],
+  contextLabel: string,
+): Promise<boolean> {
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey || laterConversation.length === 0) return true;
+  // Cap to avoid massive prompts on busy chats.
+  const capped = laterConversation.slice(0, 50);
+  const prompt = `A team member raised this question in a feature group chat (tagging the chat owner):
+"${question.replace(/"/g, '\\"').slice(0, 800)}"
+
+Subsequent messages in the same chat, chronological order:
+${capped.map((r, i) => `(${i + 1}) "${r.replace(/"/g, '\\"').slice(0, 500)}"`).join('\n')}
+
+Was the question above directly addressed or answered by any subsequent message? Treat reactions, restatements, follow-up questions, or unrelated chatter as NOT answers.
+
+Reply with ONLY one word: "addressed" or "outstanding". No other text.`;
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim().toLowerCase();
+    const outstanding = raw.startsWith('o');
+    console.log(`[digests] Gemini outstanding-check (${contextLabel}): ${outstanding ? 'outstanding' : 'addressed'} (raw=${JSON.stringify(raw).slice(0, 60)})`);
+    return outstanding;
+  } catch (e) {
+    console.warn(`[digests] Gemini outstanding-check failed (${contextLabel}), defaulting to "outstanding":`, e);
+    return true;
+  }
 }
 
 /**
