@@ -202,10 +202,11 @@ export async function POST(req: NextRequest) {
         let replyText = '_(Couldn\'t generate a reply — Gemini not configured)_';
         if (apiKey) {
           try {
-            const { getPrompt } = await import('@/lib/prompts');
+            const { getPrompt, getPromptModel } = await import('@/lib/prompts');
             const { renderPrompt, getPromptDef } = await import('@/lib/prompt-registry');
             const promptDef = getPromptDef('hamlet.letjr_reply');
             const template = await getPrompt('hamlet.letjr_reply', promptDef?.default ?? '');
+            const modelName = await getPromptModel('hamlet.letjr_reply', promptDef?.model ?? 'gemini-2.5-flash-lite');
             const prompt = renderPrompt(template, {
               featureName,
               sourceLabel: questionSource === 'prd_comment' ? 'PRD comment' : 'feature group chat',
@@ -213,7 +214,7 @@ export async function POST(req: NextRequest) {
               prdContent: prdContent.slice(0, 8000) || '(PRD not available)',
             });
             const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+            const model = genAI.getGenerativeModel({ model: modelName });
             const result = await model.generateContent(prompt);
             replyText = result.response.text().trim();
           } catch (e) {
