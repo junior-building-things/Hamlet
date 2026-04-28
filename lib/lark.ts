@@ -1760,13 +1760,19 @@ export async function resolveUserName(
       { headers: { Authorization: `Bearer ${token}` } },
     );
     const data = await parseJson(res, 'get_user_name') as {
-      code: number;
+      code: number; msg?: string;
       data?: { user?: { en_name?: string; name?: string; nickname?: string } };
     };
-    if (data.code !== 0) return '';
+    if (data.code !== 0) {
+      console.warn(`[lark] resolveUserName(${idType}=${id}) code=${data.code} msg=${data.msg}`);
+      return '';
+    }
     const u = data.data?.user;
-    return u?.en_name || u?.name || u?.nickname || '';
-  } catch {
+    const name = u?.en_name || u?.name || u?.nickname || '';
+    if (!name) console.warn(`[lark] resolveUserName(${idType}=${id}) returned empty (user=${JSON.stringify(u)})`);
+    return name;
+  } catch (e) {
+    console.warn(`[lark] resolveUserName(${idType}=${id}) threw:`, e);
     return '';
   }
 }
