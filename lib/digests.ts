@@ -1972,12 +1972,11 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
     const lines: string[] = [`**${escapeMd(f.name)}**`];
     for (const q of finding.questions) {
       const sourceLabel = q.source === 'prd_comment' ? 'PRD comment' : 'Chat';
-      // Render the asker as a Lark @mention via open_id — Lark's
-      // client resolves the display name + avatar from the id.
+      // DEBUG: drop the <at> tag to test if it's breaking callback
+      // buttons (200340 on Let Jr. Reply). Render plain @name only
+      // when we have one, otherwise no asker tag.
       let fromTag = '';
-      if (q.senderOpenId && q.senderOpenId.startsWith('ou_')) {
-        fromTag = ` from <at id="${q.senderOpenId}"></at>`;
-      } else if (q.senderName) {
+      if (q.senderName) {
         fromTag = ` from @${q.senderName}`;
       }
       const preview = (q.text || '(no text)').replace(/\s+/g, ' ').trim();
