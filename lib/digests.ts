@@ -23,6 +23,7 @@ import {
   listMessageReactions,
   PostParagraph,
   ChatMessage,
+  CardButton,
   CardSection,
   CardHeaderTemplate,
   PM_GROUP_CHAT_ID,
@@ -1967,45 +1968,33 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
 
   for (const finding of findings) {
     const f = finding.feature;
-    const linkParts: string[] = [`[Meego](${f.meegoUrl})`];
-    if (f.prd) linkParts.push(`[PRD](${f.prd})`);
-    const linkSuffix = ` (${linkParts.join(', ')})`;
-
-    const lines: string[] = [];
-    lines.push(`**${escapeMd(f.name)}**${linkSuffix}`);
-    const todaySgt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+    const lines: string[] = [`**${escapeMd(f.name)}**`];
     for (const q of finding.questions) {
-      let timeLabel = '';
-      if (q.timestamp > 0) {
-        const dt = new Date(q.timestamp);
-        const date = dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-        const hhmm = dt.toLocaleTimeString('en-GB', {
-          hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore',
-        });
-        if (date === todaySgt) {
-          timeLabel = `Today ${hhmm}`;
-        } else {
-          const md = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Singapore' });
-          timeLabel = `${md} ${hhmm}`;
-        }
-      }
-      const sourceLabel = q.source === 'prd_comment' ? 'PRD comment' : 'chat';
+      const sourceLabel = q.source === 'prd_comment' ? 'PRD comment' : 'Chat';
       // Render the asker as a Lark @mention via open_id — Lark's
-      // client resolves the display name + avatar without the bot
-      // needing the contact-read scope. Falls back to the cached
-      // senderName (or no name) if open_id isn't available.
+      // client resolves the display name + avatar from the id.
       let fromTag = '';
       if (q.senderOpenId && q.senderOpenId.startsWith('ou_')) {
         fromTag = ` from <at id="${q.senderOpenId}"></at>`;
       } else if (q.senderName) {
         fromTag = ` from @${q.senderName}`;
       }
-      const sourceTag = ` [${sourceLabel}${fromTag}]`;
       const preview = (q.text || '(no text)').replace(/\s+/g, ' ').trim();
       const safePreview = escapeMd(preview);
-      lines.push(`* ${timeLabel}${sourceTag}: ${safePreview}`);
+      lines.push(`- ${sourceLabel}${fromTag}: ${safePreview}`);
     }
-    sections.push({ content: lines.join('\n') });
+    // Per-feature action buttons: jump to the PRD doc and/or the
+    // feature's Lark group chat. Skip whichever URL we don't have.
+    const buttons: CardButton[] = [];
+    if (f.prd) buttons.push({ text: 'Open PRD', type: 'default', url: f.prd });
+    if (f.chatId) {
+      buttons.push({
+        text: 'Open Group',
+        type: 'default',
+        url: `https://applink.larkoffice.com/client/chat/open?openChatId=${f.chatId}`,
+      });
+    }
+    sections.push({ content: lines.join('\n'), buttons: buttons.length > 0 ? buttons : undefined });
   }
 
   return { title, template, sections };
