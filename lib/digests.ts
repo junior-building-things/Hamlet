@@ -2657,7 +2657,7 @@ export async function buildAbConcludedSection(
     `**Background**: ${background}`,
     `**A/B Results**:`,
     abResults,
-    nextStep ? `**Next Steps**: ${nextStep}` : '',
+    nextStep ? `**Next Steps**:\n- ${nextStep}` : '',
     refs.length > 0
       ? `**Reference**: ${refs.map(r => `[${r.label}](${r.url})`).join(' | ')}`
       : '',
@@ -2680,10 +2680,8 @@ export async function buildAbConcludedSection(
     postParagraphs.push([{ tag: 'text', text: trimmed }]);
   }
   if (nextStep) {
-    postParagraphs.push([
-      { tag: 'text', text: 'Next Steps: ', style: ['bold'] },
-      { tag: 'text', text: nextStep },
-    ]);
+    postParagraphs.push([{ tag: 'text', text: 'Next Steps:', style: ['bold'] }]);
+    postParagraphs.push([{ tag: 'text', text: `- ${nextStep}` }]);
   }
   if (refs.length > 0) {
     const inlines: Array<{ tag: 'text'; text: string; style?: string[] } | { tag: 'a'; text: string; href: string }> = [
