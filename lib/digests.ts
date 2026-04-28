@@ -1996,7 +1996,7 @@ export function buildUnansweredDigestCard(findings: UnansweredFinding[]): {
     const q = finding.questions[0];
     if (q && (q.source === 'prd_comment' || q.source === 'chat')) {
       buttons.push({
-        text: 'Let Jr. Reply',
+        text: 'Let me Reply',
         type: 'primary',
         value: {
           action: 'letjr_reply',
@@ -3690,19 +3690,23 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
 
   // Step 8: Send unanswered Q&A digest (only if there are findings) —
-  // interactive card to the same PM group chat. Sent under Rio's
-  // identity; Rio's card-action callback URL is configured to point
-  // at Hamlet's `/api/lark/card-action` so the Let Jr. Reply button
-  // works.
+  // interactive card to the same PM group chat. Sent under the
+  // Hamlet/Junior bot identity so card-action button clicks
+  // (Let me Reply) route to Hamlet's `/api/lark/card-action`.
   let unansweredSent = false;
-  if (rioToken && unansweredFindings.length > 0) {
-    const card = buildUnansweredDigestCard(unansweredFindings);
-    const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
-    console.log('[digests] unanswered digest:\n' + preview);
-    const id = await sendInteractiveCardToChat(
-      targetChatId, card.title, card.template, card.sections, rioToken,
-    );
-    unansweredSent = id !== null;
+  if (unansweredFindings.length > 0) {
+    const sendToken = botToken || rioToken;
+    if (!sendToken) {
+      console.log('[digests] no token to send unanswered digest — skipping');
+    } else {
+      const card = buildUnansweredDigestCard(unansweredFindings);
+      const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
+      console.log('[digests] unanswered digest:\n' + preview);
+      const id = await sendInteractiveCardToChat(
+        targetChatId, card.title, card.template, card.sections, sendToken,
+      );
+      unansweredSent = id !== null;
+    }
   } else {
     console.log('[digests] no unanswered questions — skipping Q&A digest');
   }
