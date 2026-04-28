@@ -3690,28 +3690,19 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   }
 
   // Step 8: Send unanswered Q&A digest (only if there are findings) —
-  // interactive card to the same PM group chat.
-  //
-  // Send with the Hamlet/Junior bot token (NOT Rio's token) so card-
-  // action button clicks (Let Jr. Reply) route to Hamlet's
-  // `/api/lark/card-action` endpoint. Lark routes button callbacks
-  // back to whichever app sent the card; Rio's app doesn't have a
-  // matching callback handler, which surfaces as 200340 in the
-  // client when the user clicks.
+  // interactive card to the same PM group chat. Sent under Rio's
+  // identity; Rio's card-action callback URL is configured to point
+  // at Hamlet's `/api/lark/card-action` so the Let Jr. Reply button
+  // works.
   let unansweredSent = false;
-  if (unansweredFindings.length > 0) {
-    const sendToken = botToken || rioToken;
-    if (!sendToken) {
-      console.log('[digests] no token to send unanswered digest — skipping');
-    } else {
-      const card = buildUnansweredDigestCard(unansweredFindings);
-      const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
-      console.log('[digests] unanswered digest:\n' + preview);
-      const id = await sendInteractiveCardToChat(
-        targetChatId, card.title, card.template, card.sections, sendToken,
-      );
-      unansweredSent = id !== null;
-    }
+  if (rioToken && unansweredFindings.length > 0) {
+    const card = buildUnansweredDigestCard(unansweredFindings);
+    const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
+    console.log('[digests] unanswered digest:\n' + preview);
+    const id = await sendInteractiveCardToChat(
+      targetChatId, card.title, card.template, card.sections, rioToken,
+    );
+    unansweredSent = id !== null;
   } else {
     console.log('[digests] no unanswered questions — skipping Q&A digest');
   }
