@@ -195,12 +195,15 @@ export async function POST(req: NextRequest) {
     const juniorUrl = process.env.JUNIOR_URL;
     const cronSecret = process.env.JUNIOR_CRON_SECRET;
     const projectKey = meegoUrl.match(/meego\.larkoffice\.com\/([^/]+)\/story/)?.[1];
+    console.log(`[sync] check-prd-ready trigger: juniorUrl=${juniorUrl ? 'set' : 'missing'} cronSecret=${cronSecret ? 'set' : 'missing'} projectKey=${projectKey} meegoId=${meegoId}`);
     if (juniorUrl && cronSecret && projectKey && meegoId) {
       fetch(`${juniorUrl}/api/check-prd-ready`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cronSecret}` },
         body: JSON.stringify({ project: projectKey, id: meegoId }),
-      }).catch(e => console.warn('[sync] check-prd-ready call failed:', e));
+      })
+        .then(r => console.log(`[sync] check-prd-ready ${meegoId}: status=${r.status}`))
+        .catch(e => console.warn('[sync] check-prd-ready call failed:', e));
     }
 
     return NextResponse.json({ ...result, pocAvatars });
