@@ -163,8 +163,12 @@ async function runUnansweredCheck(
     return actions;
   }
 
+  const { getPrompt, getPromptModel } = await import('./prompts');
+  const { getPromptDef, renderPrompt } = await import('./prompt-registry');
+  const def = getPromptDef('hamlet.unanswered_followup');
+  const modelName = await getPromptModel('hamlet.unanswered_followup', def?.model ?? 'gemini-2.5-flash-lite');
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+  const model = genAI.getGenerativeModel({ model: modelName });
 
   for (const msg of unanswered.slice(0, 3)) { // limit to 3 per run
     try {
@@ -176,9 +180,6 @@ async function runUnansweredCheck(
         .map(m => `<at user_id="${m.id.open_id}">${m.name}</at>`)
         .join(' ');
 
-      const { getPrompt } = await import('./prompts');
-      const { getPromptDef, renderPrompt } = await import('./prompt-registry');
-      const def = getPromptDef('hamlet.unanswered_followup');
       const tmpl = await getPrompt('hamlet.unanswered_followup', def?.default ?? '');
       const prompt = renderPrompt(tmpl, {
         agentDescription: agent === 'rio' ? 'Rio, a PM Agent' : 'Mia, an RD Agent',

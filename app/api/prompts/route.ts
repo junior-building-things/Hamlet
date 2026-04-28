@@ -21,9 +21,15 @@ export async function GET() {
       return {
         ...def,
         defaultThinkingBudget,
+        defaultModel: def.model,
         current: override?.content ?? def.default,
         currentThinkingBudget: override?.thinkingBudget ?? defaultThinkingBudget,
-        isOverridden: Boolean(override?.content !== undefined || override?.thinkingBudget !== undefined),
+        currentModel: override?.model ?? def.model,
+        isOverridden: Boolean(
+          override?.content !== undefined ||
+          override?.thinkingBudget !== undefined ||
+          override?.model !== undefined,
+        ),
         updatedAt: override?.updatedAt ?? null,
         updatedBy: override?.updatedBy ?? null,
       };

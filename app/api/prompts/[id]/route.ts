@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setPrompt, resetPrompt, getPrompt, getPromptThinkingBudget, THINKING_BUDGETS, ThinkingBudget } from '@/lib/prompts';
+import { setPrompt, resetPrompt, getPrompt, getPromptThinkingBudget, getPromptModel, THINKING_BUDGETS, ALLOWED_MODELS, ThinkingBudget } from '@/lib/prompts';
 import { getPromptDef } from '@/lib/prompt-registry';
 import { getSession } from '@/lib/session';
 
@@ -15,9 +15,10 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
   const def = getPromptDef(id);
   if (!def) return NextResponse.json({ error: 'Unknown prompt id' }, { status: 404 });
   const defaultThinkingBudget = def.defaultThinkingBudget ?? 'dynamic';
-  const [current, currentThinkingBudget] = await Promise.all([
+  const [current, currentThinkingBudget, currentModel] = await Promise.all([
     getPrompt(id, def.default),
     getPromptThinkingBudget(id, defaultThinkingBudget),
+    getPromptModel(id, def.model),
   ]);
   return NextResponse.json({
     id,
@@ -25,6 +26,8 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     default: def.default,
     currentThinkingBudget,
     defaultThinkingBudget,
+    currentModel,
+    defaultModel: def.model,
   });
 }
 
@@ -38,8 +41,8 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
   const def = getPromptDef(id);
   if (!def) return NextResponse.json({ error: 'Unknown prompt id' }, { status: 404 });
 
-  const body = await req.json() as { content?: unknown; thinkingBudget?: unknown };
-  const patch: { content?: string; thinkingBudget?: ThinkingBudget } = {};
+  const body = await req.json() as { content?: unknown; thinkingBudget?: unknown; model?: unknown };
+  const patch: { content?: string; thinkingBudget?: ThinkingBudget; model?: string } = {};
   if (body.content !== undefined) {
     if (typeof body.content !== 'string') {
       return NextResponse.json({ error: 'content must be a string' }, { status: 400 });
@@ -52,8 +55,14 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     }
     patch.thinkingBudget = body.thinkingBudget as ThinkingBudget;
   }
-  if (patch.content === undefined && patch.thinkingBudget === undefined) {
-    return NextResponse.json({ error: 'must provide content or thinkingBudget' }, { status: 400 });
+  if (body.model !== undefined) {
+    if (typeof body.model !== 'string' || !ALLOWED_MODELS.includes(body.model as typeof ALLOWED_MODELS[number])) {
+      return NextResponse.json({ error: `model must be one of: ${ALLOWED_MODELS.join(', ')}` }, { status: 400 });
+    }
+    patch.model = body.model;
+  }
+  if (patch.content === undefined && patch.thinkingBudget === undefined && patch.model === undefined) {
+    return NextResponse.json({ error: 'must provide content, thinkingBudget, or model' }, { status: 400 });
   }
 
   const session = await getSession();

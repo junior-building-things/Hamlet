@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 type ThinkingBudget = 'dynamic' | 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
 const THINKING_BUDGET_OPTIONS: ThinkingBudget[] = ['dynamic', 'off', 'minimal', 'low', 'medium', 'high'];
+const MODEL_OPTIONS = ['gemini-3.1-flash-lite-preview', 'gemini-2.5-flash-lite'] as const;
+type ModelName = typeof MODEL_OPTIONS[number];
 
 interface PromptItem {
   id: string;
@@ -19,6 +21,8 @@ interface PromptItem {
   current: string;
   defaultThinkingBudget: ThinkingBudget;
   currentThinkingBudget: ThinkingBudget;
+  defaultModel: string;
+  currentModel: string;
   isOverridden: boolean;
   updatedAt: string | null;
   updatedBy: string | null;
@@ -134,22 +138,25 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
 }) {
   const [draft, setDraft] = useState(prompt.current);
   const [budgetDraft, setBudgetDraft] = useState<ThinkingBudget>(prompt.currentThinkingBudget);
+  const [modelDraft, setModelDraft] = useState<string>(prompt.currentModel);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDraft(prompt.current);
     setBudgetDraft(prompt.currentThinkingBudget);
-  }, [prompt.current, prompt.currentThinkingBudget, expanded]);
+    setModelDraft(prompt.currentModel);
+  }, [prompt.current, prompt.currentThinkingBudget, prompt.currentModel, expanded]);
 
-  const isDirty = draft !== prompt.current || budgetDraft !== prompt.currentThinkingBudget;
+  const isDirty = draft !== prompt.current || budgetDraft !== prompt.currentThinkingBudget || modelDraft !== prompt.currentModel;
   const serviceCls = SERVICE_COLORS[prompt.service] ?? '';
 
   async function handleSave() {
     setSaving(true);
     try {
-      const body: { content?: string; thinkingBudget?: ThinkingBudget } = {};
+      const body: { content?: string; thinkingBudget?: ThinkingBudget; model?: string } = {};
       if (draft !== prompt.current) body.content = draft;
       if (budgetDraft !== prompt.currentThinkingBudget) body.thinkingBudget = budgetDraft;
+      if (modelDraft !== prompt.currentModel) body.model = modelDraft;
       const res = await fetch(`/api/prompts/${prompt.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -210,6 +217,20 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
         <div className="px-4 pb-4 border-t border-[var(--border)]">
           <div className="mt-3 mb-2 flex items-center justify-between gap-3">
             <div className="text-xs text-[var(--muted)] flex items-center gap-3 flex-wrap">
+              <label className="inline-flex items-center gap-1.5">
+                <span className="text-[11px]">Model:</span>
+                <select
+                  value={modelDraft}
+                  onChange={e => setModelDraft(e.target.value as ModelName)}
+                  className="bg-[var(--card-hover)] border border-[var(--border)] rounded px-2 py-0.5 text-[11px] text-[var(--foreground)] focus:outline-none focus:border-blue-500"
+                >
+                  {MODEL_OPTIONS.map(m => (
+                    <option key={m} value={m}>
+                      {m}{m === prompt.defaultModel ? ' (default)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="inline-flex items-center gap-1.5">
                 <span className="text-[11px]">Thinking budget:</span>
                 <select

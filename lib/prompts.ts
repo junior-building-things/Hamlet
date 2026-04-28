@@ -32,11 +32,17 @@ export type ThinkingBudget = 'dynamic' | 'off' | 'minimal' | 'low' | 'medium' | 
 
 export const THINKING_BUDGETS: ThinkingBudget[] = ['dynamic', 'off', 'minimal', 'low', 'medium', 'high'];
 
+/** Models that can be selected per prompt in the UI. */
+export const ALLOWED_MODELS = ['gemini-3.1-flash-lite-preview', 'gemini-2.5-flash-lite'] as const;
+export type AllowedModel = typeof ALLOWED_MODELS[number];
+
 export interface PromptOverride {
   /** Override text. If absent, fall back to the default in prompt-registry. */
   content?: string;
   /** Override thinking budget. If absent, fall back to the registry default (or 'dynamic'). */
   thinkingBudget?: ThinkingBudget;
+  /** Override Gemini model. If absent, fall back to the registry default. */
+  model?: string;
   updatedAt: string;
   updatedBy?: string;
 }
@@ -79,6 +85,15 @@ export async function getPromptThinkingBudget(
   return overrides[id]?.thinkingBudget ?? fallback;
 }
 
+/**
+ * Get the Gemini model name for a prompt. Returns the override if set,
+ * else the provided fallback (the registry's default model).
+ */
+export async function getPromptModel(id: string, fallback: string): Promise<string> {
+  const overrides = await loadOverrides();
+  return overrides[id]?.model ?? fallback;
+}
+
 // Note: the helper that maps ThinkingBudget into the @google/genai
 // ThinkingConfig shape lives in the consumer (currently Junior's
 // lib/prompts.ts) so it can reference the SDK's ThinkingLevel enum
@@ -91,7 +106,7 @@ export async function getPromptThinkingBudget(
  */
 export async function setPrompt(
   id: string,
-  patch: { content?: string; thinkingBudget?: ThinkingBudget },
+  patch: { content?: string; thinkingBudget?: ThinkingBudget; model?: string },
   updatedBy?: string,
 ): Promise<void> {
   const overrides = await loadOverrides();
@@ -100,6 +115,7 @@ export async function setPrompt(
     ...(prev ?? {}),
     ...(patch.content !== undefined ? { content: patch.content } : {}),
     ...(patch.thinkingBudget !== undefined ? { thinkingBudget: patch.thinkingBudget } : {}),
+    ...(patch.model !== undefined ? { model: patch.model } : {}),
     updatedAt: new Date().toISOString(),
     ...(updatedBy ? { updatedBy } : {}),
   };

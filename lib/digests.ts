@@ -1426,11 +1426,12 @@ export async function evaluateChatRisk(
 
   // Build the prompt from the registry — separate templates for "with prior"
   // vs "no prior" so each can be edited independently in the admin UI.
-  const { getPrompt: getPromptFn } = await import('./prompts');
+  const { getPrompt: getPromptFn, getPromptModel: getModelFn } = await import('./prompts');
   const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
   const promptId = prior ? 'hamlet.chat_risk_eval_prior' : 'hamlet.chat_risk_eval';
   const def = getDefFn(promptId);
   const tmpl = await getPromptFn(promptId, def?.default ?? '');
+  const modelName = await getModelFn(promptId, def?.model ?? 'gemini-2.5-flash-lite');
   const prompt = renderFn(tmpl, prior ? {
     featureName,
     priorLevel: prior.level,
@@ -1444,7 +1445,7 @@ export async function evaluateChatRisk(
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
     // Strip optional ```json fences if Gemini ignored the instruction
@@ -2457,10 +2458,11 @@ async function summariseAbReport(
 
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) return '_(Gemini not configured — fill in)_';
-  const { getPrompt: getPromptFn } = await import('./prompts');
+  const { getPrompt: getPromptFn, getPromptModel: getModelFn } = await import('./prompts');
   const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
   const def = getDefFn('hamlet.ab_results_summary');
   const tmpl = await getPromptFn('hamlet.ab_results_summary', def?.default ?? '');
+  const modelName = await getModelFn('hamlet.ab_results_summary', def?.model ?? 'gemini-2.5-flash-lite');
   // Cap report content so we don't blow Gemini's input budget on
   // very long reports — first 30k chars typically covers the
   // headline tables + key metrics section.
@@ -2468,7 +2470,7 @@ async function summariseAbReport(
   const prompt = renderFn(tmpl, { featureName, abReportContent: truncated });
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
     return raw || '_(Gemini returned empty — fill in)_';
@@ -2978,11 +2980,12 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           prdChanged++;
           let summary = 'PRD content updated';
           try {
-            const prdGenAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '');
-            const model = prdGenAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
-            const { getPrompt } = await import('./prompts');
+            const { getPrompt, getPromptModel } = await import('./prompts');
             const { renderPrompt, getPromptDef } = await import('./prompt-registry');
             const def = getPromptDef('hamlet.prd_change_summary');
+            const modelName = await getPromptModel('hamlet.prd_change_summary', def?.model ?? 'gemini-3.1-flash-lite-preview');
+            const prdGenAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '');
+            const model = prdGenAI.getGenerativeModel({ model: modelName });
             const tmpl = await getPrompt('hamlet.prd_change_summary', def?.default ?? '');
             const prompt = renderPrompt(tmpl, {
               prevText: prevText.slice(0, 4000),

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getPrompt } from '@/lib/prompts';
+import { getPrompt, getPromptModel } from '@/lib/prompts';
 import { getPromptDef, renderPrompt } from '@/lib/prompt-registry';
 
 export async function POST(req: NextRequest) {
@@ -18,11 +18,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'GOOGLE_AI_API_KEY not set' }, { status: 500 });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
-
     const promptId = field === 'name' ? 'hamlet.rewrite_name' : 'hamlet.rewrite_description';
     const def = getPromptDef(promptId);
+    const modelName = await getPromptModel(promptId, def?.model ?? 'gemini-3.1-flash-lite-preview');
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+
     const tmpl = await getPrompt(promptId, def?.default ?? '');
     const prompt = renderPrompt(tmpl, { text: text.trim() });
 

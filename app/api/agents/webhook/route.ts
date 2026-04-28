@@ -142,6 +142,8 @@ async function handleMessage(body: LarkEvent) {
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
+  // Default model for the feature-lookup pre-step. The final reply uses
+  // whatever the prompt-registry has configured for hamlet.agent_webhook.
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
   const chatType = message.chat_type === 'p2p' ? 'direct message' : 'group chat';
 
@@ -317,13 +319,15 @@ async function handleMessage(body: LarkEvent) {
   }
 
   // Allow editing the persona + the wrapper template via the Prompts admin UI
-  const { getPrompt } = await import('@/lib/prompts');
+  const { getPrompt, getPromptModel } = await import('@/lib/prompts');
   const { getPromptDef, renderPrompt } = await import('@/lib/prompt-registry');
   const personaId = agent.key === 'rio' ? 'rio.persona' : 'mia.persona';
   const personaDef = getPromptDef(personaId);
   const persona = await getPrompt(personaId, personaDef?.default ?? agent.persona);
   const wrapperDef = getPromptDef('hamlet.agent_webhook');
   const wrapperTmpl = await getPrompt('hamlet.agent_webhook', wrapperDef?.default ?? '');
+  const modelName = await getPromptModel('hamlet.agent_webhook', wrapperDef?.model ?? 'gemini-2.5-flash-lite');
+  const replyModel = genAI.getGenerativeModel({ model: modelName });
   const prompt = renderPrompt(wrapperTmpl, {
     persona,
     chatType,
@@ -332,7 +336,7 @@ async function handleMessage(body: LarkEvent) {
   });
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await replyModel.generateContent(prompt);
     const reply = result.response.text().trim();
 
     if (!reply) return;
