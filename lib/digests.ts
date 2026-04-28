@@ -1782,7 +1782,11 @@ export async function collectUnansweredForFeature(
 
   let messages: ChatMessage[] = [];
   try {
-    messages = await readChatMessages(chatId, sinceMs, token);
+    // includeThreadReplies: Lark's v1 list-messages API only returns
+    // top-level messages; thread replies must be fetched separately.
+    // Without this, findLaterThreadMessages can't see any answers and
+    // every question with thread-only replies looks unanswered.
+    messages = await readChatMessages(chatId, sinceMs, token, { includeThreadReplies: true });
   } catch (e) {
     console.warn(`[digests] failed to read messages for ${feature.name}:`, e);
     return null;
