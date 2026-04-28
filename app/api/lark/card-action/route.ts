@@ -222,7 +222,7 @@ export async function POST(req: NextRequest) {
           }
         }
         const botToken = await getLarkBotToken();
-        const proposal = `${replyText}\n\n_Looks ok? React with 👍 and I'll send it._`;
+        const proposal = `${replyText}\n\nLooks ok? React with 👍 and I'll send it.`;
         const proposalMsgId = await replyToMessage(parentMessageId, proposal, botToken);
         if (!proposalMsgId) {
           console.warn('[card-action] letjr_reply: replyToMessage returned null');

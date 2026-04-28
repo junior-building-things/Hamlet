@@ -2916,12 +2916,6 @@ export async function sendInteractiveCardToChat(
       }
     }
     if (s.buttons && s.buttons.length > 0) {
-      // Split URL buttons and callback buttons into separate action
-      // rows. Mixing them in one row appears to break Lark client
-      // callbacks (200340 "card returns illegal data" — the click
-      // never even leaves the client).
-      const urlButtons = s.buttons.filter(b => b.url);
-      const callbackButtons = s.buttons.filter(b => !b.url && b.value);
       const buildAction = (b: CardButton): Record<string, unknown> => {
         const action: Record<string, unknown> = {
           tag: 'button',
@@ -2932,12 +2926,7 @@ export async function sendInteractiveCardToChat(
         if (b.value) action.value = b.value;
         return action;
       };
-      if (urlButtons.length > 0) {
-        elements.push({ tag: 'action', actions: urlButtons.map(buildAction) });
-      }
-      if (callbackButtons.length > 0) {
-        elements.push({ tag: 'action', actions: callbackButtons.map(buildAction) });
-      }
+      elements.push({ tag: 'action', actions: s.buttons.map(buildAction) });
     }
     if (i < sections.length - 1) {
       elements.push({ tag: 'hr' });
