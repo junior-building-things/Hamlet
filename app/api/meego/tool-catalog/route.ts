@@ -20,9 +20,17 @@ export async function GET(req: NextRequest) {
   });
 
   const data = await res.json();
-  const tools = (data.result?.tools ?? []) as Array<{ name: string; description?: string }>;
+  const tools = (data.result?.tools ?? []) as Array<{ name: string; description?: string; inputSchema?: unknown }>;
+  const filter = req.nextUrl.searchParams.get('filter');
+  const filtered = filter
+    ? tools.filter(t => t.name.toLowerCase().includes(filter.toLowerCase()))
+    : tools;
   return NextResponse.json({
     count: tools.length,
-    tools: tools.map(t => ({ name: t.name, description: (t.description ?? '').split('\n')[0].slice(0, 200) })),
+    tools: filtered.map(t => ({
+      name: t.name,
+      description: (t.description ?? '').slice(0, 600),
+      inputSchema: filter ? t.inputSchema : undefined,
+    })),
   });
 }
