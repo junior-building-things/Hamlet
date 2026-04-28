@@ -2090,13 +2090,16 @@ export async function batchFetchAvatars(
   const emailToAvatar = new Map<string, string>();
   const uniqueEmails = [...new Set(entries.map(([, email]) => email))];
 
-  // Batch resolve emails → user IDs using user_id type (works with @bytedance.com emails)
+  // Batch resolve emails → open_ids. The earlier user_id variant
+  // returned `0 / N` resolved for many @bytedance.com addresses; the
+  // open_id variant matches what `resolveOpenIds` uses successfully
+  // elsewhere in the codebase.
   const emailToUserId = new Map<string, string>();
   for (let i = 0; i < uniqueEmails.length; i += 5) {
     const batch = uniqueEmails.slice(i, i + 5);
     try {
       const res = await fetch(
-        `${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=user_id`,
+        `${LARK_BASE_URL}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -2115,7 +2118,7 @@ export async function batchFetchAvatars(
     } catch { /* skip */ }
   }
 
-  // Batch fetch user avatars
+  // Batch fetch user avatars using the same open_id type.
   const userIds = [...new Set(emailToUserId.values())];
   const userIdToAvatar = new Map<string, string>();
   for (let i = 0; i < userIds.length; i += 50) {
@@ -2123,17 +2126,21 @@ export async function batchFetchAvatars(
     try {
       const params = batch.map(id => `user_ids=${id}`).join('&');
       const res = await fetch(
-        `${LARK_BASE_URL}/open-apis/contact/v3/users/batch?${params}&user_id_type=user_id`,
+        `${LARK_BASE_URL}/open-apis/contact/v3/users/batch?${params}&user_id_type=open_id`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const d = await res.json() as {
         code: number;
-        data?: { items?: Array<{ user_id: string; avatar?: { avatar_72?: string; avatar_240?: string } }> };
+        data?: { items?: Array<{ user_id: string; open_id?: string; avatar?: { avatar_72?: string; avatar_240?: string } }> };
       };
       if (d.code === 0) {
         for (const u of d.data?.items ?? []) {
           const avatar = u.avatar?.avatar_72 || u.avatar?.avatar_240;
-          if (avatar) userIdToAvatar.set(u.user_id, avatar);
+          // The response key is `open_id` when user_id_type=open_id, but
+          // some Lark deployments return `user_id` either way. Accept
+          // both so the lookup map works.
+          const idKey = u.open_id ?? u.user_id;
+          if (avatar && idKey) userIdToAvatar.set(idKey, avatar);
         }
       }
     } catch { /* skip */ }
