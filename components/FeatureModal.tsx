@@ -211,6 +211,8 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
   // ── Edit-mode state ──
   const [completing, setCompleting]       = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
+  const [creating,    setCreating]    = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // ── Add-mode state ──
   const [form, setForm] = useState({
@@ -286,27 +288,11 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
-  function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
 
-    const tempId   = `temp_${Date.now()}`;
     const priority = (PRIORITIES.find(p => p.id === form.priority)?.label ?? 'P1') as Priority;
-
-    // Immediately close the modal and add the feature with a "Creating…" status
-    onSave({
-      id:              tempId,
-      name:            form.name.trim(),
-      description:     '',
-      status:          'Creating…',
-      priority,
-      owner:           'Thomas',
-      tasks:           [],
-      lastUpdated:     new Date().toISOString().split('T')[0],
-      meegoProjectKey: TIKTOK_PROJECT_KEY,
-    });
-
-    // Finish the API call in the background
     const roles: Array<{ role: string; owners: string[] }> = [
       { role: 'DA',          owners: [form.da] },
       { role: 'UX_Writer',   owners: [form.contentDesigner] },
@@ -320,45 +306,53 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
     if (form.ios)       roles.push({ role: 'iOS',        owners: [form.ios] });
     if (form.uiux)      roles.push({ role: 'UI',         owners: [form.uiux] });
 
-    fetch('/api/meego/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name:                    form.name.trim(),
-        priority,
-        quarterlyCycleOptionId:  form.quarterlyCycle  || undefined,
-        businessLineOptionId:    form.businessLine    || undefined,
-        socialComponentOptionId: form.socialComponent || undefined,
-        businessLineLabel:       BUSINESS_LINES.find(b => b.id === form.businessLine)?.label,
-        socialComponentLabel:    SOCIAL_COMPONENTS.find(s => s.id === form.socialComponent)?.label,
-        roles,
-        featureDescription:      featureDescription.trim() || undefined,
-        useHalfDayPrd:           prdType === 'halfday' ? true : undefined,
-      }),
-    })
-      .then(res => res.json().then(data => ({ ok: res.ok, data })))
-      .then(({ ok, data }: { ok: boolean; data: { id?: string; meegoUrl?: string; prd?: string; prdError?: string; error?: string } }) => {
-        if (!ok) throw new Error(data.error ?? 'Create failed');
-        if (data.prdError) {
-          console.error('PRD creation failed:', data.prdError);
-          toast.error(`PRD creation failed: ${data.prdError}`);
-        }
-        onFeatureCreated?.(tempId, {
-          id:              data.id ?? tempId,
-          name:            form.name.trim(),
-          description:     '',
-          status:          'PRD/Design Prep',
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const res = await fetch('/api/meego/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:                    form.name.trim(),
           priority,
-          owner:           'Thomas',
-          tasks:           [],
-          lastUpdated:     new Date().toISOString().split('T')[0],
-          meegoUrl:        data.meegoUrl,
-          meegoIssueId:    data.id,
-          meegoProjectKey: TIKTOK_PROJECT_KEY,
-          prd:             data.prd,
-        });
-      })
-      .catch(() => onFeatureCreated?.(tempId, null));
+          quarterlyCycleOptionId:  form.quarterlyCycle  || undefined,
+          businessLineOptionId:    form.businessLine    || undefined,
+          socialComponentOptionId: form.socialComponent || undefined,
+          businessLineLabel:       BUSINESS_LINES.find(b => b.id === form.businessLine)?.label,
+          socialComponentLabel:    SOCIAL_COMPONENTS.find(s => s.id === form.socialComponent)?.label,
+          roles,
+          featureDescription:      featureDescription.trim() || undefined,
+          useHalfDayPrd:           prdType === 'halfday' ? true : undefined,
+        }),
+      });
+      const data = await res.json() as { id?: string; meegoUrl?: string; prd?: string; prdError?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Create failed');
+      if (data.prdError) {
+        console.error('PRD creation failed:', data.prdError);
+        toast.error(`PRD creation failed: ${data.prdError}`);
+      }
+      onSave({
+        id:              data.id ?? `feature_${Date.now()}`,
+        name:            form.name.trim(),
+        description:     '',
+        status:          'PRD/Design Prep',
+        priority,
+        owner:           'Thomas',
+        tasks:           [],
+        lastUpdated:     new Date().toISOString().split('T')[0],
+        meegoUrl:        data.meegoUrl,
+        meegoIssueId:    data.id,
+        meegoProjectKey: TIKTOK_PROJECT_KEY,
+        prd:             data.prd,
+      });
+      toast.success(`"${form.name.trim()}" created`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Create failed';
+      setCreateError(msg);
+      toast.error(msg);
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function handleCompleteNode() {
@@ -547,14 +541,20 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
 
             </div>
 
+            <div className="px-6 pt-2 pb-0 shrink-0">
+              {createError && (
+                <p className="text-xs text-red-500 mb-2">{createError}</p>
+              )}
+            </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-[var(--border)] shrink-0">
-              <button type="button" onClick={onClose}
-                className="px-5 py-2 bg-[var(--card-hover)] text-[var(--foreground)] hover:opacity-80 text-sm font-semibold rounded-lg transition-colors">
+              <button type="button" onClick={onClose} disabled={creating}
+                className="px-5 py-2 bg-[var(--card-hover)] text-[var(--foreground)] hover:opacity-80 disabled:opacity-50 text-sm font-semibold rounded-lg transition-colors">
                 Cancel
               </button>
-              <button type="submit" disabled={!form.name.trim()}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
-                Create Feature
+              <button type="submit" disabled={!form.name.trim() || creating}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2">
+                {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {creating ? 'Creating…' : 'Create Feature'}
               </button>
             </div>
           </form>
