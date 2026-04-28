@@ -2906,7 +2906,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         meegoIssueId: f.workItemId,
         name: f.name,
         description: prev?.description ?? '',
-        status: f.overallStatusName,
+        // Translate Chinese overall status to the English display label so the
+        // UI shows e.g. "Done" instead of "已完成" on refresh.
+        status: resolveDisplayStatus(f.overallStatusName),
         priority: (f.priority ?? prev?.priority ?? 'P1') as import('./types').Priority,
         owner: (f.roles['PM'] ?? [])[0] ?? prev?.owner ?? '',
         tasks: prev?.tasks ?? ([] as import('./types').Task[]),
