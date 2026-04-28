@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createFeature, updateFeatureFields, CreateFeatureParams } from '@/lib/meego';
-import { copyPrdTemplate, sendFeatureCard } from '@/lib/lark';
+import { copyPrdTemplate } from '@/lib/lark';
 
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
@@ -33,17 +33,6 @@ export async function POST(req: NextRequest) {
       prdError = larkErr instanceof Error ? larkErr.message : String(larkErr);
       console.warn('PRD creation skipped:', prdError);
     }
-
-    // 4. Send card message to PM group chat (fire-and-forget)
-    sendFeatureCard({
-      name: body.name.trim(),
-      description: body.featureDescription?.trim(),
-      meegoUrl: result.meegoUrl,
-      prdUrl: prd,
-      priority: body.priority ?? 'P1',
-      businessLine: body.businessLineLabel,
-      socialComponent: body.socialComponentLabel,
-    }).catch(e => console.warn('[create] card send failed:', e));
 
     return NextResponse.json({ ...result, prd, prdError });
   } catch (err) {
