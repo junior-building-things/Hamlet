@@ -23,6 +23,7 @@ import {
   listMessageReactions,
   PostParagraph,
   ChatMessage,
+  mentionOpenId,
   CardButton,
   CardSection,
   CardHeaderTemplate,
@@ -1790,10 +1791,9 @@ export async function collectUnansweredForFeature(
 
   // Filter to messages where Thomas is in the @mentions list. Any sender,
   // any thread depth.
-  const mentionMsgs = messages.filter(m => {
-    if (!m.mentions || m.mentions.length === 0) return false;
-    return m.mentions.some(mention => mention.id?.open_id === ownerOpenId);
-  });
+  const mentionMsgs = messages.filter(m =>
+    (m.mentions ?? []).some(mention => mentionOpenId(mention) === ownerOpenId),
+  );
   console.log(`[digests] Q&A "${feature.name}": ${mentionMsgs.length} msgs mentioning owner`);
   if (mentionMsgs.length === 0) return null;
 

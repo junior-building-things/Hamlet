@@ -2603,7 +2603,35 @@ export interface ChatMessage {
   body?: { content?: string };
   parent_id?: string;       // set if this is a thread reply
   root_id?: string;         // root message of a thread
-  mentions?: Array<{ key: string; id: { open_id?: string; user_id?: string }; name: string }>;
+  // Lark's v1 messages list API returns `id` as a STRING (e.g. "ou_xxx"
+  // with id_type alongside). Some webhook payloads return the object
+  // shape `{ open_id }` instead, so we accept both. Use mentionOpenId()
+  // to read it portably.
+  mentions?: Array<{
+    key: string;
+    id: string | { open_id?: string; user_id?: string };
+    id_type?: string;
+    name: string;
+  }>;
+}
+
+/**
+ * Extract the open_id from a Lark mention regardless of whether the
+ * payload uses the v1 string shape (`id: "ou_xxx"`) or the legacy
+ * object shape (`id: { open_id: "ou_xxx" }`). Returns '' when the
+ * mention isn't an open_id (e.g. user_id mentions).
+ */
+export function mentionOpenId(mention: NonNullable<ChatMessage['mentions']>[number]): string {
+  const id = mention.id as unknown;
+  if (typeof id === 'string') {
+    // String form: prefix tells us which id flavor it is.
+    if (mention.id_type && mention.id_type !== 'open_id') return '';
+    return id.startsWith('ou_') ? id : '';
+  }
+  if (id && typeof id === 'object') {
+    return (id as { open_id?: string }).open_id ?? '';
+  }
+  return '';
 }
 
 /**

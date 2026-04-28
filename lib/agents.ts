@@ -1,5 +1,5 @@
 import { Feature } from './types';
-import { readChatMessages, sendTextMessage, resolveOpenIds, ChatMessage } from './lark';
+import { readChatMessages, sendTextMessage, resolveOpenIds, mentionOpenId, ChatMessage } from './lark';
 import { syncFeatureStatus } from './meego';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -176,8 +176,9 @@ async function runUnansweredCheck(
       // Extract mentioned user names
       const mentionNames = (msg.mentions ?? []).map(m => m.name).join(', ');
       const mentionTags = (msg.mentions ?? [])
-        .filter(m => m.id?.open_id)
-        .map(m => `<at user_id="${m.id.open_id}">${m.name}</at>`)
+        .map(m => ({ openId: mentionOpenId(m), name: m.name }))
+        .filter(m => m.openId)
+        .map(m => `<at user_id="${m.openId}">${m.name}</at>`)
         .join(' ');
 
       const tmpl = await getPrompt('hamlet.unanswered_followup', def?.default ?? '');
