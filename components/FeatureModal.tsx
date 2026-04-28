@@ -213,6 +213,9 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [creating,    setCreating]    = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  // After a successful create the modal stays open so the user can
+  // see the created feature's links. We capture them here.
+  const [createdFeature, setCreatedFeature] = useState<{ name: string; meegoUrl?: string; prd?: string } | null>(null);
 
   // ── Add-mode state ──
   const [form, setForm] = useState({
@@ -345,6 +348,7 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
         meegoProjectKey: TIKTOK_PROJECT_KEY,
         prd:             data.prd,
       });
+      setCreatedFeature({ name: form.name.trim(), meegoUrl: data.meegoUrl, prd: data.prd });
       toast.success(`"${form.name.trim()}" created`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Create failed';
@@ -545,16 +549,31 @@ export function FeatureModal({ mode, feature, onSave, onClose, onNodeCompleted, 
               {createError && (
                 <p className="text-xs text-red-500 mb-2">{createError}</p>
               )}
+              {createdFeature && (
+                <div className="mb-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                  <div className="text-xs text-emerald-700 font-medium flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Created &ldquo;{createdFeature.name}&rdquo;
+                  </div>
+                  <div className="text-xs text-[var(--muted)] mt-1 flex items-center gap-3 flex-wrap">
+                    {createdFeature.meegoUrl && (
+                      <a href={createdFeature.meegoUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">Meego ↗</a>
+                    )}
+                    {createdFeature.prd && (
+                      <a href={createdFeature.prd} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">PRD ↗</a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-[var(--border)] shrink-0">
               <button type="button" onClick={onClose} disabled={creating}
                 className="px-5 py-2 bg-[var(--card-hover)] text-[var(--foreground)] hover:opacity-80 disabled:opacity-50 text-sm font-semibold rounded-lg transition-colors">
-                Cancel
+                {createdFeature ? 'Close' : 'Cancel'}
               </button>
-              <button type="submit" disabled={!form.name.trim() || creating}
+              <button type="submit" disabled={!form.name.trim() || creating || !!createdFeature}
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2">
                 {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {creating ? 'Creating…' : 'Create Feature'}
+                {creating ? 'Creating…' : createdFeature ? 'Created ✓' : 'Create Feature'}
               </button>
             </div>
           </form>
