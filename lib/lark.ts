@@ -2966,6 +2966,20 @@ export async function sendInteractiveCardToChat(
     console.warn('[lark] card payload preview:', content.slice(0, 1500));
     return null;
   }
+  // TEMP debug: log card payload size + button value sizes so we can
+  // see when Lark client rejects (200340) for size/format reasons.
+  if (process.env.LOG_CARD_PAYLOAD === '1') {
+    console.log(`[lark] send_card OK msg_id=${data.data?.message_id} payload_bytes=${content.length}`);
+    for (const el of elements) {
+      const elT = el as { tag?: string; actions?: Array<{ tag?: string; text?: { content?: string }; value?: unknown; url?: string }> };
+      if (elT.tag === 'action' && Array.isArray(elT.actions)) {
+        for (const a of elT.actions) {
+          const valStr = a.value ? JSON.stringify(a.value) : '';
+          console.log(`[lark]   button text="${a.text?.content}" url=${a.url ?? '(none)'} value_bytes=${valStr.length}`);
+        }
+      }
+    }
+  }
   return data.data?.message_id ?? null;
 }
 
