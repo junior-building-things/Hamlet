@@ -24,6 +24,7 @@ import {
   PostParagraph,
   ChatMessage,
   mentionOpenId,
+  countMessageReplies,
   CardButton,
   CardSection,
   CardHeaderTemplate,
@@ -1830,9 +1831,17 @@ export async function collectUnansweredForFeature(
     }
 
     // (1) Any thread reply → answered.
+    // First check the in-memory messages array (fast). If that misses,
+    // hit Lark's /replies endpoint directly — it catches nested replies
+    // (replies-to-replies) that the bulk fetch sometimes drops.
     const threadReplies = findLaterThreadMessages(msg, messages);
     if (threadReplies.length > 0) {
-      console.log(`[digests] ${qLabel} → answered (${threadReplies.length} thread replies)`);
+      console.log(`[digests] ${qLabel} → answered (${threadReplies.length} in-memory thread replies)`);
+      continue;
+    }
+    const directReplyCount = await countMessageReplies(msg.message_id, token);
+    if (directReplyCount > 0) {
+      console.log(`[digests] ${qLabel} → answered (${directReplyCount} direct replies via /replies)`);
       continue;
     }
 

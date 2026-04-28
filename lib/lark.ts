@@ -1778,6 +1778,27 @@ export async function listMessageReactions(
 }
 
 /**
+ * Count direct replies on a Lark message via the /replies endpoint.
+ * Useful when the bulk readChatMessages fetch may have missed nested
+ * replies — this hits the API for the specific message and counts
+ * what comes back. Returns 0 on any error.
+ */
+export async function countMessageReplies(messageId: string, token: string): Promise<number> {
+  if (!messageId) return 0;
+  try {
+    const res = await fetch(
+      `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}/replies?page_size=10`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const data = await res.json() as { code: number; data?: { items?: unknown[] } };
+    if (data.code !== 0) return 0;
+    return (data.data?.items ?? []).length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Resolve a Lark user identifier (open_id or user_id) to a display
  * name. Returns '' if the lookup fails. Uses the contact API; the
  * caller is responsible for caching across calls.
