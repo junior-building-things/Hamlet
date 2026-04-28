@@ -2929,12 +2929,7 @@ export async function sendInteractiveCardToChat(
           type: b.type,
         };
         if (b.url) action.url = b.url;
-        if (b.value) {
-          // Provide BOTH legacy `value` and v2 `behaviors` so old +
-          // new Lark clients both pick up the callback.
-          action.value = b.value;
-          action.behaviors = [{ type: 'callback', value: b.value }];
-        }
+        if (b.value) action.value = b.value;
         return action;
       };
       if (urlButtons.length > 0) {
