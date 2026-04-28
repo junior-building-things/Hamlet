@@ -304,6 +304,15 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         if (cacheRes.ok) {
           const cacheData = await cacheRes.json() as { features?: Feature[] };
           if (cacheData.features && cacheData.features.length > 0) {
+            // Seed the global AV map from every cached feature's
+            // per-feature avatars so the FeatureModal's people
+            // dropdowns can render proper images for team members
+            // even before any of those features get synced this
+            // session. Without this, opening "New Feature" right
+            // after page load shows "AL" / "KC" initials only.
+            for (const f of cacheData.features) {
+              if (f.avatars) Object.assign(AV, f.avatars);
+            }
             setFeatures(cacheData.features);
             setLoading(false);
             return;
