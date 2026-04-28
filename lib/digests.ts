@@ -1779,7 +1779,9 @@ export async function collectUnansweredForFeature(
   // Drop the ones that have a real answer. The structural thread-
   // activity check (parent_id / root_id matching) only proves there's
   // SOMETHING after the question — Gemini decides whether any of
-  // those follow-ups is actually an answer.
+  // those follow-ups is actually an answer. Stickers / files / other
+  // non-text follow-ups don't count as answers (Gemini gets nothing
+  // to read), so we leave the question flagged.
   const unanswered: UnansweredQuestion[] = [];
   for (const msg of mentionMsgs) {
     const laterMsgs = findLaterThreadMessages(msg, messages);
@@ -1793,11 +1795,9 @@ export async function collectUnansweredForFeature(
           `chat "${feature.name}" msg=${msg.message_id}`,
         );
         if (answered) continue;
-      } else {
-        // No textual replies (just reactions etc.) → still treat as answered
-        // to match the prior structural rule.
-        continue;
       }
+      // No textual replies (just stickers etc.) → fall through and
+      // keep the question flagged as unanswered.
     }
 
     const text = chatMessageText(msg);
