@@ -8,6 +8,16 @@ export interface Task {
   completed: boolean;
 }
 
+/** Comment on a Meego ticket (from list_workitem_comments). */
+export interface MeegoComment {
+  /** Author display name. */
+  author: string;
+  /** Plain-text content (HTML/markdown stripped). */
+  content: string;
+  /** ISO date string (YYYY-MM-DD) of the comment's creation time. */
+  createdAt: string;
+}
+
 export interface Feature {
   id: string;
   name: string;
@@ -53,6 +63,12 @@ export interface Feature {
   iosPackageName?: string;
   iosPackageBuildTime?: string;
   commentSummary?: string;
+  /**
+   * Latest page (up to ~20) of comments on the Meego ticket itself.
+   * Populated by per-feature sync and Sync All. Surfaced to Junior via
+   * the Hamlet GCS cache; not displayed in the Hamlet UI.
+   */
+  meegoComments?: MeegoComment[];
   chatId?: string;
   avatars?: Record<string, string>;
   pocEmails?: Record<string, string>;  // name → email (for Junior @mentions)

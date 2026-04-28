@@ -1,4 +1,4 @@
-import { Priority, Feature } from './types';
+import { Priority, Feature, MeegoComment } from './types';
 import { extractFigmaUrlFromPrd, searchAbReport, joinFeatureChat, getPackageQrUrl, searchLibraInChat } from './lark';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
@@ -428,6 +428,84 @@ export async function fetchUserStories(projectKey: string): Promise<Feature[]> {
   return features;
 }
 
+/**
+ * Fetch the latest page (~20) of comments on a Meego work item via the
+ * `list_workitem_comments` MCP tool. Returns an empty array on any failure
+ * — callers should treat comments as best-effort enrichment.
+ *
+ * Response shape varies; we try common structures defensively. Each comment
+ * is normalised to {author, content, createdAt}, with HTML/markdown stripped
+ * to plain text and the date in YYYY-MM-DD form.
+ */
+export async function fetchTicketComments(
+  projectKey: string,
+  workItemId: string,
+): Promise<MeegoComment[]> {
+  let raw: string;
+  try {
+    raw = await callMeegoMcp('list_workitem_comments', {
+      project_key: projectKey,
+      work_item_id: workItemId,
+      page_num: 1,
+    });
+  } catch (e) {
+    console.warn(`[comments] fetch failed for ${workItemId}:`, e);
+    return [];
+  }
+
+  // Try JSON first; fall back to nothing if the response is unparseable.
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return []; }
+
+  // Walk the parsed structure looking for an array of comment-like objects.
+  // Common shapes: top-level array, {data: [...]}, {list: [...]},
+  // {comments: [...]}, or {data: {list: [...]}}.
+  const candidates: unknown[] = [];
+  const tryPush = (v: unknown) => { if (Array.isArray(v)) candidates.push(...v); };
+  if (Array.isArray(parsed)) tryPush(parsed);
+  else if (parsed && typeof parsed === 'object') {
+    const o = parsed as Record<string, unknown>;
+    tryPush(o.list); tryPush(o.comments); tryPush(o.data);
+    if (o.data && typeof o.data === 'object') {
+      const d = o.data as Record<string, unknown>;
+      tryPush(d.list); tryPush(d.comments);
+    }
+  }
+
+  const stripHtml = (s: string): string =>
+    s.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+
+  const toIsoDate = (v: unknown): string => {
+    if (typeof v === 'string') {
+      const m = v.match(/(\d{4}-\d{2}-\d{2})/);
+      if (m) return m[1];
+    }
+    if (typeof v === 'number') {
+      const ms = v > 1e12 ? v : v * 1000;
+      return new Date(ms).toISOString().split('T')[0];
+    }
+    return '';
+  };
+
+  return candidates.flatMap((c): MeegoComment[] => {
+    if (!c || typeof c !== 'object') return [];
+    const o = c as Record<string, unknown>;
+    const content = stripHtml(String(o.content ?? o.text ?? o.body ?? ''));
+    if (!content) return [];
+    const author = String(
+      (typeof o.creator === 'object' && o.creator !== null
+        ? (o.creator as Record<string, unknown>).name ?? (o.creator as Record<string, unknown>).user_name
+        : undefined)
+      ?? o.author
+      ?? o.user_name
+      ?? o.creator_name
+      ?? '',
+    );
+    const createdAt = toIsoDate(o.created_at ?? o.create_time ?? o.created_time ?? o.createTime);
+    return [{ author, content, createdAt }];
+  });
+}
+
 export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: string, cachedChatId?: string): Promise<{
   status: string;
   name: string;
@@ -462,6 +540,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   chatId: string;
   pocEmails: Record<string, string>;
   meegoAvatars: Record<string, string>;
+  meegoComments: MeegoComment[];
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
@@ -831,6 +910,13 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     }
   }
 
+  // Best-effort: fetch the latest page of Meego ticket comments. Failures
+  // are swallowed inside fetchTicketComments — comments are an enrichment.
+  const meegoUrlMatch = meegoUrl.match(/meego\.larkoffice\.com\/([^/]+)\/(?:[^/]+)\/detail\/(\d+)/);
+  const meegoComments = meegoUrlMatch
+    ? await fetchTicketComments(meegoUrlMatch[1], meegoUrlMatch[2])
+    : [];
+
   return {
     status:      resolveDisplayStatus(overallStatusName),
     name:        workItemName,
@@ -865,6 +951,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     chatId,
     pocEmails,
     meegoAvatars,
+    meegoComments,
   };
 }
 

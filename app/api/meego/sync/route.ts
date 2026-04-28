@@ -186,6 +186,7 @@ export async function POST(req: NextRequest) {
         qaOwner: result.qaOwner,
         avatars: pocAvatars,
         pocEmails: result.pocEmails,
+        meegoComments: result.meegoComments,
       }).catch(e => console.warn('[sync] cache update failed:', e));
     }
 
