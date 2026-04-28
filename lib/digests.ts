@@ -2555,31 +2555,31 @@ async function summariseAbReport(
 }
 
 /**
- * Read the feature's PRD and ask Gemini to return the first bullet from
- * the "Next Steps" section, verbatim. Returns '' on any failure or when
- * the section / bullets are missing — caller decides whether to skip or
- * show a placeholder.
+ * Read the feature's AB report and ask Gemini to return the first bullet
+ * from the "Next Steps" section, verbatim. Returns '' on any failure or
+ * when the section / bullets are missing — caller decides whether to
+ * skip or show a placeholder.
  */
 async function getFirstNextStep(
   featureName: string,
-  prdUrl: string,
+  abReportUrl: string,
   userAccessToken?: string,
 ): Promise<string> {
-  if (!prdUrl) return '';
+  if (!abReportUrl) return '';
   let content = '';
   try {
-    content = await readDocContent(prdUrl);
+    content = await readDocContent(abReportUrl);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if ((msg.includes('1770032') || /forbidden/i.test(msg)) && userAccessToken) {
       try {
-        content = await readDocContentWithToken(prdUrl, userAccessToken);
+        content = await readDocContentWithToken(abReportUrl, userAccessToken);
       } catch (e2) {
-        console.warn(`[digests] AB-concluded: PRD next-step user-token read failed for "${featureName}":`, e2);
+        console.warn(`[digests] AB-concluded: next-step user-token read failed for "${featureName}":`, e2);
       }
     }
     if (!content) {
-      console.warn(`[digests] AB-concluded: PRD next-step read failed for "${featureName}":`, e);
+      console.warn(`[digests] AB-concluded: next-step AB report read failed for "${featureName}":`, e);
       return '';
     }
   }
@@ -2592,7 +2592,7 @@ async function getFirstNextStep(
   const tmpl = await getPromptFn('hamlet.first_next_step', def?.default ?? '');
   const modelName = await getModelFn('hamlet.first_next_step', def?.model ?? 'gemini-2.5-flash-lite');
   const truncated = content.length > 30_000 ? content.slice(0, 30_000) + '\n…[truncated]' : content;
-  const prompt = renderFn(tmpl, { featureName, prdContent: truncated });
+  const prompt = renderFn(tmpl, { featureName, abReportContent: truncated });
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
@@ -2642,7 +2642,7 @@ export async function buildAbConcludedSection(
   }
   const [abResults, nextStep] = await Promise.all([
     summariseAbReport(feature.name, abReportUrl, userAccessToken),
-    getFirstNextStep(feature.name, feature.prd ?? '', userAccessToken),
+    getFirstNextStep(feature.name, abReportUrl, userAccessToken),
   ]);
 
   const refs: Array<{ label: string; url: string }> = [];

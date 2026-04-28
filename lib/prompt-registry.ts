@@ -247,14 +247,14 @@ Rules:
 A/B report text:
 \${abReportContent}`;
 
-const HAMLET_FIRST_NEXT_STEP = `You're given the PRD content for a feature called "\${featureName}". Find the section titled "Next Steps" (also accept variants: "Next Step", "下一步", "下一步骤", "Next steps").
+const HAMLET_FIRST_NEXT_STEP = `You're given the AB report content for a feature called "\${featureName}". Find the section titled "Next Steps" (also accept variants: "Next Step", "下一步", "下一步骤", "Next steps").
 
-Return ONLY the first bullet point from that section, copied VERBATIM using the EXACT wording from the PRD. Preserve casing, punctuation, and any inline links — just strip the leading bullet marker (- or • or 1.). Do NOT paraphrase, summarise, translate, or add quotes/preamble/labels.
+Return ONLY the first bullet point from that section, copied VERBATIM using the EXACT wording from the AB report. Preserve casing, punctuation, and any inline links — just strip the leading bullet marker (- or • or 1.). Do NOT paraphrase, summarise, translate, or add quotes/preamble/labels.
 
 If there is no Next Steps section, or it has no bullets, reply with the literal string "(none)".
 
-PRD content:
-\${prdContent}`;
+AB report content:
+\${abReportContent}`;
 
 // ─── Junior prompts ─────────────────────────────────────────────────────────
 
@@ -476,8 +476,8 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     service: 'hamlet',
     fileRef: 'lib/digests.ts',
     model: 'gemini-2.5-flash-lite',
-    description: 'Extracts the first bullet from the Next Steps section of a PRD, verbatim — used on the AB-concluded card',
-    variables: ['featureName', 'prdContent'],
+    description: 'Extracts the first bullet from the Next Steps section of an AB report, verbatim — used on the AB-concluded card',
+    variables: ['featureName', 'abReportContent'],
     default: HAMLET_FIRST_NEXT_STEP,
   },
 
