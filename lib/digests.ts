@@ -19,7 +19,6 @@ import {
   uploadDocImageForMessage,
   resolveDocIdFromUrl,
   listDocCommentsDetailed,
-  resolveUserIdFromOpenId,
   resolveUserName,
   listMessageReactions,
   PostParagraph,
@@ -1858,10 +1857,15 @@ export async function collectUnansweredForFeature(
  * resolved AND was created/touched in the last 24h AND the owner
  * (Thomas) hasn't posted any reply in the thread. We optionally
  * tighten further to threads that explicitly @-mention the owner.
+ *
+ * NOTE: Lark's doc-comment API labels its identifier field `user_id`
+ * but actually returns OPEN_IDs (values like `ou_…`). The
+ * `ownerOpenId` parameter must therefore be the open_id, not the
+ * employee user_id.
  */
 export async function collectUnansweredCommentsForFeature(
   feature: MeegoFeature,
-  ownerUserId: string,
+  ownerOpenId: string,
   sinceMs: number,
   opts: { mentionOnly?: boolean } = {},
 ): Promise<UnansweredQuestion[]> {
@@ -1883,13 +1887,13 @@ export async function collectUnansweredCommentsForFeature(
     const lastTouchMs = Math.max(t.updateTime, ...t.replies.map(r => r.createTime));
     if (lastTouchMs < sinceMs) continue;
     // Skip threads where the owner has already replied.
-    const ownerReplied = t.replies.some(r => r.userId === ownerUserId);
+    const ownerReplied = t.replies.some(r => r.userId === ownerOpenId);
     if (ownerReplied) continue;
     // Skip threads the owner started (they're the asker, not the askee).
-    if (original.userId === ownerUserId) continue;
+    if (original.userId === ownerOpenId) continue;
     // Optional stricter filter: only threads that @-mention the owner.
     if (opts.mentionOnly) {
-      const mentionsOwner = t.replies.some(r => r.mentionedUserIds.includes(ownerUserId));
+      const mentionsOwner = t.replies.some(r => r.mentionedUserIds.includes(ownerOpenId));
       if (!mentionsOwner) continue;
     }
     // If there are OTHER non-owner replies in the thread, ask Gemini
@@ -1912,7 +1916,9 @@ export async function collectUnansweredCommentsForFeature(
     // bullet should show the actual question, not the snippet of doc
     // the comment was anchored to.
     const preview = (original.text || '(no text)').slice(0, 500);
-    const senderName = await lookupUserName(original.userId, 'user_id');
+    // Lark's doc-comment user_id field actually contains an open_id,
+    // so resolve as open_id rather than user_id.
+    const senderName = await lookupUserName(original.userId, 'open_id');
     out.push({
       senderOpenId: original.userId,
       senderName,
@@ -3347,13 +3353,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     // the same per-feature finding so the card has one section per
     // feature regardless of whether the questions came from chat or
     // doc comments.
-    let ownerUserId: string | null = null;
-    try {
-      ownerUserId = await resolveUserIdFromOpenId(ownerOpenId);
-    } catch (e) {
-      console.warn('[digests] failed to resolve owner user_id (PRD-comment scan disabled):', e);
-    }
-    if (ownerUserId) {
+    // Lark's doc-comment API returns open_id values in its (mis-named)
+    // user_id field, so we pass the owner's open_id straight through.
+    {
       const cache = await readFeatureCache();
       if (cache) {
         let prdScanned = 0;
@@ -3370,7 +3372,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           prdScanned++;
           try {
             const commentQs = await collectUnansweredCommentsForFeature(
-              meegoFeature, ownerUserId, sinceMs,
+              meegoFeature, ownerOpenId, sinceMs,
             );
             if (commentQs.length === 0) continue;
             prdWithUnanswered++;
