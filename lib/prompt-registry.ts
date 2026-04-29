@@ -153,6 +153,9 @@ Feature: \${featureName}
 Source of question: \${sourceLabel}
 Question: \${questionText}
 
+Feature context (from Hamlet cache — status, owners, links, version, risk, recent Meego comments):
+\${featureContext}
+
 PRD content (truncated):
 \${prdContent}
 
@@ -400,7 +403,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     fileRef: 'app/api/lark/card-action/route.ts',
     model: 'gemini-2.5-flash-lite',
     description: 'Drafts a reply to an unanswered PRD comment / chat question for the "Let Jr. Reply" button',
-    variables: ['featureName', 'sourceLabel', 'questionText', 'prdContent'],
+    variables: ['featureName', 'sourceLabel', 'questionText', 'featureContext', 'prdContent'],
     default: HAMLET_LETJR_REPLY,
   },
   {

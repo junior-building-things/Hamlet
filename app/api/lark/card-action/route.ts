@@ -286,6 +286,22 @@ export async function POST(req: NextRequest) {
           try { prdContent = await readDocContent(prdUrl); }
           catch (e) { console.warn('[card-action] letjr_reply: PRD read failed:', e); }
         }
+
+        // Pull rich feature context from the Hamlet cache (status, owners,
+        // links, risk, recent Meego comments) so Gemini can answer
+        // beyond what the PRD says.
+        let featureContext = '(no feature context available)';
+        try {
+          const { readFeatureCache } = await import('@/lib/feature-cache');
+          const cache = await readFeatureCache();
+          const f = cache?.features.find(c =>
+            (prdUrl && c.prd === prdUrl) || (chatId && c.chatId === chatId),
+          );
+          if (f) featureContext = formatFeatureContext(f);
+        } catch (e) {
+          console.warn('[card-action] letjr_reply: feature cache lookup failed:', e);
+        }
+
         const apiKey = process.env.GOOGLE_AI_API_KEY;
         let replyText = '_(Couldn\'t generate a reply — Gemini not configured)_';
         if (apiKey) {
@@ -300,6 +316,7 @@ export async function POST(req: NextRequest) {
               sourceLabel: questionSource === 'prd_comment' ? 'PRD comment' : 'feature group chat',
               questionText,
               prdContent: prdContent.slice(0, 8000) || '(PRD not available)',
+              featureContext,
             });
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: modelName });
@@ -344,6 +361,51 @@ export async function POST(req: NextRequest) {
 
   console.log('[card-action] no matching action:', actionName, 'type:', body.type, 'bodyKeys:', Object.keys(body).join(','));
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Format a Hamlet-cached Feature into a compact text block for the
+ * letjr_reply Gemini prompt. Includes the data Gemini is most likely
+ * to reference when answering: status, owners, links, version + risk,
+ * recent Meego comments. Skips empty fields. Never throws.
+ */
+function formatFeatureContext(f: import('@/lib/types').Feature): string {
+  const lines: string[] = [];
+  lines.push(`Name: ${f.name}`);
+  if (f.status) lines.push(`Status: ${f.status}`);
+  if (f.priority) lines.push(`Priority: ${f.priority}`);
+  if (f.iosVersion) lines.push(`Version: ${f.iosVersion}`);
+  if (f.versionHistory?.length) lines.push(`Version History: ${f.versionHistory.join(' → ')}`);
+  if (f.versionChanges?.length) {
+    lines.push(`Risk: Delayed (${f.versionChanges.map(c => `${c.date}: ${c.from}→${c.to}`).join('; ')})`);
+  } else if (f.riskLevel) {
+    lines.push(`Risk: ${f.riskLevel === 'red' ? 'High' : f.riskLevel === 'yellow' ? 'Medium' : 'Low'}`);
+  }
+  if (f.riskNotes?.length) lines.push(`Risk Notes: ${f.riskNotes.join(', ')}`);
+  if (f.pmOwner)         lines.push(`PM: ${f.pmOwner}`);
+  if (f.techOwner)       lines.push(`Tech Owner: ${f.techOwner}`);
+  if (f.iosOwner)        lines.push(`iOS: ${f.iosOwner}`);
+  if (f.androidOwner)    lines.push(`Android: ${f.androidOwner}`);
+  if (f.serverOwner)     lines.push(`Server: ${f.serverOwner}`);
+  if (f.qaOwner)         lines.push(`QA: ${f.qaOwner}`);
+  if (f.uiuxOwner)       lines.push(`UX: ${f.uiuxOwner}`);
+  if (f.daOwner)         lines.push(`DS: ${f.daOwner}`);
+  if (f.contentDesigner) lines.push(`Content Designer: ${f.contentDesigner}`);
+  if (f.figmaUrl)      lines.push(`Figma: ${f.figmaUrl}`);
+  if (f.libraUrl)      lines.push(`Libra: ${f.libraUrl}`);
+  if (f.abReportUrl)   lines.push(`AB Report: ${f.abReportUrl}`);
+  if (f.complianceUrl) lines.push(`Compliance: ${f.complianceUrl}`);
+  if (f.meegoUrl)      lines.push(`Meego: ${f.meegoUrl}`);
+  if (f.notes)         lines.push(`Notes: ${f.notes}`);
+  if (f.meegoComments?.length) {
+    lines.push('');
+    lines.push(`Recent Meego comments:`);
+    for (const c of f.meegoComments.slice(-5)) {
+      const body = c.content.length > 200 ? `${c.content.slice(0, 200)}…` : c.content;
+      lines.push(`  - ${c.createdAt} ${c.author}: ${body}`);
+    }
+  }
+  return lines.join('\n');
 }
 
 function decryptLarkPayload(encrypt: string, encryptKey: string): string {
