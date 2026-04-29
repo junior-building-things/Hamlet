@@ -185,7 +185,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ toast: { type: 'error', content: 'No parent message' } });
     }
 
-    // Background work: post the prompt thread reply + persist pending-edit state.
+    // Save the pending-edit entry SYNCHRONOUSLY (before returning the
+    // toast) so a fast user reply can be matched against it via the
+    // cardMsgId lookup. We use a synthetic key here since we dont
+    // know the prompt message_id yet; the background task will add a
+    // second entry keyed by the actual prompt msg_id once posted (so
+    // both lookup paths — by parent_id and by root_id — work).
+    const requestedAtIso = new Date().toISOString();
+    const synthKey = `card:${cardMsgId}:${Date.now()}`;
+    try {
+      const state = await loadDigestState();
+      if (!state.pendingCardEdits) state.pendingCardEdits = {};
+      state.pendingCardEdits[synthKey] = {
+        cardMsgId,
+        cardKind: cardKind as 'ab_open' | 'ab_concluded',
+        featureWorkItemId,
+        featureName,
+        chatId,
+        requestedByOpenId: requesterOpenId,
+        requestedAtIso,
+      };
+      // Light pruning: drop entries older than 7 days.
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      for (const [id, e] of Object.entries(state.pendingCardEdits)) {
+        if (new Date(e.requestedAtIso).getTime() < cutoff) delete state.pendingCardEdits[id];
+      }
+      await saveDigestState(state);
+    } catch (e) {
+      console.warn('[card-action] edit_ab_card sync state save failed:', e);
+    }
+
+    // Post the prompt thread reply in the background. Once we have
+    // the prompt msg_id, mirror the entry under that key too so a
+    // direct parent_id lookup still works.
     void (async () => {
       try {
         const botToken = await getLarkBotToken();
@@ -208,13 +240,8 @@ export async function POST(req: NextRequest) {
           featureName,
           chatId,
           requestedByOpenId: requesterOpenId,
-          requestedAtIso: new Date().toISOString(),
+          requestedAtIso,
         };
-        // Light pruning: drop entries older than 7 days.
-        const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        for (const [id, e] of Object.entries(state.pendingCardEdits)) {
-          if (new Date(e.requestedAtIso).getTime() < cutoff) delete state.pendingCardEdits[id];
-        }
         await saveDigestState(state);
         console.log(`[card-action] edit_ab_card: prompt posted msg=${promptMsgId} for feature=${featureName}`);
       } catch (e) {
