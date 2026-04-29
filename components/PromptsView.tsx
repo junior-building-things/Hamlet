@@ -72,7 +72,7 @@ export function PromptsView() {
             System Prompts
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Manage AI prompts used across Hamlet, Junior, Rio, and Mia. Edits take effect within 30 seconds.
+            Manage system prompts used across Hamlet and chat bots. Edits propagate within 1 min.
           </p>
         </div>
       </div>
