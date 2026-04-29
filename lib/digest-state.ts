@@ -246,6 +246,15 @@ export interface DigestStateFile {
     prdUrl: string;
     sentAtIso: string;
   }>;
+
+  /**
+   * IDs of cron jobs / digest sub-sections currently paused. When a
+   * digest sub-section's id is in this list, lib/digests.ts skips its
+   * card. For cloud_scheduler-kind crons the pause is enforced at the
+   * Cloud Scheduler level (job state = PAUSED), but we mirror the
+   * flag here for consistent UI rendering.
+   */
+  cronPaused?: string[];
 }
 
 /**
@@ -345,6 +354,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const postFeatureMap = (obj.postFeatureMap && typeof obj.postFeatureMap === 'object')
     ? (obj.postFeatureMap as DigestStateFile['postFeatureMap'])
     : undefined;
+  const cronPaused = Array.isArray(obj.cronPaused)
+    ? (obj.cronPaused as unknown[]).map(String)
+    : undefined;
 
   return {
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
@@ -363,6 +375,7 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     pendingCardEdits,
     juniorCommentThreads,
     postFeatureMap,
+    cronPaused,
   };
 }
 

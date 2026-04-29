@@ -8,6 +8,7 @@ import { TodoView } from '@/components/TodoView';
 import { RolesView } from '@/components/RolesView';
 import { PromptsView } from '@/components/PromptsView';
 import { JuniorContextView } from '@/components/JuniorContextView';
+import { CronJobsView } from '@/components/CronJobsView';
 import { SyncProvider } from '@/components/SyncContext';
 import { GlobalActions } from '@/components/GlobalActions';
 import { FeatureModal } from '@/components/FeatureModal';
@@ -37,6 +38,7 @@ export default function Home() {
       if (path === '/roles') return 'roles';
       if (path === '/prompts') return 'prompts';
       if (path === '/context') return 'context';
+      if (path === '/crons') return 'crons';
     }
     return 'project';
   });
@@ -45,7 +47,7 @@ export default function Home() {
   const [user,          setUser]          = useState<{ name: string; avatarUrl: string } | undefined>();
 
   // Sync URL when view changes
-  const viewToPath: Record<SidebarView, string> = { project: '/projects', todos: '/todos', chat: '/chat', roles: '/roles', prompts: '/prompts', context: '/context' };
+  const viewToPath: Record<SidebarView, string> = { project: '/projects', todos: '/todos', chat: '/chat', roles: '/roles', prompts: '/prompts', context: '/context', crons: '/crons' };
   function handleViewChange(view: SidebarView) {
     setActiveView(view);
     window.history.pushState(null, '', viewToPath[view]);
@@ -60,6 +62,7 @@ export default function Home() {
       else if (path === '/roles') setActiveView('roles');
       else if (path === '/prompts') setActiveView('prompts');
       else if (path === '/context') setActiveView('context');
+      else if (path === '/crons') setActiveView('crons');
       else setActiveView('project');
     }
     window.addEventListener('popstate', onPopState);
@@ -185,6 +188,9 @@ export default function Home() {
           )}
           {activeView === 'context' && (
             <JuniorContextView />
+          )}
+          {activeView === 'crons' && (
+            <CronJobsView />
           )}
         </div>
 

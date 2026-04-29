@@ -1,8 +1,8 @@
 'use client';
 import Image from 'next/image';
-import { LayoutList, MessageSquare, CheckSquare, Users, Plus, LogOut, MessageSquareCode, Database } from 'lucide-react';
+import { LayoutList, MessageSquare, CheckSquare, Users, Plus, LogOut, MessageSquareCode, Database, Clock } from 'lucide-react';
 
-export type SidebarView = 'project' | 'chat' | 'todos' | 'roles' | 'prompts' | 'context';
+export type SidebarView = 'project' | 'chat' | 'todos' | 'roles' | 'prompts' | 'context' | 'crons';
 
 interface Props {
   activeView: SidebarView;
@@ -59,6 +59,12 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Pro
           label="Junior Context"
           active={activeView === 'context'}
           onClick={() => onViewChange('context')}
+        />
+        <NavItem
+          icon={<Clock className="w-4 h-4 shrink-0" />}
+          label="Cron Jobs"
+          active={activeView === 'crons'}
+          onClick={() => onViewChange('crons')}
         />
       </nav>
 

@@ -213,6 +213,14 @@ export interface RiskFinding {
   delay?: { detail: string };
 }
 
+/**
+ * Whether a cron-job id is currently paused (per-id flag in
+ * state.cronPaused). Used to gate digest sub-section sends.
+ */
+function isCronPaused(state: DigestStateFile, id: string): boolean {
+  return Array.isArray(state.cronPaused) && state.cronPaused.includes(id);
+}
+
 export interface UnansweredQuestion {
   senderOpenId: string;
   /** Display name of the asker (resolved at scan time, empty if lookup failed). */
@@ -3172,6 +3180,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
       const isForwardTransition = prevStatus === 'PRD/Design Prep';
       const alreadyNotified = lineReviewNotified.has(f.workItemId);
       if (isLineReviewNow && isForwardTransition && !alreadyNotified) {
+        if (isCronPaused(state, 'digest.line_review')) {
+          console.log(`[digests] Line Review card paused — skipping "${f.name}"`);
+          continue;
+        }
         console.log(`[digests] PRD Ready card → "${f.name}" (PRD/Design Prep → Line Review)`);
         lineReviewNotified.add(f.workItemId);
         notifiedSetChanged = true;
@@ -3211,9 +3223,11 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     // Send the aggregated AB-open card after the loop. Fire-and-forget
     // (with .catch) because a slow PRD parse shouldn't block the rest
     // of the digest pipeline.
-    if (abOpenTransitions.length > 0) {
+    if (abOpenTransitions.length > 0 && !isCronPaused(state, 'digest.ab_open')) {
       sendAbOpenDigestCard(abOpenTransitions)
         .catch(e => console.warn('[digests] AB-open digest card send failed:', e));
+    } else if (abOpenTransitions.length > 0) {
+      console.log('[digests] AB-open digest paused — skipping send');
     }
 
     // MERGE into the existing GCS cache — update features the digest knows
@@ -3403,7 +3417,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // time out the whole digest run. This ensures the PRD digest is delivered
   // even if later steps fail.
   let prdChangesSentEarly = false;
-  if (prdChanges.length > 0) {
+  if (prdChanges.length > 0 && isCronPaused(state, 'digest.prd_changes')) {
+    console.log('[digests] PRD changes digest paused — skipping send');
+  } else if (prdChanges.length > 0) {
     const card = buildPrdChangesDigestCard(prdChanges);
     const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
     console.log('[digests] PRD changes digest:\n' + preview);
@@ -3805,9 +3821,11 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     }
     console.log(`[digests] AB-concluded scan: ${scanned} chats scanned, ${matched} matched`);
     if (abConcludedChanged) state.abConcludedNotified = [...abConcluded];
-    if (abConcludedTransitions.length > 0) {
+    if (abConcludedTransitions.length > 0 && !isCronPaused(state, 'digest.ab_concluded')) {
       sendAbConcludedDigestCard(abConcludedTransitions)
         .catch(e => console.warn('[digests] AB-concluded digest card send failed:', e));
+    } else if (abConcludedTransitions.length > 0) {
+      console.log('[digests] AB-concluded digest paused — skipping send');
     }
   }
 
@@ -4028,7 +4046,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Step 7: Send risk digest (always) — interactive card with per-feature
   // buttons, posted to the PM group chat.
   let riskSent = false;
-  if (rioToken) {
+  if (rioToken && isCronPaused(state, 'digest.risk')) {
+    console.log('[digests] risk digest paused — skipping send');
+  } else if (rioToken) {
     const card = await buildRiskDigestCard(riskFindings);
     const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
     console.log('[digests] risk digest:\n' + preview);
@@ -4043,7 +4063,9 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Hamlet/Junior bot identity so card-action button clicks
   // (Let me Reply) route to Hamlet's `/api/lark/card-action`.
   let unansweredSent = false;
-  if (unansweredFindings.length > 0) {
+  if (unansweredFindings.length > 0 && isCronPaused(state, 'digest.unanswered')) {
+    console.log('[digests] unanswered digest paused — skipping send');
+  } else if (unansweredFindings.length > 0) {
     const sendToken = botToken || rioToken;
     if (!sendToken) {
       console.log('[digests] no token to send unanswered digest — skipping');
