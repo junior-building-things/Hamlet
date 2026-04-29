@@ -65,13 +65,9 @@ export function JuniorContextView() {
             Context included each time Junior replies. Edits propagate within 1 min.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-colors"
-        >
-          <Plus className="w-3 h-3" />
-          New file
-        </button>
+        {/* New file lives in the bottom-of-list affordance now to avoid
+            overlapping with the floating GlobalActions in the top-right. */}
+        <div aria-hidden className="invisible" />
       </div>
 
       {/* List */}
@@ -108,7 +104,7 @@ export function JuniorContextView() {
             {/* Markdown context files */}
             {files.length === 0 ? (
               <div className="text-center text-sm text-gray-500 py-8">
-                No context files yet. Click <strong>New file</strong> to create the first one (e.g. <code>system.md</code>).
+                No context files yet.
               </div>
             ) : (
               files.map(f => (
