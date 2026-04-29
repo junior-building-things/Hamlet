@@ -511,7 +511,7 @@ function parseWorkItemField(raw: string, fieldName: string): string {
 /**
  * Fetch a single feature from Meego MCP with its raw (untranslated) Chinese status.
  */
-async function fetchMeegoFeature(workItemId: string, name: string, projectKey: string): Promise<MeegoFeature | null> {
+export async function fetchMeegoFeature(workItemId: string, name: string, projectKey: string): Promise<MeegoFeature | null> {
   const meegoUrl = `https://meego.larkoffice.com/${projectKey}/story/detail/${workItemId}`;
   let raw: string;
   try {

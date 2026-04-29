@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendAbConcludedDigestCard } from '@/lib/digests';
-import { fetchMeegoFeature, TIKTOK_PROJECT_KEY } from '@/lib/meego';
+import { sendAbConcludedDigestCard, fetchMeegoFeature } from '@/lib/digests';
 import { readFeatureCache } from '@/lib/feature-cache';
+
+const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 600;
