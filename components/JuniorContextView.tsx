@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Save, Trash2, Plus, FileText, Database, History, Activity } from 'lucide-react';
+import { Loader2, Save, Trash2, Plus, FileText, History, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface HistoryStats { fileCount: number; totalMessages: number }
@@ -90,7 +90,7 @@ export function JuniorContextView() {
               right="live"
             />
             <SystemCell
-              icon={<Database className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+              icon={<History className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
               name="Conversation history (chat-level)"
               description="Per-chat back-and-forth Junior remembers, keyed by chatId. Replayed as user/model turns to Gemini."
               right={stats.chat ? `${stats.chat.fileCount} chats · ${stats.chat.totalMessages} msgs` : '—'}
