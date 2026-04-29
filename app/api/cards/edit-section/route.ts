@@ -12,6 +12,11 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+// Owner open_id used for the trailing "cc @Thomas" mention on the
+// AB-open / AB-concluded posts. Must stay in sync with
+// AB_OPEN_MENTION_OPEN_ID in lib/digests.ts.
+const AB_OPEN_MENTION_OPEN_ID = 'ou_1e7fa98f1e46311d8a5e4554dc7a668e';
+
 /**
  * Apply an edit to one feature section of an AB-open or AB-concluded
  * card and patch the card back into Lark.
@@ -52,9 +57,26 @@ export async function POST(req: NextRequest) {
     }
 
     // Update the snapshot — both cardContent and postParagraphs.
-    const newPostParagraphs = cardContentToPostParagraphs(newCardContent);
+    // Re-derive the BODY from the new markdown, then append the
+    // image paragraphs (from cardImages) + the trailing cc@Thomas
+    // mention so the rich-text post that "Send to PM Group" sends
+    // continues to mirror the build-time structure.
+    const featureSnap = ctx.features[featureIdx];
+    const bodyParagraphs = cardContentToPostParagraphs(newCardContent);
+    const imageParagraphs: PostParagraph[] = featureSnap.cardImages.map(img => [
+      { tag: 'img', image_key: img.image_key } as PostInline,
+    ]);
+    const ccParagraph: PostParagraph = [
+      { tag: 'text', text: 'cc' },
+      { tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID },
+    ];
+    const newPostParagraphs: PostParagraph[] = [
+      ...bodyParagraphs,
+      ...imageParagraphs,
+      ccParagraph,
+    ];
     ctx.features[featureIdx] = {
-      ...ctx.features[featureIdx],
+      ...featureSnap,
       cardContent: newCardContent,
       postParagraphsJson: JSON.stringify(newPostParagraphs),
     };
