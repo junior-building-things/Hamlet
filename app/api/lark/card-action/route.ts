@@ -261,6 +261,7 @@ export async function POST(req: NextRequest) {
     const questionSource = String(actionValue?.questionSource ?? '');
     const commentId = String(actionValue?.commentId ?? '');
     const chatMessageId = String(actionValue?.chatMessageId ?? '');
+    let resolvedChatId = String(actionValue?.chatId ?? '');
 
     if (!questionText) {
       return NextResponse.json({ toast: { type: 'error', content: 'Missing question' } });
@@ -281,11 +282,12 @@ export async function POST(req: NextRequest) {
 
     void (async () => {
       try {
-        // Recover the asker open_id at runtime if the button payload
-        // didnt include one (older cards built before the senderOpenIdOf
-        // fix). For chat questions we have the original chatMessageId
-        // and can fetch the senders open_id directly.
-        if (!askerOpenId && chatMessageId) {
+        // Recover askerOpenId AND chatId at runtime if the button payload
+        // didnt include them (older cards built before the senderOpenIdOf
+        // fix and before chat-id was stamped on findings). For chat
+        // questions we have the original chatMessageId; one /im/v1
+        // /messages/{id} fetch returns both senders open_id and chat_id.
+        if (chatMessageId && (!askerOpenId || !resolvedChatId)) {
           try {
             const { getLarkBotToken } = await import('@/lib/lark');
             const tokenForLookup = await getLarkBotToken();
@@ -295,20 +297,30 @@ export async function POST(req: NextRequest) {
             );
             const data = await res.json() as {
               code: number;
-              data?: { items?: Array<{ sender?: { id?: string; id_type?: string; sender_id?: { open_id?: string } } }> };
+              data?: { items?: Array<{
+                chat_id?: string;
+                sender?: { id?: string; id_type?: string; sender_id?: { open_id?: string } };
+              }> };
             };
             if (data.code === 0) {
-              const s = data.data?.items?.[0]?.sender;
-              const recovered = s?.sender_id?.open_id
-                ?? (s?.id && (s.id_type ?? 'open_id') === 'open_id' && s.id.startsWith('ou_') ? s.id : '')
-                ?? '';
-              if (recovered) {
-                askerOpenId = recovered;
-                console.log(`[card-action] letjr_reply: recovered askerOpenId=${recovered} via chatMessageId=${chatMessageId}`);
+              const item = data.data?.items?.[0];
+              const s = item?.sender;
+              if (!askerOpenId) {
+                const recovered = s?.sender_id?.open_id
+                  ?? (s?.id && (s.id_type ?? 'open_id') === 'open_id' && s.id.startsWith('ou_') ? s.id : '')
+                  ?? '';
+                if (recovered) {
+                  askerOpenId = recovered;
+                  console.log(`[card-action] letjr_reply: recovered askerOpenId=${recovered} via chatMessageId=${chatMessageId}`);
+                }
+              }
+              if (!resolvedChatId && item?.chat_id) {
+                resolvedChatId = item.chat_id;
+                console.log(`[card-action] letjr_reply: recovered chatId=${resolvedChatId} via chatMessageId=${chatMessageId}`);
               }
             }
           } catch (e) {
-            console.warn('[card-action] letjr_reply: failed to recover askerOpenId:', e);
+            console.warn('[card-action] letjr_reply: failed to recover asker/chat ids:', e);
           }
         }
         let prdContent = '';
@@ -396,7 +408,7 @@ export async function POST(req: NextRequest) {
             destination: questionSource === 'prd_comment' ? 'prd_comment' : 'chat',
             prdUrl: prdUrl || undefined,
             commentId: commentId || undefined,
-            chatId: chatId || undefined,
+            chatId: resolvedChatId || undefined,
             chatParentMessageId: chatMessageId || undefined,
             proposedAtIso: new Date().toISOString(),
           };
