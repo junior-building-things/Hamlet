@@ -254,12 +254,6 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
                     ))
                   : <span className="text-[11px] text-gray-500 italic">none</span>}
               </span>
-              {prompt.updatedAt && (
-                <span className="text-[11px]">
-                  Last edited {new Date(prompt.updatedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}
-                  {prompt.updatedBy && ` by ${prompt.updatedBy}`}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-2">
               {prompt.isOverridden && (
