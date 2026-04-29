@@ -1832,10 +1832,17 @@ export async function collectUnansweredForFeature(
   if (messages.length === 0) return null;
 
   // Candidates: any message in the window that @-mentions the owner.
-  const mentionMsgs = messages.filter(m =>
-    (m.mentions ?? []).some(mention => mentionOpenId(mention) === ownerOpenId),
-  );
-  console.log(`[digests] Q&A "${feature.name}": ${mentionMsgs.length} msgs mentioning owner`);
+  // Exclude messages sent by the bot itself (Junior auto-posts that
+  // happen to tag Thomas — those arent real questions) and by Thomas
+  // himself (he's the answerer, not the asker).
+  const botOpenId = process.env.LARK_BOT_OPEN_ID ?? '';
+  const mentionMsgs = messages.filter(m => {
+    if (!(m.mentions ?? []).some(mention => mentionOpenId(mention) === ownerOpenId)) return false;
+    const sender = senderOpenIdOf(m);
+    if (sender && (sender === ownerOpenId || sender === botOpenId)) return false;
+    return true;
+  });
+  console.log(`[digests] Q&A "${feature.name}": ${mentionMsgs.length} msgs mentioning owner (bot/owner senders filtered out)`);
   if (mentionMsgs.length === 0) return null;
 
   // Newest first — per-chat dedup means the freshest unanswered wins.
