@@ -1763,14 +1763,19 @@ function chatMessageText(m: ChatMessage): string {
     }
     // post msg (rich text): {title, content: [[{tag,text,user_id,...}]]}
     // OR localised: {zh_cn: {title, content}, en_us: {...}}
+    // OR Lark interactive shape: {title, elements: [[...]]}
     if (!text) {
-      const blocks = ('content' in parsed && Array.isArray(parsed.content))
-        ? parsed.content as unknown[][]
-        : Object.values(parsed)
-            .find(v => v && typeof v === 'object' && Array.isArray((v as { content?: unknown }).content))
-            ? ((Object.values(parsed)
-                .find(v => v && typeof v === 'object' && Array.isArray((v as { content?: unknown }).content)) as { content: unknown[][] }).content)
-            : null;
+      let blocks: unknown[][] | null = null;
+      if ('content' in parsed && Array.isArray(parsed.content)) blocks = parsed.content as unknown[][];
+      else if ('elements' in parsed && Array.isArray(parsed.elements)) blocks = parsed.elements as unknown[][];
+      if (!blocks) {
+        for (const v of Object.values(parsed)) {
+          if (v && typeof v === 'object' && Array.isArray((v as { content?: unknown }).content)) {
+            blocks = (v as { content: unknown[][] }).content;
+            break;
+          }
+        }
+      }
       if (blocks) {
         const lines: string[] = [];
         for (const para of blocks) {
