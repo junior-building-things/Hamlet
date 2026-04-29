@@ -271,6 +271,11 @@ AB report content:
 // What stays here = non-negotiable guardrails: identity, formatting rules
 // the model must never abandon, and the contract for using context files.
 // Everything else (persona, skills, glossary, preferences) belongs in a .md.
+//
+// Two prompts because Lark IM and Lark drive comments have different
+// rendering rules (Markdown vs plain text) and different tone expectations
+// (chat = conversational, comments = concise + inline). Junior's chat()
+// picks one based on ctx.replyChannel.
 const JUNIOR_SYSTEM_PROMPT = `You are Thomas Jr., an AI assistant embedded in TikTok IM Lark group chats.
 
 Your detailed persona, capabilities, glossary, and skill playbooks live in the ADDITIONAL CONTEXT block below — read those files (system.md, glossary.md, skill_*.md, preferences.md) carefully and follow them. They override generic instincts.
@@ -283,6 +288,24 @@ Non-negotiable formatting rules:
 Default to action: when a tool can answer the question, call it instead of asking the user. Only ask a clarifying question when you truly can't proceed.
 
 When the user states a standing preference ("from now on…", "always…", "going forward…"), call the remember_preference tool so it persists.`;
+
+// Used when Junior auto-replies to a PRD comment thread (drive comments).
+// Drive comments are PLAIN TEXT — Markdown shows up as literal characters —
+// and they're read inline in the doc, so concision matters more than in chat.
+const JUNIOR_COMMENT_SYSTEM_PROMPT = `You are Thomas Jr., responding to a PRD comment on a TikTok feature.
+
+Your detailed persona, capabilities, glossary, and skill playbooks live in the ADDITIONAL CONTEXT block below — read those files (system.md, glossary.md, skill_*.md, preferences.md) carefully and follow them. They override generic instincts.
+
+Hard formatting rules for THIS reply (do not abandon):
+- PLAIN TEXT only. Lark drive comments do NOT render Markdown. No **bold**, *italic*, \`code\`, bullet lists, numbered lists, or headings — they will appear as literal characters.
+- Inline URLs render as clickable links automatically — paste them inline.
+- The asker is automatically @-tagged for you by the runtime; do NOT add another @-mention of them.
+- For @-mentioning OTHER people (e.g. the PM, Tech Owner): use the syntax \`<at user_id="ou_xxx"></at>\` ONLY if you have their open_id. If you only have their email or name, write the name as plain text (e.g. "Thomas") — the email-style \`<at email=...>\` syntax does NOT work in drive comments.
+- Reply in English even if asked in Chinese. Translate any Chinese data inline.
+
+Be concise: 1–3 short sentences typical, max 5. PRD comments are read inline in the doc next to the highlighted text — short and direct beats thorough.
+
+Default to action: when a tool can answer the question, call it instead of asking. If you genuinely can't answer from the PRD content, feature context, or any tool, say so honestly and indicate you'll check with the PM.`;
 
 const JUNIOR_CONVERSATION_SUMMARY = `You are summarizing a user's Lark conversations from the past few days.
 
@@ -489,6 +512,16 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     description: 'Main system prompt for Junior bot in Lark chat — defines personality, tools, and behavior',
     variables: [],
     default: JUNIOR_SYSTEM_PROMPT,
+  },
+  {
+    id: 'junior.comment_system_prompt',
+    name: 'Junior — PRD comment system prompt',
+    service: 'junior',
+    fileRef: 'lib/gemini.ts',
+    model: 'gemini-3.1-flash-lite-preview',
+    description: 'System prompt for Junior bot when auto-replying to a PRD comment thread (drive comments). Plain text only, more concise than chat.',
+    variables: [],
+    default: JUNIOR_COMMENT_SYSTEM_PROMPT,
   },
   {
     id: 'junior.conversation_summary',
