@@ -24,6 +24,7 @@ import {
   PostParagraph,
   ChatMessage,
   mentionOpenId,
+  senderOpenIdOf,
   countMessageReplies,
   CardButton,
   CardSection,
@@ -1864,7 +1865,7 @@ export async function collectUnansweredForFeature(
 
 async function buildUnansweredQuestion(msg: ChatMessage): Promise<UnansweredQuestion> {
   const text = chatMessageText(msg);
-  const senderOpenId = msg.sender?.sender_id?.open_id ?? '';
+  const senderOpenId = senderOpenIdOf(msg);
   const senderName = senderOpenId ? await lookupUserName(senderOpenId, 'open_id') : '';
   return {
     senderOpenId,

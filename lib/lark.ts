@@ -2620,7 +2620,14 @@ export interface ChatMessage {
   message_id: string;
   msg_type: string;
   create_time: string;
-  sender: { sender_type: string; sender_id?: { open_id?: string; user_id?: string } };
+  // Lark v1 list-messages returns sender as `{id, id_type, sender_type, tenant_key}`
+  // but webhook payloads use `{sender_id: {open_id}, sender_type}`. Accept both.
+  sender: {
+    sender_type: string;
+    id?: string;
+    id_type?: string;
+    sender_id?: { open_id?: string; user_id?: string };
+  };
   body?: { content?: string };
   parent_id?: string;       // set if this is a thread reply
   root_id?: string;         // root message of a thread
@@ -2634,6 +2641,24 @@ export interface ChatMessage {
     id_type?: string;
     name: string;
   }>;
+}
+
+/**
+ * Extract the sender's open_id from a ChatMessage. Lark's v1
+ * list-messages returns `{sender: {id: "ou_xxx", id_type: "open_id"}}`,
+ * while webhook payloads use `{sender: {sender_id: {open_id: "ou_xxx"}}}`.
+ * Returns '' if no open_id can be found.
+ */
+export function senderOpenIdOf(msg: ChatMessage): string {
+  const s = msg.sender;
+  if (s.sender_id?.open_id) return s.sender_id.open_id;
+  if (s.id && (s.id_type ?? 'open_id') === 'open_id' && s.id.startsWith('ou_')) return s.id;
+  // Fallback: any string field that looks like an open_id.
+  const candidates = [s.id, s.sender_id?.user_id];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.startsWith('ou_')) return c;
+  }
+  return '';
 }
 
 /**

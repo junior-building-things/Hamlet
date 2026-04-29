@@ -1,5 +1,5 @@
 import { Feature } from './types';
-import { readChatMessages, sendTextMessage, resolveOpenIds, mentionOpenId, ChatMessage } from './lark';
+import { readChatMessages, sendTextMessage, resolveOpenIds, mentionOpenId, senderOpenIdOf, ChatMessage } from './lark';
 import { syncFeatureStatus } from './meego';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -133,7 +133,7 @@ async function runUnansweredCheck(
 
   // Filter messages from stakeholders that have @mentions
   const stakeholderMsgs = messages.filter(m => {
-    const senderOpenId = m.sender?.sender_id?.open_id;
+    const senderOpenId = senderOpenIdOf(m);
     if (!senderOpenId || !stakeholderOpenIds.has(senderOpenId)) return false;
     // Must have mentions (tagging someone)
     if (!m.mentions || m.mentions.length === 0) return false;
