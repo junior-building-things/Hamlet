@@ -2934,20 +2934,15 @@ export interface CardSection {
 }
 
 /**
- * Send a Lark interactive card message to a group chat. Each section
- * becomes `<div><action><hr>` in the card body, letting us pack multiple
- * per-feature blocks (with their own link buttons) into a single message.
- *
- * `title` is shown in the coloured card header, `template` controls the
- * header colour.
+ * Build the JSON content string for an interactive card. Shared between
+ * `sendInteractiveCardToChat` (POST a new card) and `patchInteractiveCard`
+ * (update an existing card with new content).
  */
-export async function sendInteractiveCardToChat(
-  chatId: string,
+export function buildInteractiveCardContent(
   title: string,
   template: CardHeaderTemplate,
   sections: CardSection[],
-  token: string,
-): Promise<string | null> {
+): string {
   const elements: Array<Record<string, unknown>> = [];
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i];
@@ -2981,20 +2976,57 @@ export async function sendInteractiveCardToChat(
       elements.push({ tag: 'hr' });
     }
   }
-
   const card: Record<string, unknown> = {
     config: { wide_screen_mode: true },
     elements,
   };
-  // Empty title → skip the colored header entirely (headerless card)
   if (title) {
     card.header = {
       title: { tag: 'plain_text', content: title },
       template,
     };
   }
+  return JSON.stringify(card);
+}
 
-  const content = JSON.stringify(card);
+/**
+ * Patch an existing interactive card by message_id. Replaces the entire
+ * card content. Returns true on success.
+ */
+export async function patchInteractiveCard(
+  messageId: string,
+  cardContentJson: string,
+  token: string,
+): Promise<boolean> {
+  const res = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: cardContentJson }),
+  });
+  const data = await parseJson(res, 'patch_card') as { code: number; msg?: string };
+  if (data.code !== 0) {
+    console.warn('[lark] patch interactive card failed:', data.code, data.msg);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Send a Lark interactive card message to a group chat. Each section
+ * becomes `<div><action><hr>` in the card body, letting us pack multiple
+ * per-feature blocks (with their own link buttons) into a single message.
+ *
+ * `title` is shown in the coloured card header, `template` controls the
+ * header colour.
+ */
+export async function sendInteractiveCardToChat(
+  chatId: string,
+  title: string,
+  template: CardHeaderTemplate,
+  sections: CardSection[],
+  token: string,
+): Promise<string | null> {
+  const content = buildInteractiveCardContent(title, template, sections);
   const res = await fetch(
     `${LARK_BASE_URL}/open-apis/im/v1/messages?receive_id_type=chat_id`,
     {
@@ -3013,19 +3045,8 @@ export async function sendInteractiveCardToChat(
     console.warn('[lark] card payload preview:', content.slice(0, 1500));
     return null;
   }
-  // TEMP debug: log card payload size + button value sizes so we can
-  // see when Lark client rejects (200340) for size/format reasons.
   if (process.env.LOG_CARD_PAYLOAD === '1') {
     console.log(`[lark] send_card OK msg_id=${data.data?.message_id} payload_bytes=${content.length}`);
-    for (const el of elements) {
-      const elT = el as { tag?: string; actions?: Array<{ tag?: string; text?: { content?: string }; value?: unknown; url?: string }> };
-      if (elT.tag === 'action' && Array.isArray(elT.actions)) {
-        for (const a of elT.actions) {
-          const valStr = a.value ? JSON.stringify(a.value) : '';
-          console.log(`[lark]   button text="${a.text?.content}" url=${a.url ?? '(none)'} value_bytes=${valStr.length}`);
-        }
-      }
-    }
   }
   return data.data?.message_id ?? null;
 }
