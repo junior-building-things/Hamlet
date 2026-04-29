@@ -3682,7 +3682,15 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
         const finding = await collectUnansweredForFeature(
           feature, chat.chatId, sinceMs, ownerOpenId, botToken,
         );
-        if (finding) unansweredByFeature.set(feature.workItemId, finding);
+        if (finding) {
+          // Stamp chatId on the feature so the unanswered card can show
+          // an Open Group button and the Let me Reply button payload
+          // carries chatId through to Junior. MeegoFeature is built
+          // from raw Meego data which doesnt know about Lark chats —
+          // chatId only exists in the juniorChats list paired up here.
+          finding.feature.chatId = chat.chatId;
+          unansweredByFeature.set(feature.workItemId, finding);
+        }
       } catch (e) {
         console.warn(`[digests] Q&A scan failed for ${feature.name}:`, e);
       }
