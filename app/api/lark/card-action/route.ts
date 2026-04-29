@@ -141,6 +141,36 @@ export async function POST(req: NextRequest) {
         toast: { type: 'error', content: 'Missing post payload' },
       });
     }
+    // Resolve which feature this post is for so we can map
+    // postMsgId -> feature for Junior's chat handler. The card msg_id
+    // comes from event.context.open_message_id; we look up that
+    // cardEditContexts entry, then find the section whose
+    // postParagraphs match (single feature in the contextual case).
+    const cardMsgIdForLookup = (body.event as { context?: { open_message_id?: string } } | undefined)?.context?.open_message_id ?? '';
+    let featureWorkItemId = '';
+    let featureName = '';
+    let prdUrl = '';
+    try {
+      const state = await loadDigestState();
+      const ctx = state.cardEditContexts?.[cardMsgIdForLookup];
+      if (ctx) {
+        // Match on postTitle when present, else use first feature.
+        const wanted = postTitle.trim();
+        const match = ctx.features.find(f => f.postTitle === wanted) ?? ctx.features[0];
+        if (match) {
+          featureWorkItemId = match.workItemId;
+          featureName = match.featureName;
+          // Find the prdUrl from Hamlet feature cache by workItemId.
+          const { readFeatureCache } = await import('@/lib/feature-cache');
+          const featureCache = await readFeatureCache();
+          const feature = featureCache?.features.find(f => (f.meegoIssueId ?? f.id) === featureWorkItemId);
+          prdUrl = feature?.prd ?? '';
+        }
+      }
+    } catch (e) {
+      console.warn('[card-action] send_ab_open_to_pm_group: feature lookup failed:', e);
+    }
+
     // Real PM group. (Personal test group oc_d1f9b0ad6b325ef6699e0422fa1e8541
     // can be swapped back here for testing.)
     const targetChatId = 'oc_ea2940122b041a9c9ee4153596d6a15c';
@@ -153,6 +183,29 @@ export async function POST(req: NextRequest) {
         }, { status: 500 });
       }
       console.log(`[card-action] sent AB-open post to ${targetChatId}: msg_id=${id}`);
+      // Map postMsgId -> feature so Junior's chat webhook can resolve
+      // feature context for thread replies on the post.
+      if (featureWorkItemId) {
+        try {
+          const state = await loadDigestState();
+          if (!state.postFeatureMap) state.postFeatureMap = {};
+          state.postFeatureMap[id] = {
+            workItemId: featureWorkItemId,
+            featureName,
+            prdUrl,
+            sentAtIso: new Date().toISOString(),
+          };
+          // Light pruning: drop entries older than 90 days.
+          const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+          for (const [k, v] of Object.entries(state.postFeatureMap)) {
+            if (new Date(v.sentAtIso).getTime() < cutoff) delete state.postFeatureMap[k];
+          }
+          await saveDigestState(state);
+          console.log(`[card-action] postFeatureMap[${id}] = ${featureName} (${featureWorkItemId})`);
+        } catch (e) {
+          console.warn('[card-action] postFeatureMap save failed:', e);
+        }
+      }
       return NextResponse.json({
         toast: { type: 'success', content: 'Sent ✓' },
       });

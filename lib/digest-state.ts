@@ -232,6 +232,20 @@ export interface DigestStateFile {
     askerOpenId: string;
     lastJuniorReplyAtIso: string;
   }>;
+
+  /**
+   * Lark `post` message_id (sent to the PM group via Send-to-PM-Group)
+   * → originating feature. Lets Junior auto-resolve the feature
+   * context when someone @-mentions the bot in a thread reply on the
+   * PM-group post (the chat itself isnt a feature chat, so chatId
+   * lookup misses).
+   */
+  postFeatureMap?: Record<string, {
+    workItemId: string;
+    featureName: string;
+    prdUrl: string;
+    sentAtIso: string;
+  }>;
 }
 
 /**
@@ -328,6 +342,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const juniorCommentThreads = (obj.juniorCommentThreads && typeof obj.juniorCommentThreads === 'object')
     ? (obj.juniorCommentThreads as DigestStateFile['juniorCommentThreads'])
     : undefined;
+  const postFeatureMap = (obj.postFeatureMap && typeof obj.postFeatureMap === 'object')
+    ? (obj.postFeatureMap as DigestStateFile['postFeatureMap'])
+    : undefined;
 
   return {
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
@@ -345,6 +362,7 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     cardEditContexts,
     pendingCardEdits,
     juniorCommentThreads,
+    postFeatureMap,
   };
 }
 
