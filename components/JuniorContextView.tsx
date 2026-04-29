@@ -1,7 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Save, Trash2, Plus, FileText } from 'lucide-react';
+import { Loader2, Save, Trash2, Plus, FileText, Database, History, Activity } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface HistoryStats { fileCount: number; totalMessages: number }
+interface SystemContextStats { chat?: HistoryStats; user?: HistoryStats }
 
 interface ContextFile {
   name: string;
@@ -23,18 +26,26 @@ function describe(name: string): string {
 
 export function JuniorContextView() {
   const [files, setFiles] = useState<ContextFile[]>([]);
+  const [stats, setStats] = useState<SystemContextStats>({});
   const [loading, setLoading] = useState(true);
   const [expandedName, setExpandedName] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch('/api/junior-context');
-      const data = await res.json() as { files?: ContextFile[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Failed to load');
-      setFiles(data.files ?? []);
+      const [filesRes, statsRes] = await Promise.all([
+        fetch('/api/junior-context'),
+        fetch('/api/junior-history'),
+      ]);
+      const filesData = await filesRes.json() as { files?: ContextFile[]; error?: string };
+      if (!filesRes.ok) throw new Error(filesData.error ?? 'Failed to load files');
+      setFiles(filesData.files ?? []);
+      if (statsRes.ok) {
+        const s = await statsRes.json() as SystemContextStats;
+        setStats(s);
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load context files');
+      toast.error(e instanceof Error ? e.message : 'Failed to load context');
     } finally {
       setLoading(false);
     }
@@ -69,21 +80,47 @@ export function JuniorContextView() {
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
           </div>
-        ) : files.length === 0 ? (
-          <div className="text-center text-sm text-gray-500 py-12">
-            No context files yet. Click <strong>New file</strong> to create the first one (e.g. <code>system.md</code>).
-          </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {files.map(f => (
-              <ContextCard
-                key={f.name}
-                file={f}
-                expanded={expandedName === f.name}
-                onToggle={() => setExpandedName(expandedName === f.name ? null : f.name)}
-                onSaved={refresh}
-              />
-            ))}
+            {/* System context cells: live (recent chat) + stored history */}
+            <SystemCell
+              icon={<Activity className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+              name="Recent chat snapshot"
+              description="Last 15 messages of the current chat, fetched live from Lark on every Junior turn."
+              right="live"
+            />
+            <SystemCell
+              icon={<Database className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+              name="Conversation history (chat-level)"
+              description="Per-chat back-and-forth Junior remembers, keyed by chatId. Replayed as user/model turns to Gemini."
+              right={stats.chat ? `${stats.chat.fileCount} chats · ${stats.chat.totalMessages} msgs` : '—'}
+              clearScope="chat"
+              onCleared={refresh}
+            />
+            <SystemCell
+              icon={<History className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
+              name="Conversation history (user-level)"
+              description="Per-user cross-chat history Junior remembers, keyed by openId. Merged with chat-level on each turn."
+              right={stats.user ? `${stats.user.fileCount} users · ${stats.user.totalMessages} msgs` : '—'}
+              clearScope="user"
+              onCleared={refresh}
+            />
+            {/* Markdown context files */}
+            {files.length === 0 ? (
+              <div className="text-center text-sm text-gray-500 py-8">
+                No context files yet. Click <strong>New file</strong> to create the first one (e.g. <code>system.md</code>).
+              </div>
+            ) : (
+              files.map(f => (
+                <ContextCard
+                  key={f.name}
+                  file={f}
+                  expanded={expandedName === f.name}
+                  onToggle={() => setExpandedName(expandedName === f.name ? null : f.name)}
+                  onSaved={refresh}
+                />
+              ))
+            )}
           </div>
         )}
       </div>
@@ -91,6 +128,64 @@ export function JuniorContextView() {
       {showCreate && (
         <CreateFileModal onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); refresh(); }} />
       )}
+    </div>
+  );
+}
+
+function SystemCell({
+  icon, name, description, right, clearScope, onCleared,
+}: {
+  icon: React.ReactNode;
+  name: string;
+  description: string;
+  right: string;
+  clearScope?: 'chat' | 'user';
+  onCleared?: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function handleClear() {
+    if (!clearScope) return;
+    if (!confirm(`Clear all ${clearScope}-level conversation history? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/junior-history/${clearScope}`, { method: 'DELETE' });
+      const data = await res.json() as { ok?: boolean; deleted?: number; error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Clear failed');
+      toast.success(`Cleared ${data.deleted ?? 0} file(s)`);
+      onCleared?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Clear failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            {icon}
+            <span className="text-sm font-medium text-[var(--foreground)]">{name}</span>
+          </div>
+          <div className="text-xs text-[var(--muted)] truncate">{description}</div>
+        </div>
+        <div className="text-right shrink-0 flex items-center gap-3">
+          <div className="text-[10px] text-gray-500 font-mono">{right}</div>
+          {clearScope && (
+            <button
+              onClick={handleClear}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-400 hover:text-red-300 border border-[var(--border)] rounded-lg disabled:opacity-50"
+              title={`Clear all ${clearScope}-level history`}
+            >
+              {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+              Clear context
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
