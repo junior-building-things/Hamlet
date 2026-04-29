@@ -1415,7 +1415,7 @@ export async function appendPrdChangeLog(
       const cells: Array<{ text: string; mention?: string }> = [
         { text: entry.date },
         { text: entry.detail },
-        { text: entry.by ?? '@Junior', mention: botOpenId },
+        { text: entry.by ?? '@Thomas Jr.', mention: botOpenId },
       ];
       for (let col = 0; col < Math.min(newCells.length, cells.length); col++) {
         // Find the paragraph block inside the cell
@@ -1435,7 +1435,7 @@ export async function appendPrdChangeLog(
           }], token);
         }
       }
-      console.log(`[lark] Change Log row added: ${entry.date} | ${entry.detail} | ${entry.by ?? '@Junior'}`);
+      console.log(`[lark] Change Log row added: ${entry.date} | ${entry.detail} | ${entry.by ?? '@Thomas Jr.'}`);
       rowCount++;
     }
     return;

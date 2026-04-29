@@ -221,7 +221,7 @@ export async function POST(req: NextRequest) {
     void (async () => {
       try {
         const botToken = await getLarkBotToken();
-        const prompt = `Reply to this thread with **\`@Junior\`** + your edit instruction. Examples:\n` +
+        const prompt = `Reply to this thread with **\`@Thomas Jr.\`** + your edit instruction. Examples:\n` +
           `- Update the first bullet of A/B Results to ...\n` +
           `- Remove the 3rd bullet of A/B Results\n` +
           `- Add this image: <image url>\n\n` +

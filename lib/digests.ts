@@ -3287,7 +3287,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
             continue;
           }
           try {
-            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Junior' }]);
+            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Thomas Jr.' }]);
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             // Retry: if forbidden, grant bot access via user token then retry
@@ -3296,7 +3296,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
               const granted = await grantBotEditAccess(f.prd, userAccessTokenForPrd);
               if (granted) {
                 try {
-                  await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Junior' }]);
+                  await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Thomas Jr.' }]);
                   console.log(`[digests] PRD changelog written after access grant for "${f.name}"`);
                 } catch (retryErr) {
                   console.warn(`[digests] append PRD changelog retry failed for "${f.name}":`, retryErr);
