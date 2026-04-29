@@ -8,10 +8,35 @@ const AGENT_RUN_SECRET = process.env.AGENT_RUN_SECRET;
 const LARK_BASE_URL = 'https://open.larksuite.com';
 
 /**
- * One-off helper: fetch a Lark `post` message by msg_id, optionally
- * append image paragraphs (pulled from a saved cardEditContexts
- * snapshot), then a trailing "cc @<openId>" paragraph, and PATCH
- * the message back.
+ * GET — inspect a post message (for finding which feature it's about
+ * before patching). Auth via Bearer AGENT_RUN_SECRET, msgId via query.
+ */
+export async function GET(req: NextRequest) {
+  if (AGENT_RUN_SECRET) {
+    const auth = req.headers.get('authorization');
+    if (auth !== `Bearer ${AGENT_RUN_SECRET}`) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+  }
+  const msgId = req.nextUrl.searchParams.get('msgId') ?? '';
+  if (!msgId) return NextResponse.json({ error: 'missing msgId' }, { status: 400 });
+  try {
+    const token = await getLarkBotToken();
+    const res = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/messages/${msgId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json() as { code: number; msg?: string; data?: { items?: Array<{ msg_type?: string; body?: { content?: string } }> } };
+    if (data.code !== 0) return NextResponse.json({ error: `Lark get failed: ${data.code} ${data.msg}` }, { status: 500 });
+    const m = data.data?.items?.[0];
+    return NextResponse.json({ msg_type: m?.msg_type, content: m?.body?.content });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
+  }
+}
+
+/**
+ * POST — append image paragraphs (from a saved cardEditContexts
+ * snapshot) and a trailing cc@<openId> paragraph to a sent post.
  *
  * Body: {
  *   msgId: string,
