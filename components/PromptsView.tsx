@@ -57,11 +57,19 @@ export function PromptsView() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const filtered = prompts.filter(p => {
-    if (filter !== 'all' && p.service !== filter) return false;
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.id.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const SERVICE_ORDER: Record<string, number> = { junior: 0, rio: 1, mia: 2, hamlet: 3 };
+  const filtered = prompts
+    .filter(p => {
+      if (filter !== 'all' && p.service !== filter) return false;
+      if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.id.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const sa = SERVICE_ORDER[a.service] ?? 99;
+      const sb = SERVICE_ORDER[b.service] ?? 99;
+      if (sa !== sb) return sa - sb;
+      return a.name.localeCompare(b.name);
+    });
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
