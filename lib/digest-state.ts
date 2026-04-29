@@ -142,6 +142,15 @@ export interface DigestStateFile {
    */
   abConcludedNotified?: string[];
   /**
+   * Meego work item IDs that have already received a "PRD Ready ✅"
+   * (Line Review) notification card. Required because the card may
+   * trigger compliance review downstream, so each feature must only
+   * ever fire it once. A separate forward-only check (prev status
+   * must be PRD/Design Prep) is the primary guardrail; this set is
+   * the dedup safety net.
+   */
+  lineReviewNotified?: string[];
+  /**
    * "Let Jr. Reply" proposals awaiting the owner's 👍 reaction. Keyed
    * by the message_id of the proposed-reply message Junior posted in
    * the digest chat. When the owner reacts 👍, the entry is consumed:
@@ -244,6 +253,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const abConcludedNotified = Array.isArray(obj.abConcludedNotified)
     ? (obj.abConcludedNotified as unknown[]).map(String)
     : undefined;
+  const lineReviewNotified = Array.isArray(obj.lineReviewNotified)
+    ? (obj.lineReviewNotified as unknown[]).map(String)
+    : undefined;
   const pendingLetJrReplies = (obj.pendingLetJrReplies && typeof obj.pendingLetJrReplies === 'object')
     ? (obj.pendingLetJrReplies as DigestStateFile['pendingLetJrReplies'])
     : undefined;
@@ -259,6 +271,7 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     larkUserRefreshToken,
     abOpenNotified,
     abConcludedNotified,
+    lineReviewNotified,
     pendingLetJrReplies,
   };
 }

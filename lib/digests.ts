@@ -2984,6 +2984,7 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
   // Mutable across the loop so the changed flag controls whether we
   // re-save state at the end. Loaded once from GCS digest state.
   const abOpenNotified = new Set<string>(state.abOpenNotified ?? []);
+  const lineReviewNotified = new Set<string>(state.lineReviewNotified ?? []);
   let notifiedSetChanged = false;
   // Features transitioning into AB Testing this run; sent as one
   // aggregate card at the end of Step 2b.
@@ -2998,10 +2999,24 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
     }
 
     // Detect transitions to Line Review and send notification cards.
+    // Hard guardrails — this card may trigger compliance review downstream,
+    // so we err on the side of *missing* a card vs. sending one wrongly:
+    //   1. Meego's *current* overall status must be 待线内评审 (Line Review).
+    //   2. The cached previous status must be 'PRD/Design Prep' — the ONLY
+    //      legitimate forward predecessor. Anything else (Development, Done,
+    //      AB Testing, …) means we either backfilled wrong or the feature
+    //      is moving backwards, neither of which should fire compliance.
+    //   3. We must not have already sent the card for this workItemId
+    //      (lineReviewNotified set, persisted across runs).
     for (const f of features) {
       const prevStatus = prevStatusMap.get(f.workItemId);
-      if (f.overallStatusName === LINE_REVIEW_STATUS && prevStatus && prevStatus !== 'Line Review') {
-        console.log(`[digests] status transition: "${f.name}" ${prevStatus} → Line Review`);
+      const isLineReviewNow = f.overallStatusName === LINE_REVIEW_STATUS;
+      const isForwardTransition = prevStatus === 'PRD/Design Prep';
+      const alreadyNotified = lineReviewNotified.has(f.workItemId);
+      if (isLineReviewNow && isForwardTransition && !alreadyNotified) {
+        console.log(`[digests] PRD Ready card → "${f.name}" (PRD/Design Prep → Line Review)`);
+        lineReviewNotified.add(f.workItemId);
+        notifiedSetChanged = true;
         sendFeatureCard({
           name: f.name,
           meegoUrl: f.meegoUrl,
@@ -3010,6 +3025,10 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           headerTitle: 'PRD Ready ✅',
           headerTemplate: 'green',
         }).catch(e => console.warn(`[digests] Line Review card send failed for "${f.name}":`, e));
+      } else if (f.overallStatusName === LINE_REVIEW_STATUS && !alreadyNotified) {
+        // Skipped: log why so we can audit cases where prevStatus wasn't
+        // PRD/Design Prep (likely the source of the recent over-firing).
+        console.log(`[digests] PRD Ready card SKIPPED for "${f.name}" — prevStatus=${prevStatus ?? '∅'} (only fires from PRD/Design Prep)`);
       }
       // Notify on AB Testing. Fires once per feature ever — covers both
       // (a) the initial backfill of features already in 实验中 when this
@@ -3457,7 +3476,8 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
 
   if (notifiedSetChanged) {
     state.abOpenNotified = [...abOpenNotified];
-    console.log(`[digests] abOpenNotified updated — total ${state.abOpenNotified.length} feature(s) notified`);
+    state.lineReviewNotified = [...lineReviewNotified];
+    console.log(`[digests] notify sets updated — abOpen=${state.abOpenNotified.length}, lineReview=${state.lineReviewNotified.length}`);
   }
   await saveDigestState(state);
   console.log(`[digests] saved digest state with ${Object.keys(state.features).length} active feature entries, ${Object.keys(state.featureLinks ?? {}).length} link cache entries`);
