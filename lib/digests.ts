@@ -3277,6 +3277,15 @@ export async function runDailyDigests(): Promise<DigestRunResult> {
           } catch (e) {
             console.warn(`[digests] Gemini PRD diff failed for "${f.name}":`, e);
           }
+          // Skip trivial wording-only edits: don't append to the PRD change
+          // log and don't include in the daily digest card. Snapshot still
+          // gets updated below so we compare against the latest text next run.
+          const normalized = summary.trim().toLowerCase().replace(/[.!]+$/, '');
+          if (normalized === 'minor wording edits') {
+            console.log(`[digests] PRD change for "${f.name}" is minor wording — skipping log + digest`);
+            snapshots[f.workItemId] = currentText;
+            continue;
+          }
           try {
             await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Junior' }]);
           } catch (e) {
