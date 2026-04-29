@@ -2744,6 +2744,74 @@ export async function buildAbConcludedSection(
  * — green header, one section per feature, Send-to-PM-Group button
  * routes through the same card-action handler.
  */
+/**
+ * Persist a per-card snapshot keyed by message_id so the Edit button
+ * can look up the section the user wants to change, and so an editor
+ * (Junior) can rebuild + patch the full card after applying the edit.
+ *
+ * Skips silently on failure — the card itself is already sent and
+ * usable; only the Edit affordance is degraded.
+ */
+async function saveCardEditContext(
+  msgId: string,
+  args: {
+    cardKind: 'ab_open' | 'ab_concluded';
+    chatId: string;
+    headerText: string;
+    headerTemplate: 'green' | 'yellow';
+    built: Array<PromiseSettledResult<{
+      cardContent: string;
+      cardImages: Array<{ image_key: string; alt?: string }>;
+      postTitle: string;
+      postParagraphs: PostParagraph[];
+    }>>;
+    features: Array<{ feature: MeegoFeature; libraUrl: string; abReportUrl?: string }>;
+  },
+): Promise<void> {
+  try {
+    const featureSnapshots = args.built
+      .map((b, i) => ({ b, src: args.features[i] }))
+      .filter(({ b }) => b.status === 'fulfilled')
+      .map(({ b, src }) => {
+        const v = (b as PromiseFulfilledResult<{
+          cardContent: string;
+          cardImages: Array<{ image_key: string; alt?: string }>;
+          postTitle: string;
+          postParagraphs: PostParagraph[];
+        }>).value;
+        return {
+          workItemId: src.feature.workItemId,
+          featureName: src.feature.name,
+          cardContent: v.cardContent,
+          cardImages: v.cardImages,
+          postTitle: v.postTitle,
+          postParagraphsJson: JSON.stringify(v.postParagraphs),
+          libraUrl: src.libraUrl,
+          abReportUrl: src.abReportUrl,
+        };
+      });
+    const state = await loadDigestState();
+    if (!state.cardEditContexts) state.cardEditContexts = {};
+    state.cardEditContexts[msgId] = {
+      cardKind: args.cardKind,
+      chatId: args.chatId,
+      headerText: args.headerText,
+      headerTemplate: args.headerTemplate,
+      features: featureSnapshots,
+      createdAt: new Date().toISOString(),
+    };
+    // Light pruning: drop entries older than 30 days to keep the
+    // state object bounded.
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    for (const [id, ctx] of Object.entries(state.cardEditContexts)) {
+      if (new Date(ctx.createdAt).getTime() < cutoff) delete state.cardEditContexts[id];
+    }
+    await saveDigestState(state);
+  } catch (e) {
+    console.warn(`[digests] saveCardEditContext failed for ${msgId}:`, e);
+  }
+}
+
 export async function sendAbConcludedDigestCard(
   features: Array<{ feature: MeegoFeature; abReportUrl: string; libraUrl: string }>,
 ): Promise<void> {
@@ -2785,6 +2853,7 @@ export async function sendAbConcludedDigestCard(
       continue;
     }
     const { cardContent, cardImages, postTitle, postParagraphs } = result.value;
+    const f = features[i];
     sections.push({
       content: cardContent,
       images: cardImages,
@@ -2793,6 +2862,16 @@ export async function sendAbConcludedDigestCard(
           text: 'Send to PM Group',
           type: 'primary',
           value: { action: 'send_ab_open_to_pm_group', postTitle, postParagraphs },
+        },
+        {
+          text: 'Edit',
+          type: 'default',
+          value: {
+            action: 'edit_ab_card',
+            cardKind: 'ab_concluded',
+            featureWorkItemId: f.feature.workItemId,
+            featureName: f.feature.name,
+          },
         },
       ],
     });
@@ -2804,6 +2883,18 @@ export async function sendAbConcludedDigestCard(
   const headerText = `✅ AB Concluded — ${today}`;
   const id = await sendInteractiveCardToChat(AB_OPEN_PERSONAL_CHAT_ID, headerText, 'green', sections, token);
   console.log(`[digests] AB-concluded digest card sent (${sections.length} feature${sections.length === 1 ? '' : 's'}): message_id=${id ?? 'null'}`);
+  // Snapshot per-feature state so the Edit button can later locate
+  // the section, edit it, and patch the card back into Lark.
+  if (id) {
+    await saveCardEditContext(id, {
+      cardKind: 'ab_concluded',
+      chatId: AB_OPEN_PERSONAL_CHAT_ID,
+      headerText,
+      headerTemplate: 'green',
+      built,
+      features,
+    });
+  }
 }
 
 /**
@@ -2859,6 +2950,7 @@ export async function sendAbOpenDigestCard(
       continue;
     }
     const { cardContent, cardImages, postTitle, postParagraphs } = result.value;
+    const f = features[i];
     sections.push({
       content: cardContent,
       images: cardImages,
@@ -2867,6 +2959,16 @@ export async function sendAbOpenDigestCard(
           text: 'Send to PM Group',
           type: 'primary',
           value: { action: 'send_ab_open_to_pm_group', postTitle, postParagraphs },
+        },
+        {
+          text: 'Edit',
+          type: 'default',
+          value: {
+            action: 'edit_ab_card',
+            cardKind: 'ab_open',
+            featureWorkItemId: f.feature.workItemId,
+            featureName: f.feature.name,
+          },
         },
       ],
     });
@@ -2878,6 +2980,17 @@ export async function sendAbOpenDigestCard(
   const headerText = `📲 Features in AB Testing — ${today}`;
   const id = await sendInteractiveCardToChat(AB_OPEN_PERSONAL_CHAT_ID, headerText, 'yellow', sections, token);
   console.log(`[digests] AB-open digest card sent (${sections.length} feature${sections.length === 1 ? '' : 's'}): message_id=${id ?? 'null'}`);
+  if (id) {
+    await saveCardEditContext(id, {
+      cardKind: 'ab_open',
+      chatId: AB_OPEN_PERSONAL_CHAT_ID,
+      headerText,
+      headerTemplate: 'yellow',
+      built,
+      // ab-open features lack abReportUrl; abReportUrl is undefined on save
+      features: features.map(f => ({ feature: f.feature, libraUrl: f.libraUrl, abReportUrl: undefined as string | undefined })),
+    });
+  }
 }
 
 // ─── Main orchestrator ─────────────────────────────────────────────────────

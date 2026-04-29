@@ -172,6 +172,47 @@ export interface DigestStateFile {
     /** When the proposal was posted; entries older than 24h are pruned. */
     proposedAtIso: string;
   }>;
+
+  /**
+   * Per-card snapshot used to support the "Edit" button on AB-open and
+   * AB-concluded cards. Keyed by the card's message_id. Stores enough
+   * to (a) look up the per-feature section a user wants to edit, and
+   * (b) rebuild + patch the full card after Junior applies an edit.
+   */
+  cardEditContexts?: Record<string, {
+    cardKind: 'ab_open' | 'ab_concluded';
+    chatId: string;
+    headerText: string;
+    headerTemplate: 'green' | 'yellow' | 'blue' | 'red' | 'orange' | 'purple' | 'turquoise' | 'wathet' | 'indigo' | 'carmine' | 'violet';
+    features: Array<{
+      workItemId: string;
+      featureName: string;
+      cardContent: string;
+      cardImages: Array<{ image_key: string; alt?: string }>;
+      postTitle: string;
+      // Stored as JSON string to keep the DigestState type free of the
+      // PostParagraph dependency (which lives in lib/lark).
+      postParagraphsJson: string;
+      libraUrl: string;
+      abReportUrl?: string;
+    }>;
+    createdAt: string;
+  }>;
+
+  /**
+   * Active "Edit" requests in flight. Keyed by the message_id of the
+   * bot's "What would you like to change?" thread reply — Junior looks
+   * up the entry when it gets a reply in that thread.
+   */
+  pendingCardEdits?: Record<string, {
+    cardMsgId: string;
+    cardKind: 'ab_open' | 'ab_concluded';
+    featureWorkItemId: string;
+    featureName: string;
+    chatId: string;
+    requestedByOpenId: string;
+    requestedAtIso: string;
+  }>;
 }
 
 /**
@@ -259,6 +300,12 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const pendingLetJrReplies = (obj.pendingLetJrReplies && typeof obj.pendingLetJrReplies === 'object')
     ? (obj.pendingLetJrReplies as DigestStateFile['pendingLetJrReplies'])
     : undefined;
+  const cardEditContexts = (obj.cardEditContexts && typeof obj.cardEditContexts === 'object')
+    ? (obj.cardEditContexts as DigestStateFile['cardEditContexts'])
+    : undefined;
+  const pendingCardEdits = (obj.pendingCardEdits && typeof obj.pendingCardEdits === 'object')
+    ? (obj.pendingCardEdits as DigestStateFile['pendingCardEdits'])
+    : undefined;
 
   return {
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
@@ -273,6 +320,8 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     abConcludedNotified,
     lineReviewNotified,
     pendingLetJrReplies,
+    cardEditContexts,
+    pendingCardEdits,
   };
 }
 

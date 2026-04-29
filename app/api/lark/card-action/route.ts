@@ -164,6 +164,67 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (actionName === 'edit_ab_card') {
+    const cardKind = String(actionValue?.cardKind ?? '');
+    const featureWorkItemId = String(actionValue?.featureWorkItemId ?? '');
+    const featureName = String(actionValue?.featureName ?? '');
+    if (cardKind !== 'ab_open' && cardKind !== 'ab_concluded') {
+      return NextResponse.json({ toast: { type: 'error', content: 'Bad cardKind' } });
+    }
+    if (!featureWorkItemId) {
+      return NextResponse.json({ toast: { type: 'error', content: 'Missing feature id' } });
+    }
+
+    // The card msg_id comes from the event context.
+    const eventCtx = (body.event as { context?: { open_message_id?: string; open_chat_id?: string }; operator?: { open_id?: string } } | undefined);
+    const cardMsgId = eventCtx?.context?.open_message_id ?? '';
+    const chatId = eventCtx?.context?.open_chat_id ?? '';
+    const requesterOpenId = (body.event as { operator?: { open_id?: string } } | undefined)?.operator?.open_id ?? '';
+    if (!cardMsgId) {
+      console.warn('[card-action] edit_ab_card: no parent message_id');
+      return NextResponse.json({ toast: { type: 'error', content: 'No parent message' } });
+    }
+
+    // Background work: post the prompt thread reply + persist pending-edit state.
+    void (async () => {
+      try {
+        const botToken = await getLarkBotToken();
+        const prompt = `Reply to this thread with **\`@Junior\`** + your edit instruction. Examples:\n` +
+          `- Update the first bullet of A/B Results to ...\n` +
+          `- Remove the 3rd bullet of A/B Results\n` +
+          `- Add this image: <image url>\n\n` +
+          `Editing the **${featureName}** section.`;
+        const promptMsgId = await replyToMessage(cardMsgId, prompt, botToken);
+        if (!promptMsgId) {
+          console.warn('[card-action] edit_ab_card: replyToMessage returned null');
+          return;
+        }
+        const state = await loadDigestState();
+        if (!state.pendingCardEdits) state.pendingCardEdits = {};
+        state.pendingCardEdits[promptMsgId] = {
+          cardMsgId,
+          cardKind: cardKind as 'ab_open' | 'ab_concluded',
+          featureWorkItemId,
+          featureName,
+          chatId,
+          requestedByOpenId: requesterOpenId,
+          requestedAtIso: new Date().toISOString(),
+        };
+        // Light pruning: drop entries older than 7 days.
+        const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        for (const [id, e] of Object.entries(state.pendingCardEdits)) {
+          if (new Date(e.requestedAtIso).getTime() < cutoff) delete state.pendingCardEdits[id];
+        }
+        await saveDigestState(state);
+        console.log(`[card-action] edit_ab_card: prompt posted msg=${promptMsgId} for feature=${featureName}`);
+      } catch (e) {
+        console.warn('[card-action] edit_ab_card background work failed:', e);
+      }
+    })();
+
+    return NextResponse.json({ toast: { type: 'success', content: 'Edit prompt posted ↓' } });
+  }
+
   if (actionName === 'letjr_reply') {
     const featureName = String(actionValue?.featureName ?? '');
     const prdUrl = String(actionValue?.prdUrl ?? '');
