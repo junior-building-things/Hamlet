@@ -50,7 +50,7 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Pro
         />
         <NavItem
           icon={<Sparkles className="w-4 h-4 shrink-0" />}
-          label="Prompts"
+          label="System Prompts"
           active={activeView === 'prompts'}
           onClick={() => onViewChange('prompts')}
         />

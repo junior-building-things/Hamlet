@@ -69,7 +69,7 @@ export function PromptsView() {
       <div className="shrink-0 px-6 pt-7 pb-2 flex items-center justify-between">
         <div>
           <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
-            Prompts
+            System Prompts
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             Manage AI prompts used across Hamlet, Junior, Rio, and Mia. Edits take effect within 30 seconds.
