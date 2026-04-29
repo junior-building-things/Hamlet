@@ -1752,13 +1752,45 @@ function findLaterThreadMessages(question: ChatMessage, all: ChatMessage[]): Cha
 }
 
 function chatMessageText(m: ChatMessage): string {
+  const raw = m.body?.content ?? '';
+  if (!raw) return '';
   try {
-    const parsed = JSON.parse(m.body?.content ?? '{}') as { text?: string };
-    let text = (parsed.text ?? '').trim();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    let text = '';
+    // text msg: {text: "..."}
+    if (typeof parsed.text === 'string') {
+      text = parsed.text;
+    }
+    // post msg (rich text): {title, content: [[{tag,text,user_id,...}]]}
+    // OR localised: {zh_cn: {title, content}, en_us: {...}}
+    if (!text) {
+      const blocks = ('content' in parsed && Array.isArray(parsed.content))
+        ? parsed.content as unknown[][]
+        : Object.values(parsed)
+            .find(v => v && typeof v === 'object' && Array.isArray((v as { content?: unknown }).content))
+            ? ((Object.values(parsed)
+                .find(v => v && typeof v === 'object' && Array.isArray((v as { content?: unknown }).content)) as { content: unknown[][] }).content)
+            : null;
+      if (blocks) {
+        const lines: string[] = [];
+        for (const para of blocks) {
+          const lineParts = (para as Array<Record<string, unknown>>).map(inline => {
+            if (inline.tag === 'text' && typeof inline.text === 'string') return inline.text;
+            if (inline.tag === 'a' && typeof inline.text === 'string') return inline.text;
+            // Skip 'at' inlines — they appear in mentions[] separately and get stripped below.
+            return '';
+          });
+          const line = lineParts.join('').trim();
+          if (line) lines.push(line);
+        }
+        text = lines.join(' ');
+      }
+    }
+    text = text.trim();
     for (const mention of m.mentions ?? []) text = text.replace(mention.key, '').trim();
     return text;
   } catch {
-    return (m.body?.content ?? '').trim();
+    return raw.trim();
   }
 }
 
