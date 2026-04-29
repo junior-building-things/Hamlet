@@ -1,8 +1,8 @@
 'use client';
 import Image from 'next/image';
-import { LayoutList, MessageSquare, CheckSquare, Users, Plus, LogOut, Sparkles } from 'lucide-react';
+import { LayoutList, MessageSquare, CheckSquare, Users, Plus, LogOut, Sparkles, FileText } from 'lucide-react';
 
-export type SidebarView = 'project' | 'chat' | 'todos' | 'roles' | 'prompts';
+export type SidebarView = 'project' | 'chat' | 'todos' | 'roles' | 'prompts' | 'context';
 
 interface Props {
   activeView: SidebarView;
@@ -53,6 +53,12 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Pro
           label="Prompts"
           active={activeView === 'prompts'}
           onClick={() => onViewChange('prompts')}
+        />
+        <NavItem
+          icon={<FileText className="w-4 h-4 shrink-0" />}
+          label="Junior Context"
+          active={activeView === 'context'}
+          onClick={() => onViewChange('context')}
         />
       </nav>
 
