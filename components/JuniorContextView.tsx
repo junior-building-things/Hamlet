@@ -62,7 +62,7 @@ export function JuniorContextView() {
             Junior Context
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Markdown files appended to Junior&apos;s system prompt at chat time. Edits propagate within ~60 seconds.
+            Context included each time Junior replies. Edits propagate within ~60 seconds.
           </p>
         </div>
         <button
