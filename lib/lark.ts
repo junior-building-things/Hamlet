@@ -1787,13 +1787,23 @@ export async function countMessageReplies(messageId: string, token: string): Pro
   if (!messageId) return 0;
   try {
     const res = await fetch(
-      `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}/replies?page_size=10`,
+      `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}/replies?page_size=20`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
-    const data = await res.json() as { code: number; data?: { items?: unknown[] } };
-    if (data.code !== 0) return 0;
-    return (data.data?.items ?? []).length;
-  } catch {
+    const data = await res.json() as {
+      code: number;
+      msg?: string;
+      data?: { items?: Array<{ message_id?: string; create_time?: string; sender?: unknown }> };
+    };
+    if (data.code !== 0) {
+      console.warn(`[lark] countMessageReplies(${messageId}) failed: code=${data.code} msg=${data.msg ?? ''}`);
+      return 0;
+    }
+    const items = data.data?.items ?? [];
+    console.log(`[lark] countMessageReplies(${messageId}) returned ${items.length} reply ids: ${items.map(i => i.message_id ?? '(none)').slice(0, 5).join(',')}${items.length > 5 ? '…' : ''}`);
+    return items.length;
+  } catch (e) {
+    console.warn(`[lark] countMessageReplies(${messageId}) threw:`, e);
     return 0;
   }
 }
