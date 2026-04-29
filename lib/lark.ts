@@ -2977,7 +2977,10 @@ export function buildInteractiveCardContent(
     }
   }
   const card: Record<string, unknown> = {
-    config: { wide_screen_mode: true },
+    // update_multi: true is required for interactive cards to accept
+    // PATCH /im/v1/messages/{id} updates. Without it, Lark accepts the
+    // patch (returns code=0) but silently ignores the new content.
+    config: { wide_screen_mode: true, update_multi: true },
     elements,
   };
   if (title) {
@@ -2998,16 +3001,15 @@ export async function patchInteractiveCard(
   cardContentJson: string,
   token: string,
 ): Promise<boolean> {
-  const res = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}`, {
+  const url = `${LARK_BASE_URL}/open-apis/im/v1/messages/${messageId}`;
+  const res = await fetch(url, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ content: cardContentJson }),
   });
-  const data = await parseJson(res, 'patch_card') as { code: number; msg?: string };
-  if (data.code !== 0) {
-    console.warn('[lark] patch interactive card failed:', data.code, data.msg);
-    return false;
-  }
+  const data = await parseJson(res, 'patch_card') as { code: number; msg?: string; data?: unknown };
+  console.log(`[lark] patch_card http=${res.status} code=${data.code} msg=${data.msg ?? ''} payload_bytes=${cardContentJson.length}`);
+  if (data.code !== 0) return false;
   return true;
 }
 
