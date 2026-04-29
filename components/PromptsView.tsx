@@ -244,9 +244,16 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
                   ))}
                 </select>
               </label>
-              {prompt.variables.length > 0 && (
-                <span>Variables: {prompt.variables.map(v => <code key={v} className="bg-[var(--card-hover)] px-1.5 py-0.5 rounded mr-1 text-[11px]">${`{${v}}`}</code>)}</span>
-              )}
+              <span>
+                Variables:{' '}
+                {prompt.variables.length > 0
+                  ? prompt.variables.map(v => (
+                      <code key={v} className="bg-[var(--card-hover)] px-1.5 py-0.5 rounded mr-1 text-[11px]">
+                        ${`{${v}}`}
+                      </code>
+                    ))
+                  : <span className="text-[11px] text-gray-500 italic">none</span>}
+              </span>
               {prompt.updatedAt && (
                 <span className="text-[11px]">
                   Last edited {new Date(prompt.updatedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}
