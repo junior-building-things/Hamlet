@@ -208,8 +208,7 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
           <div className="text-xs text-[var(--muted)] truncate">{prompt.description}</div>
         </div>
         <div className="text-right shrink-0">
-          <div className="text-[11px] text-gray-500">{prompt.model}</div>
-          <div className="text-[10px] text-gray-500 mt-0.5 font-mono">{prompt.fileRef}</div>
+          <div className="text-[10px] text-gray-500 font-mono">{prompt.fileRef}</div>
         </div>
       </button>
 
