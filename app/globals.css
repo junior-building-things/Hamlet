@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+/* Always show the hand cursor on clickable elements. Browsers default
+   <button> to the arrow cursor (a longstanding quirk); this matches
+   the user expectation that "if it's clickable, the cursor changes". */
+button:not(:disabled),
+a[href],
+[role="button"]:not([aria-disabled="true"]),
+summary,
+label[for],
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="button"]:not(:disabled) {
+  cursor: pointer;
+}
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 :root {
   --background: #f5f6fa;
   --foreground: #111827;
