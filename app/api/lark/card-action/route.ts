@@ -289,15 +289,30 @@ export async function POST(req: NextRequest) {
 
         // Pull rich feature context from the Hamlet cache (status, owners,
         // links, risk, recent Meego comments) so Gemini can answer
-        // beyond what the PRD says.
+        // beyond what the PRD says. Also resolve the PMs open_id so
+        // the prompt can render an actual @-mention in the punt path.
         let featureContext = '(no feature context available)';
+        let pmOpenId = '';
+        let pmName = '';
         try {
           const { readFeatureCache } = await import('@/lib/feature-cache');
           const cache = await readFeatureCache();
           const f = cache?.features.find(c =>
             (prdUrl && c.prd === prdUrl) || (chatId && c.chatId === chatId),
           );
-          if (f) featureContext = formatFeatureContext(f);
+          if (f) {
+            featureContext = formatFeatureContext(f);
+            if (f.pmOwner) {
+              pmName = f.pmOwner.split(',')[0].trim();
+              const pmEmail = f.pocEmails?.[pmName];
+              if (pmEmail) {
+                const { resolveOpenIds, getLarkBotToken } = await import('@/lib/lark');
+                const tokenForResolve = await getLarkBotToken();
+                const map = await resolveOpenIds([pmEmail], tokenForResolve);
+                pmOpenId = map[pmEmail] ?? '';
+              }
+            }
+          }
         } catch (e) {
           console.warn('[card-action] letjr_reply: feature cache lookup failed:', e);
         }
@@ -317,6 +332,8 @@ export async function POST(req: NextRequest) {
               questionText,
               prdContent: prdContent.slice(0, 8000) || '(PRD not available)',
               featureContext,
+              pmOpenId,
+              pmName,
             });
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: modelName });

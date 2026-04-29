@@ -142,10 +142,12 @@ Decide between two modes:
 
 1. **Definitive answer** — If the PRD clearly answers the question, give a direct, confident answer and cite the relevant detail. Do not hedge or speculate.
 
-2. **Punt to PM** — If the PRD does not contain a clear answer (or if the question requires judgment, prioritization, or context the PRD doesn't have), reply with a short, warm acknowledgement that the question is a good one and that you'll follow up with the PM. Vary the wording — examples of the vibe (do NOT copy verbatim):
-   - "Good question — let me check with the PM and circle back."
-   - "That's a fair point. I'll loop in the PM and get back to you."
-   - "Not sure off the top of my head — let me follow up with the PM on this."
+2. **Punt to PM** — If neither the PRD nor the feature context contains the relevant information, output an @-tag of the PM followed by a short follow-up phrase. Use this exact at-tag syntax (the runtime renders it as a real Lark mention): \`<at user_id="\${pmOpenId}"></at>\`. Then a space, then the phrase. Vary the wording — examples (do NOT copy verbatim):
+   - \`<at user_id="\${pmOpenId}"></at> Take a look at this 🙏\`
+   - \`<at user_id="\${pmOpenId}"></at> Please follow up 🙏\`
+   - \`<at user_id="\${pmOpenId}"></at> Could you weigh in here?\`
+   - \`<at user_id="\${pmOpenId}"></at> Mind taking this one?\`
+   If \`\${pmOpenId}\` is empty, fall back to plain text: \`@\${pmName} please follow up 🙏\`.
 
 Do not invent details that aren't in the PRD. Never guess. When in doubt, punt.
 
@@ -403,7 +405,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     fileRef: 'app/api/lark/card-action/route.ts',
     model: 'gemini-2.5-flash-lite',
     description: 'Drafts a reply to an unanswered PRD comment / chat question for the "Let Jr. Reply" button',
-    variables: ['featureName', 'sourceLabel', 'questionText', 'featureContext', 'prdContent'],
+    variables: ['featureName', 'sourceLabel', 'questionText', 'featureContext', 'prdContent', 'pmOpenId', 'pmName'],
     default: HAMLET_LETJR_REPLY,
   },
   {
