@@ -327,7 +327,14 @@ export async function POST(req: NextRequest) {
           }
         }
         const botToken = await getLarkBotToken();
-        const proposal = `${replyText}\n\nLooks ok? React with 👍 and I'll send it.`;
+        // Prepend a visible "To: @<asker>" header so Thomas can see who
+        // will be tagged before approving. The <at> tag renders as a
+        // blue @-pill in Lark; doesnt notify the asker (theyre not in
+        // Thomas's personal chat).
+        const askerHeader = askerOpenId && askerOpenId.startsWith('ou_')
+          ? `To: <at user_id="${askerOpenId}"></at>\n\n`
+          : '';
+        const proposal = `${askerHeader}${replyText}\n\nLooks ok? React with 👍 and I'll send it.`;
         const proposalMsgId = await replyToMessage(parentMessageId, proposal, botToken);
         if (!proposalMsgId) {
           console.warn('[card-action] letjr_reply: replyToMessage returned null');
