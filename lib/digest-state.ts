@@ -213,6 +213,25 @@ export interface DigestStateFile {
     requestedByOpenId: string;
     requestedAtIso: string;
   }>;
+
+  /**
+   * PRD comment threads Junior has posted a reply into. Keyed by
+   * `${docId}:${commentId}`. When a Lark drive comment event arrives
+   * for a tracked thread, Junior will draft + propose a follow-up
+   * reply via the same letjr_reply flow.
+   *
+   * Phase 1: tracker is saved but webhook handler is a no-op log
+   * (we need to see the actual event payload from Lark first).
+   */
+  juniorCommentThreads?: Record<string, {
+    docId: string;
+    commentId: string;
+    featureWorkItemId?: string;
+    featureName?: string;
+    prdUrl: string;
+    askerOpenId: string;
+    lastJuniorReplyAtIso: string;
+  }>;
 }
 
 /**
@@ -306,6 +325,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const pendingCardEdits = (obj.pendingCardEdits && typeof obj.pendingCardEdits === 'object')
     ? (obj.pendingCardEdits as DigestStateFile['pendingCardEdits'])
     : undefined;
+  const juniorCommentThreads = (obj.juniorCommentThreads && typeof obj.juniorCommentThreads === 'object')
+    ? (obj.juniorCommentThreads as DigestStateFile['juniorCommentThreads'])
+    : undefined;
 
   return {
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
@@ -322,6 +344,7 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     pendingLetJrReplies,
     cardEditContexts,
     pendingCardEdits,
+    juniorCommentThreads,
   };
 }
 
