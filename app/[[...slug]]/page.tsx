@@ -8,6 +8,8 @@ import { TodoView } from '@/components/TodoView';
 import { RolesView } from '@/components/RolesView';
 import { PromptsView } from '@/components/PromptsView';
 import { JuniorContextView } from '@/components/JuniorContextView';
+import { SyncProvider } from '@/components/SyncContext';
+import { GlobalActions } from '@/components/GlobalActions';
 import { FeatureModal } from '@/components/FeatureModal';
 
 interface PlatformPackage {
@@ -147,43 +149,54 @@ export default function Home() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <main className="flex min-h-screen">
-      <Sidebar
-        activeView={activeView}
-        onViewChange={handleViewChange}
-        onCreateFeature={() => setShowAddModal(true)}
-        user={user}
-      />
-
-      <div id="main-scroll" className="flex-1 overflow-y-auto min-h-screen">
-        {activeView === 'project' && (
-          <ProjectView features={features} setFeatures={setFeatures} pinnedId={pinnedId} onClearPin={() => setPinnedId(null)} />
-        )}
-        {activeView === 'chat' && (
-          <ChatView onFeatureCreated={f => setFeatures(prev => [f, ...prev])} />
-        )}
-        {activeView === 'todos' && (
-          <TodoView features={features} setFeatures={setFeatures} />
-        )}
-        {activeView === 'roles' && (
-          <RolesView />
-        )}
-        {activeView === 'prompts' && (
-          <PromptsView />
-        )}
-        {activeView === 'context' && (
-          <JuniorContextView />
-        )}
-      </div>
-
-      {showAddModal && (
-        <FeatureModal
-          mode="add"
-          onSave={handleTempAdded}
-          onClose={() => setShowAddModal(false)}
-          onFeatureCreated={handleFeatureCreated}
+    <SyncProvider>
+      <main className="flex min-h-screen">
+        <Sidebar
+          activeView={activeView}
+          onViewChange={handleViewChange}
+          onCreateFeature={() => setShowAddModal(true)}
+          user={user}
         />
-      )}
-    </main>
+
+        <div id="main-scroll" className="flex-1 overflow-y-auto min-h-screen relative">
+          {/* Floating top-right actions, present on every tab. */}
+          <div className="absolute top-7 right-6 z-20">
+            <GlobalActions />
+          </div>
+
+          {/* ProjectView stays mounted always (hidden when inactive)
+              so its sync state survives tab navigation. Other tabs
+              are mount/unmount as before since they have no live
+              background work. */}
+          <div className={activeView === 'project' ? '' : 'hidden'}>
+            <ProjectView features={features} setFeatures={setFeatures} pinnedId={pinnedId} onClearPin={() => setPinnedId(null)} />
+          </div>
+          {activeView === 'chat' && (
+            <ChatView onFeatureCreated={f => setFeatures(prev => [f, ...prev])} />
+          )}
+          {activeView === 'todos' && (
+            <TodoView features={features} setFeatures={setFeatures} />
+          )}
+          {activeView === 'roles' && (
+            <RolesView />
+          )}
+          {activeView === 'prompts' && (
+            <PromptsView />
+          )}
+          {activeView === 'context' && (
+            <JuniorContextView />
+          )}
+        </div>
+
+        {showAddModal && (
+          <FeatureModal
+            mode="add"
+            onSave={handleTempAdded}
+            onClose={() => setShowAddModal(false)}
+            onFeatureCreated={handleFeatureCreated}
+          />
+        )}
+      </main>
+    </SyncProvider>
   );
 }

@@ -1,13 +1,14 @@
 'use client';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Feature, Priority } from '@/lib/types';
-import { FilterBar, GroupBy, SortBy, SortDir, ThemeToggle } from '@/components/FilterBar';
+import { FilterBar, GroupBy, SortBy, SortDir } from '@/components/FilterBar';
+import { useSync } from '@/components/SyncContext';
 import { FeatureCard } from '@/components/FeatureCard';
 import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
 import { statusStyle } from '@/components/StatusBadge';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AV } from '@/lib/avatars';
 
@@ -92,6 +93,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   const [syncingIds,     setSyncingIds]      = useState<Set<string>>(new Set());
   const [detailSyncCount, setDetailSyncCount] = useState(0);
   const [detailSyncTotal, setDetailSyncTotal] = useState(0);
+  const { setSyncState, registerSyncAll } = useSync();
   const [modalMode,      setModalMode]      = useState<'edit' | null>(null);
   const [editingFeature, setEditing]        = useState<Feature | undefined>();
   const [completingId,   setCompletingId]   = useState<string | null>(null);
@@ -436,7 +438,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     finally { setSyncingIds(prev => { const next = new Set(prev); next.delete(feature.id); return next; }); }
   }, [setFeatures]);
 
-  async function syncAll() {
+  const syncAll = useCallback(async () => {
     onClearPin?.();
     setSyncingAll(true);
     const list = await fetchFromMeego(true); // force=true bypasses GCS cache
@@ -444,7 +446,16 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     if (list) {
       syncAllDetails(list);
     }
-  }
+  }, [onClearPin, fetchFromMeego, syncAllDetails]);
+
+  // Expose syncAll + sync state to the page-level context so the
+  // floating top-right Sync All button (visible on every tab) works.
+  useEffect(() => {
+    registerSyncAll(syncAll);
+  }, [registerSyncAll, syncAll]);
+  useEffect(() => {
+    setSyncState({ syncingAll, detailSyncTotal });
+  }, [setSyncState, syncingAll, detailSyncTotal]);
 
   function handleNodeCompleted(featureId: string) {
     const f = features.find(x => x.id === featureId);
@@ -710,18 +721,11 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           </h1>
           <p className="text-sm text-gray-500 mt-1">An overview of your projects</p>
         </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <button
-            onClick={syncAll}
-            disabled={syncingAll || detailSyncTotal > 0}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--card)] border border-[var(--border)] hover:bg-[var(--card-hover)] text-[var(--muted)] hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
-          >
-            {syncingAll || detailSyncTotal > 0
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
-              : <><RefreshCw className="w-3.5 h-3.5" /> Sync All</>}
-          </button>
-        </div>
+        {/* Theme toggle + Sync All live in the page-level GlobalActions
+            (top-right of every tab) so they stay visible + state-consistent
+            during cross-tab navigation. Spacer keeps the title area
+            unchanged width-wise. */}
+        <div aria-hidden className="invisible" />
       </div>
 
       <div className="shrink-0">

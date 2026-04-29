@@ -186,18 +186,9 @@ export function TodoView({ features, setFeatures }: Props) {
           </h1>
           <p className="text-sm text-gray-500 mt-1">Projects pending your action</p>
         </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <button
-            onClick={syncAll}
-            disabled={syncingAll}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--card)] border border-[var(--border)] hover:bg-[var(--card-hover)] text-[var(--muted)] hover:text-[var(--foreground)] text-sm rounded-xl transition-colors disabled:opacity-50"
-          >
-            {syncingAll
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing</>
-              : <><RefreshCw className="w-3.5 h-3.5" /> Sync All</>}
-          </button>
-        </div>
+        {/* Theme toggle + Sync All live in the page-level GlobalActions
+            (top-right of every tab) for cross-tab consistency. */}
+        <div aria-hidden className="invisible" />
       </div>
 
       {/* Action bar (sticky) */}
