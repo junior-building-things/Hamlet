@@ -141,9 +141,9 @@ export async function POST(req: NextRequest) {
         toast: { type: 'error', content: 'Missing post payload' },
       });
     }
-    // Currently sends to the personal group (testing mode). Flip to
-    // the real PM group oc_ea2940122b041a9c9ee4153596d6a15c when ready.
-    const targetChatId = 'oc_d1f9b0ad6b325ef6699e0422fa1e8541';
+    // Real PM group. (Personal test group oc_d1f9b0ad6b325ef6699e0422fa1e8541
+    // can be swapped back here for testing.)
+    const targetChatId = 'oc_ea2940122b041a9c9ee4153596d6a15c';
     try {
       const botToken = await getLarkBotToken();
       const id = await sendPostToChat(targetChatId, postTitle, postParagraphs, botToken);
