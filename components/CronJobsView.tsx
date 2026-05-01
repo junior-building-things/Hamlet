@@ -135,7 +135,7 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
             </span>
           </div>
           <div className="text-xs text-[var(--muted)] mb-2">{job.description}</div>
-          <div className="text-[11px] text-gray-500">→ {job.target}</div>
+          <div className="text-[11px] text-gray-500">{job.target}</div>
         </div>
         <div className="shrink-0 flex items-center gap-2">
           <button
