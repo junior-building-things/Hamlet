@@ -18,7 +18,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runDailyDigests();
+    // Optional ?section=<id> filter: still runs all data fetching (so
+    // sections that share fetches stay correct), but only sends the
+    // matching card. Used by the Cron Jobs UI's per-section "Trigger
+    // once" button.
+    const sectionFilter = req.nextUrl.searchParams.get('section') ?? undefined;
+    const result = await runDailyDigests({ sectionFilter });
     return NextResponse.json({
       ok: true,
       featuresChecked: result.featuresChecked,

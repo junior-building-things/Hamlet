@@ -51,11 +51,9 @@ export async function POST(
     }
 
     if (def.kind === 'digest_section') {
-      // Run the full pipeline; the paused flags on OTHER sections still
-      // apply. To run JUST this section, temporarily unpause it (which
-      // it already is since the user asked to trigger it) and rely on
-      // the run to send only enabled sections.
-      const url = 'https://hamlet-416594255546.asia-southeast1.run.app/api/digests/run';
+      // Run the full pipeline (data work is shared across sections),
+      // but pass ?section=<id> so ONLY this section's card is sent.
+      const url = `https://hamlet-416594255546.asia-southeast1.run.app/api/digests/run?section=${encodeURIComponent(def.id)}`;
       const auth = AGENT_RUN_SECRET ? `Bearer ${AGENT_RUN_SECRET}` : '';
       const res = await fetch(url, {
         method: 'POST',
@@ -66,7 +64,7 @@ export async function POST(
         body: '{}',
       });
       const body = await res.text().catch(() => '');
-      return NextResponse.json({ ok: res.ok, status: res.status, body: body.slice(0, 400), note: 'fired full daily-digest run; only enabled sub-sections will send' });
+      return NextResponse.json({ ok: res.ok, status: res.status, body: body.slice(0, 400), note: `fired daily-digest run with section filter = ${def.id}` });
     }
 
     return NextResponse.json({ error: 'unsupported kind' }, { status: 400 });
