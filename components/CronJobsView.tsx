@@ -115,34 +115,27 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
     }
   }
 
-  const kindBadge = job.kind === 'cloud_scheduler'
-    ? { label: 'Cloud Scheduler', cls: 'bg-blue-500/15 text-blue-700 border-blue-500/30' }
-    : { label: 'Digest section', cls: 'bg-purple-500/15 text-purple-700 border-purple-500/30' };
   const stateBadge = job.paused
     ? { label: 'Paused', cls: 'bg-gray-500/15 text-gray-600 border-gray-500/30' }
     : { label: 'Active', cls: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30' };
+  const scheduleBadge = { cls: 'bg-blue-500/15 text-blue-700 border-blue-500/30' };
 
   return (
     <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl">
       <div className="flex items-start justify-between gap-3 px-4 py-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${kindBadge.cls}`}>
-              {kindBadge.label}
-            </span>
+            <span className="text-sm font-medium text-[var(--foreground)]">{job.name}</span>
             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${stateBadge.cls}`}>
               {stateBadge.label}
             </span>
-            <span className="text-sm font-medium text-[var(--foreground)]">{job.name}</span>
-          </div>
-          <div className="text-xs text-[var(--muted)] mb-2">{job.description}</div>
-          <div className="text-[11px] text-gray-500 flex items-center gap-3 flex-wrap">
-            <span className="inline-flex items-center gap-1">
-              <Clock className="w-3 h-3" />
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${scheduleBadge.cls}`}>
+              <Clock className="w-2.5 h-2.5" />
               {job.scheduleHuman}
             </span>
-            <span>→ {job.target}</span>
           </div>
+          <div className="text-xs text-[var(--muted)] mb-2">{job.description}</div>
+          <div className="text-[11px] text-gray-500">→ {job.target}</div>
         </div>
         <div className="shrink-0 flex items-center gap-2">
           <button
