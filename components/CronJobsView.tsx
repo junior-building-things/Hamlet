@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Play, Pause, PlayCircle, Clock, ExternalLink } from 'lucide-react';
+import { Loader2, Play, Pause, PlayCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
 type CronKind = 'cloud_scheduler' | 'digest_section';
@@ -122,10 +122,6 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
     ? { label: 'Paused', cls: 'bg-gray-500/15 text-gray-600 border-gray-500/30' }
     : { label: 'Active', cls: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30' };
 
-  const consoleUrl = job.kind === 'cloud_scheduler' && job.cloudSchedulerJobId
-    ? `https://console.cloud.google.com/cloudscheduler/jobs/edit/asia-southeast1/${job.cloudSchedulerJobId}?project=tiktok-im`
-    : '';
-
   return (
     <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl">
       <div className="flex items-start justify-between gap-3 px-4 py-3">
@@ -143,18 +139,9 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
           <div className="text-[11px] text-gray-500 flex items-center gap-3 flex-wrap">
             <span className="inline-flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              <code className="font-mono">{job.schedule}</code>
-              <span className="text-gray-400">({job.scheduleHuman})</span>
-              {job.inheritsSchedule && (
-                <span className="text-gray-400 ml-1">— inherited from {job.parentCronId}</span>
-              )}
+              {job.scheduleHuman}
             </span>
             <span>→ {job.target}</span>
-            {consoleUrl && (
-              <a href={consoleUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-400 inline-flex items-center gap-1">
-                <ExternalLink className="w-3 h-3" /> Edit in Cloud Console
-              </a>
-            )}
           </div>
         </div>
         <div className="shrink-0 flex items-center gap-2">
