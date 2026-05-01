@@ -116,9 +116,7 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
     }
   }
 
-  const stateBadge = job.paused
-    ? { label: 'Paused', cls: 'bg-gray-500/15 text-gray-600 border-gray-500/30' }
-    : { label: 'Active', cls: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30' };
+  const pausedBadgeCls = 'bg-gray-500/15 text-gray-600 border-gray-500/30';
   const timeBadgeCls = 'bg-blue-500/15 text-blue-700 border-blue-500/30';
   const freqBadgeCls = 'bg-amber-500/15 text-amber-700 border-amber-500/30';
 
@@ -128,9 +126,11 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-sm font-medium text-[var(--foreground)]">{job.name}</span>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${stateBadge.cls}`}>
-              {stateBadge.label}
-            </span>
+            {job.paused && (
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${pausedBadgeCls}`}>
+                Paused
+              </span>
+            )}
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${timeBadgeCls}`}>
               <Clock className="w-2.5 h-2.5" />
               {job.scheduleTime}
