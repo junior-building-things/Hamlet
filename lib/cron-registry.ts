@@ -23,8 +23,10 @@ export interface CronJobDef {
   description: string;
   /** Cron expression in the job's timezone (display + edit). */
   schedule: string;
-  /** Human-readable summary, e.g. "10:00 SGT, weekdays". */
-  scheduleHuman: string;
+  /** Time-of-day in the job's timezone, e.g. "10am SGT". */
+  scheduleTime: string;
+  /** Frequency, e.g. "Weekdays" / "Daily" / "Mondays". */
+  scheduleFrequency: string;
   /** Where the message lands, in plain English. */
   target: string;
   kind: CronKind;
@@ -52,7 +54,8 @@ export const CRON_REGISTRY: CronJobDef[] = [
       'detects PRD changes + AB transitions, scans for unanswered questions, then sends every ' +
       'enabled sub-card below to the digest target chat.',
     schedule: '0 14 * * 1-5',
-    scheduleHuman: '10am SGT, weekdays',
+    scheduleTime: '10am SGT',
+    scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat (oc_d1f9b0ad…)',
     kind: 'cloud_scheduler',
     cloudSchedulerJobId: HAMLET_DAILY,
@@ -65,7 +68,8 @@ export const CRON_REGISTRY: CronJobDef[] = [
       'Polls Meego for features that just transitioned into Line Review and posts a compliance ' +
       'card asking the PM to confirm the PRD is ready for the cross-functional review.',
     schedule: '0 23 * * *',
-    scheduleHuman: '7am SGT, daily',
+    scheduleTime: '7am SGT',
+    scheduleFrequency: 'Daily',
     target: 'Compliance review chat',
     kind: 'cloud_scheduler',
     cloudSchedulerJobId: 'poll-prd-ready',
@@ -80,7 +84,8 @@ export const CRON_REGISTRY: CronJobDef[] = [
       'For each in-flight feature, runs a Gemini risk evaluation over the last 24h of chat + ' +
       'Meego comments and surfaces anything flagged 🔴 / 🟡 in a single aggregate card.',
     schedule: '0 14 * * 1-5',
-    scheduleHuman: '10am SGT, weekdays',
+    scheduleTime: '10am SGT',
+    scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'digest_section',
     sectionKey: 'risk',
@@ -94,7 +99,8 @@ export const CRON_REGISTRY: CronJobDef[] = [
       'Detects PRDs that have been edited since the last snapshot, summarises what changed via ' +
       'Gemini, appends a Change Log entry to each PRD, and aggregates today\'s changes into a card.',
     schedule: '0 14 * * 1-5',
-    scheduleHuman: '10am SGT, weekdays',
+    scheduleTime: '10am SGT',
+    scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'digest_section',
     sectionKey: 'prd_changes',
@@ -108,7 +114,8 @@ export const CRON_REGISTRY: CronJobDef[] = [
       'Scans chat @-mentions of the owner + open PRD comment threads for questions Thomas hasn\'t ' +
       'addressed yet. Asks Gemini to gate "is this actually a question?" and surfaces only the real ones.',
     schedule: '0 14 * * 1-5',
-    scheduleHuman: '10am SGT, weekdays',
+    scheduleTime: '10am SGT',
+    scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'digest_section',
     sectionKey: 'unanswered',
@@ -122,7 +129,8 @@ export const CRON_REGISTRY: CronJobDef[] = [
       'Notifies once per feature whose Meego status transitions to 实验中 (AB Testing). One card ' +
       'per run aggregating all transitions; per-feature Send-to-PM-Group + Edit buttons.',
     schedule: '0 14 * * 1-5',
-    scheduleHuman: '10am SGT, weekdays',
+    scheduleTime: '10am SGT',
+    scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'digest_section',
     sectionKey: 'ab_open',
@@ -136,7 +144,8 @@ export const CRON_REGISTRY: CronJobDef[] = [
       'For each feature chat where an "AB Brief" calendar invite has landed, drafts an AB-concluded ' +
       'card via Gemini (results summary + Next Steps from the AB report) for review + Send-to-PM-Group.',
     schedule: '0 14 * * 1-5',
-    scheduleHuman: '10am SGT, weekdays',
+    scheduleTime: '10am SGT',
+    scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'digest_section',
     sectionKey: 'ab_concluded',
@@ -150,7 +159,8 @@ export const CRON_REGISTRY: CronJobDef[] = [
       'Fires once per feature whose status transitions into 待线内评审 (Line Review). One card per ' +
       'transition sent to the feature\'s group chat with the PRD link.',
     schedule: '0 14 * * 1-5',
-    scheduleHuman: '10am SGT, weekdays',
+    scheduleTime: '10am SGT',
+    scheduleFrequency: 'Weekdays',
     target: 'Per-feature group chat',
     kind: 'digest_section',
     sectionKey: 'line_review',
