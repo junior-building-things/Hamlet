@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { TIME_OPTIONS, FREQUENCY_OPTIONS } from '@/lib/cron-expr';
 
 type CronKind = 'cloud_scheduler' | 'digest_section';
+type CronDestinationKind = 'team_thomas' | 'progress_update' | 'feature_group' | 'compliance';
+interface CronDestination { kind: CronDestinationKind; label: string }
 interface CronJob {
   id: string;
   name: string;
@@ -19,7 +21,49 @@ interface CronJob {
   sectionKey?: string;
   inheritsSchedule?: boolean;
   parentCronId?: string;
+  destinations: CronDestination[];
   paused: boolean;
+  lastAttemptTime?: string;
+}
+
+function formatRelativeTime(iso?: string): string {
+  if (!iso) return '—';
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return '—';
+  const diffMs = Date.now() - then;
+  const sec = Math.round(diffMs / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+const DESTINATION_STYLES: Record<CronDestinationKind, string> = {
+  team_thomas:     'bg-blue-500/15 text-blue-700 border-blue-500/30',
+  progress_update: 'bg-pink-500/15 text-pink-700 border-pink-500/30',
+  feature_group:   'bg-teal-500/15 text-teal-700 border-teal-500/30',
+  compliance:      'bg-orange-500/15 text-orange-700 border-orange-500/30',
+};
+
+function DestinationBadge({ dest }: { dest: CronDestination }) {
+  const cls = DESTINATION_STYLES[dest.kind];
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${cls}`}>
+      {dest.kind === 'team_thomas' && (
+        <img
+          src="/team_thomas.png"
+          alt=""
+          className="w-3 h-3 rounded-full object-cover"
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+        />
+      )}
+      {dest.label}
+    </span>
+  );
 }
 
 export function CronJobsView() {
@@ -118,14 +162,8 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
   }
 
   const pausedBadgeCls = 'bg-gray-500/15 text-gray-600 border-gray-500/30';
-  const timeSelectCls = 'bg-blue-500/15 text-blue-700 border-blue-500/30';
-  const FREQ_SELECT_CLS: Record<string, string> = {
-    'Daily':    'bg-emerald-500/15 text-emerald-700 border-emerald-500/30',
-    'Weekdays': 'bg-amber-500/15 text-amber-700 border-amber-500/30',
-  };
-  const freqSelectCls = FREQ_SELECT_CLS[job.scheduleFrequency]
-    ?? 'bg-purple-500/15 text-purple-700 border-purple-500/30';
   const editable = job.kind === 'cloud_scheduler';
+  const selectCls = `text-xs bg-[var(--card-hover)] border border-[var(--border)] rounded px-2 py-1 text-[var(--foreground)] focus:outline-none disabled:opacity-60 ${editable ? 'cursor-pointer' : 'cursor-not-allowed'}`;
 
   async function updateSchedule(field: 'scheduleTime' | 'scheduleFrequency', value: string) {
     setBusy(true);
@@ -157,14 +195,21 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
                 Paused
               </span>
             )}
-            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${timeSelectCls}`}>
-              <Clock className="w-2.5 h-2.5" />
+            {(job.destinations ?? []).map(d => (
+              <DestinationBadge key={d.kind} dest={d} />
+            ))}
+          </div>
+          <div className="text-xs text-[var(--muted)] mb-2">{job.description}</div>
+          <div className="text-[11px] text-gray-500 mb-2">Last run: {formatRelativeTime(job.lastAttemptTime)}</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center gap-1 text-[var(--muted)]">
+              <Clock className="w-3 h-3" />
               <select
                 value={job.scheduleTime}
                 onChange={e => updateSchedule('scheduleTime', e.target.value)}
                 disabled={!editable || busy}
                 title={editable ? 'Change send time' : `Inherits from ${job.parentCronId}`}
-                className="bg-transparent border-0 text-[10px] font-semibold uppercase tracking-wide focus:outline-none disabled:opacity-100 disabled:cursor-not-allowed cursor-pointer pr-0.5"
+                className={selectCls}
               >
                 {!TIME_OPTIONS.includes(job.scheduleTime as typeof TIME_OPTIONS[number]) && (
                   <option value={job.scheduleTime}>{job.scheduleTime}</option>
@@ -173,26 +218,22 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
-            </span>
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${freqSelectCls}`}>
-              <select
-                value={job.scheduleFrequency}
-                onChange={e => updateSchedule('scheduleFrequency', e.target.value)}
-                disabled={!editable || busy}
-                title={editable ? 'Change frequency' : `Inherits from ${job.parentCronId}`}
-                className="bg-transparent border-0 text-[10px] font-semibold uppercase tracking-wide focus:outline-none disabled:opacity-100 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {!FREQUENCY_OPTIONS.includes(job.scheduleFrequency as typeof FREQUENCY_OPTIONS[number]) && (
-                  <option value={job.scheduleFrequency}>{job.scheduleFrequency}</option>
-                )}
-                {FREQUENCY_OPTIONS.map(f => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
-            </span>
+            </div>
+            <select
+              value={job.scheduleFrequency}
+              onChange={e => updateSchedule('scheduleFrequency', e.target.value)}
+              disabled={!editable || busy}
+              title={editable ? 'Change frequency' : `Inherits from ${job.parentCronId}`}
+              className={selectCls}
+            >
+              {!FREQUENCY_OPTIONS.includes(job.scheduleFrequency as typeof FREQUENCY_OPTIONS[number]) && (
+                <option value={job.scheduleFrequency}>{job.scheduleFrequency}</option>
+              )}
+              {FREQUENCY_OPTIONS.map(f => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
           </div>
-          <div className="text-xs text-[var(--muted)] mb-2">{job.description}</div>
-          <div className="text-[11px] text-gray-500">{job.target}</div>
         </div>
         <div className="shrink-0 flex items-center gap-2">
           <button

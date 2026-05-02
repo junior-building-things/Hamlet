@@ -26,16 +26,19 @@ export async function GET() {
     const liveById = new Map(live.map(l => [l.id, l.info]));
 
     const jobs = CRON_REGISTRY.map(c => {
-      // Resolve schedule:
+      // Resolve schedule + lastAttemptTime:
       //   - cloud_scheduler: live value if available, else registry default
-      //   - digest_section: parent's resolved value
+      //   - digest_section: parent's resolved value (sub-sections fire as part of parent run)
       let schedule = c.schedule;
+      let lastAttemptTime: string | undefined;
       if (c.kind === 'cloud_scheduler') {
         const info = liveById.get(c.id);
         if (info?.schedule) schedule = info.schedule;
+        lastAttemptTime = info?.lastAttemptTime;
       } else if (c.parentCronId) {
         const parentInfo = liveById.get(c.parentCronId);
         if (parentInfo?.schedule) schedule = parentInfo.schedule;
+        lastAttemptTime = parentInfo?.lastAttemptTime;
       }
       const parsed = parseCronExpression(schedule);
       return {
@@ -44,6 +47,7 @@ export async function GET() {
         scheduleTime: parsed?.time ?? c.scheduleTime,
         scheduleFrequency: parsed?.frequency ?? c.scheduleFrequency,
         paused: paused.has(c.id),
+        lastAttemptTime,
       };
     });
     return NextResponse.json({ jobs });

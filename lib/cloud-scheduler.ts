@@ -31,6 +31,8 @@ export interface SchedulerJobInfo {
   schedule: string;
   timeZone: string;
   state: string;
+  /** ISO timestamp of the last attempt; omitted if never run. */
+  lastAttemptTime?: string;
 }
 
 export async function getSchedulerJob(jobId: string): Promise<SchedulerJobInfo | null> {
@@ -42,12 +44,13 @@ export async function getSchedulerJob(jobId: string): Promise<SchedulerJobInfo |
       console.warn(`[cloud-scheduler] get ${jobId} failed: ${res.status}`);
       return null;
     }
-    const data = await res.json() as { schedule?: string; timeZone?: string; state?: string };
+    const data = await res.json() as { schedule?: string; timeZone?: string; state?: string; lastAttemptTime?: string };
     if (!data.schedule) return null;
     return {
       schedule: data.schedule,
       timeZone: data.timeZone ?? 'Asia/Singapore',
       state: data.state ?? 'ENABLED',
+      lastAttemptTime: data.lastAttemptTime,
     };
   } catch (e) {
     console.warn(`[cloud-scheduler] get ${jobId} threw:`, e);

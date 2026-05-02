@@ -40,6 +40,21 @@ export interface CronJobDef {
   inheritsSchedule?: boolean;
   /** The parent cron's id, when inheritsSchedule is true. */
   parentCronId?: string;
+  /** Destinations the job's output ends up in. First entry is the
+   *  primary (cron fires here). Additional entries indicate downstream
+   *  user-action sends (Send-to-PM-Group button, Let me Reply, etc.). */
+  destinations: CronDestination[];
+}
+
+export type CronDestinationKind =
+  | 'team_thomas'      // Personal digest chat
+  | 'progress_update'  // PM group via Send-to-PM-Group button
+  | 'feature_group'    // Per-feature group chat
+  | 'compliance';      // Compliance review chat
+
+export interface CronDestination {
+  kind: CronDestinationKind;
+  label: string;
 }
 
 const HAMLET_DAILY = 'hamlet-daily-digest';
@@ -60,6 +75,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     kind: 'cloud_scheduler',
     cloudSchedulerJobId: HAMLET_DAILY,
     cloudSchedulerService: 'hamlet',
+    destinations: [{ kind: 'team_thomas', label: 'Team Thomas' }],
   },
   {
     id: 'poll-prd-ready',
@@ -74,6 +90,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     kind: 'cloud_scheduler',
     cloudSchedulerJobId: 'poll-prd-ready',
     cloudSchedulerService: 'junior',
+    destinations: [{ kind: 'compliance', label: 'Compliance' }],
   },
 
   // ── Sub-sections of the daily digest ──────────────────────────────────────
@@ -91,6 +108,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     sectionKey: 'risk',
     inheritsSchedule: true,
     parentCronId: HAMLET_DAILY,
+    destinations: [{ kind: 'team_thomas', label: 'Team Thomas' }],
   },
   {
     id: 'digest.prd_changes',
@@ -106,6 +124,10 @@ export const CRON_REGISTRY: CronJobDef[] = [
     sectionKey: 'prd_changes',
     inheritsSchedule: true,
     parentCronId: HAMLET_DAILY,
+    destinations: [
+      { kind: 'team_thomas', label: 'Team Thomas' },
+      { kind: 'feature_group', label: 'Feature group' },
+    ],
   },
   {
     id: 'digest.unanswered',
@@ -121,6 +143,10 @@ export const CRON_REGISTRY: CronJobDef[] = [
     sectionKey: 'unanswered',
     inheritsSchedule: true,
     parentCronId: HAMLET_DAILY,
+    destinations: [
+      { kind: 'team_thomas', label: 'Team Thomas' },
+      { kind: 'feature_group', label: 'Feature group' },
+    ],
   },
   {
     id: 'digest.ab_open',
@@ -136,6 +162,10 @@ export const CRON_REGISTRY: CronJobDef[] = [
     sectionKey: 'ab_open',
     inheritsSchedule: true,
     parentCronId: HAMLET_DAILY,
+    destinations: [
+      { kind: 'team_thomas', label: 'Team Thomas' },
+      { kind: 'progress_update', label: 'Progress update' },
+    ],
   },
   {
     id: 'digest.ab_concluded',
@@ -151,6 +181,10 @@ export const CRON_REGISTRY: CronJobDef[] = [
     sectionKey: 'ab_concluded',
     inheritsSchedule: true,
     parentCronId: HAMLET_DAILY,
+    destinations: [
+      { kind: 'team_thomas', label: 'Team Thomas' },
+      { kind: 'progress_update', label: 'Progress update' },
+    ],
   },
   {
     id: 'digest.line_review',
@@ -166,6 +200,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     sectionKey: 'line_review',
     inheritsSchedule: true,
     parentCronId: HAMLET_DAILY,
+    destinations: [{ kind: 'feature_group', label: 'Feature group' }],
   },
 ];
 
