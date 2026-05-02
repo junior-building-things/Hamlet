@@ -877,6 +877,15 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     }
   }
   console.log(`[sync] "${workItemName}" createdAtRaw=${JSON.stringify(createdAtRaw)} → createdYear=${createdYear}`);
+  if (!createdAtRaw) {
+    // Diagnostic: dump every row that mentions a date / time field so
+    // we can find what the brief actually labels the creation time.
+    const dateLines = raw
+      .split('\n')
+      .filter(l => l.includes('|') && (l.includes('时间') || /create|date|time/i.test(l)))
+      .slice(0, 8);
+    if (dateLines.length > 0) console.log(`[sync] "${workItemName}" date-like rows:\n${dateLines.join('\n')}`);
+  }
 
   let packageQrUrl = '';
   let packageDownloadUrl = '';
