@@ -864,7 +864,14 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   // Skip for done features — no need for chat/package/Libra lookups.
   // Only join groups for stories created in 2026+
 
-  const createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
+  // Meego MCP brief returns a mix of markdown sections + a JSON blob.
+  // Markdown table rows are absent for created_at; the value lives in
+  // the JSON: "created_at":"<unix-seconds-or-ms>" or "created_at":<num>.
+  // Try JSON regex first, fall back to the old markdown parser.
+  let createdAtRaw = '';
+  const jsonMatch = raw.match(/"created_at"\s*:\s*"?(\d{10,13})"?/);
+  if (jsonMatch) createdAtRaw = jsonMatch[1];
+  if (!createdAtRaw) createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
   if (createdAtRaw) {
     const ts = Number(createdAtRaw);
@@ -877,15 +884,6 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     }
   }
   console.log(`[sync] "${workItemName}" createdAtRaw=${JSON.stringify(createdAtRaw)} → createdYear=${createdYear}`);
-  if (!createdAtRaw) {
-    // Diagnostic: dump the start of the 工作项字段 table to see what
-    // label the brief uses for creation time (or whether it's missing).
-    const fieldsIdx = raw.indexOf('工作项字段');
-    const snippet = fieldsIdx >= 0
-      ? raw.slice(fieldsIdx, fieldsIdx + 1500)
-      : raw.slice(0, 1500);
-    console.log(`[sync] "${workItemName}" fields table snippet:\n${snippet}`);
-  }
 
   let packageQrUrl = '';
   let packageDownloadUrl = '';
