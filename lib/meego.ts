@@ -864,32 +864,32 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   // Skip for done features — no need for chat/package/Libra lookups.
   // Only join groups for stories created in 2026+
 
-  // Meego MCP brief returns a mix of markdown sections + a JSON blob.
-  // Markdown table rows are absent for created_at; the value lives in
-  // the JSON: "created_at":"<unix-seconds-or-ms>" or "created_at":<num>.
-  // Try JSON regex first, fall back to the old markdown parser.
+  // Meego MCP brief returns a JSON blob (in the markdown text). The
+  // creation time lives at "create_time":"<ISO-8601>", e.g.
+  // "2026-03-26T16:08:47+08:00". Older briefs may use 创建时间 in a
+  // markdown row — keep that as a fallback.
   let createdAtRaw = '';
-  const jsonMatch = raw.match(/"created_at"\s*:\s*"?(\d{10,13})"?/);
+  const jsonMatch = raw.match(/"create_time"\s*:\s*"([^"]+)"/);
   if (jsonMatch) createdAtRaw = jsonMatch[1];
   if (!createdAtRaw) createdAtRaw = parseWorkItemField(raw, '创建时间') || parseWorkItemField(raw, 'created_at');
   let createdYear = 0;
   if (createdAtRaw) {
-    const ts = Number(createdAtRaw);
-    if (!isNaN(ts) && ts > 0) {
-      const ms = ts > 1e12 ? ts : ts * 1000;
-      createdYear = new Date(ms).getFullYear();
+    // ISO date first (most likely shape now).
+    const isoMatch = createdAtRaw.match(/^(\d{4})-\d{2}-\d{2}/);
+    if (isoMatch) {
+      createdYear = Number(isoMatch[1]);
     } else {
-      const m = createdAtRaw.match(/(\d{4})/);
-      if (m) createdYear = Number(m[1]);
+      const ts = Number(createdAtRaw);
+      if (!isNaN(ts) && ts > 0) {
+        const ms = ts > 1e12 ? ts : ts * 1000;
+        createdYear = new Date(ms).getFullYear();
+      } else {
+        const m = createdAtRaw.match(/(\d{4})/);
+        if (m) createdYear = Number(m[1]);
+      }
     }
   }
   console.log(`[sync] "${workItemName}" createdAtRaw=${JSON.stringify(createdAtRaw)} → createdYear=${createdYear}`);
-  if (!createdAtRaw) {
-    // Dump every "<key>":<value> JSON pair containing 'create' to find
-    // the right key name.
-    const matches = raw.match(/"[^"]*create[^"]*"\s*:\s*[^,}\]]+/gi) ?? [];
-    console.log(`[sync] "${workItemName}" create-* JSON keys: ${matches.slice(0, 10).join(' | ')}`);
-  }
 
   let packageQrUrl = '';
   let packageDownloadUrl = '';
