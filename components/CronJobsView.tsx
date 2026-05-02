@@ -44,18 +44,25 @@ function formatRelativeTime(iso?: string): string {
 
 const DESTINATION_STYLES: Record<CronDestinationKind, string> = {
   team_thomas:     'bg-blue-500/15 text-blue-700 border-blue-500/30',
-  progress_update: 'bg-pink-500/15 text-pink-700 border-pink-500/30',
+  progress_update: 'bg-yellow-500/15 text-yellow-700 border-yellow-500/30',
   feature_group:   'bg-teal-500/15 text-teal-700 border-teal-500/30',
   compliance:      'bg-orange-500/15 text-orange-700 border-orange-500/30',
 };
 
+const DESTINATION_ICONS: Partial<Record<CronDestinationKind, string>> = {
+  team_thomas: '/team_thomas.png',
+  progress_update: '/progress.png',
+  feature_group: '/feature_group.png',
+};
+
 function DestinationBadge({ dest }: { dest: CronDestination }) {
   const cls = DESTINATION_STYLES[dest.kind];
+  const icon = DESTINATION_ICONS[dest.kind];
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${cls}`}>
-      {dest.kind === 'team_thomas' && (
+      {icon && (
         <img
-          src="/team_thomas.png"
+          src={icon}
           alt=""
           className="w-3 h-3 rounded-full object-cover"
           onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
@@ -163,7 +170,7 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
 
   const pausedBadgeCls = 'bg-gray-500/15 text-gray-600 border-gray-500/30';
   const editable = job.kind === 'cloud_scheduler';
-  const selectCls = `text-xs bg-[var(--card-hover)] border border-[var(--border)] rounded px-2 py-1 text-[var(--foreground)] focus:outline-none disabled:opacity-60 ${editable ? 'cursor-pointer' : 'cursor-not-allowed'}`;
+  const selectCls = `text-[11px] bg-[var(--card-hover)] border border-[var(--border)] rounded px-2 py-0.5 text-[var(--foreground)] focus:outline-none focus:border-blue-500 disabled:opacity-60 ${editable ? 'cursor-pointer' : 'cursor-not-allowed'}`;
 
   async function updateSchedule(field: 'scheduleTime' | 'scheduleFrequency', value: string) {
     setBusy(true);
@@ -200,9 +207,8 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
             ))}
           </div>
           <div className="text-xs text-[var(--muted)] mb-2">{job.description}</div>
-          <div className="text-[11px] text-gray-500 mb-2">Last run: {formatRelativeTime(job.lastAttemptTime)}</div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="inline-flex items-center gap-1 text-[var(--muted)]">
+          <div className="flex items-center gap-3 flex-wrap text-[11px] text-[var(--muted)]">
+            <label className="inline-flex items-center gap-1.5">
               <Clock className="w-3 h-3" />
               <select
                 value={job.scheduleTime}
@@ -218,7 +224,7 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
-            </div>
+            </label>
             <select
               value={job.scheduleFrequency}
               onChange={e => updateSchedule('scheduleFrequency', e.target.value)}
@@ -234,6 +240,7 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
               ))}
             </select>
           </div>
+          <div className="mt-1.5 text-[11px] text-gray-500">Last run: {formatRelativeTime(job.lastAttemptTime)}</div>
         </div>
         <div className="shrink-0 flex items-center gap-2">
           <button

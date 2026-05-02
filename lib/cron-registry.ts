@@ -106,7 +106,10 @@ export const CRON_REGISTRY: CronJobDef[] = [
     kind: 'cloud_scheduler',
     cloudSchedulerJobId: 'poll-prd-ready',
     cloudSchedulerService: 'junior',
-    destinations: [{ kind: 'compliance', label: 'Compliance' }],
+    destinations: [
+      { kind: 'team_thomas', label: 'Team Thomas' },
+      { kind: 'compliance', label: 'Compliance' },
+    ],
   },
 
   // ── Per-section digest crons ──────────────────────────────────────────────
