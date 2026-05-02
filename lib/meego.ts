@@ -876,6 +876,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       if (m) createdYear = Number(m[1]);
     }
   }
+  console.log(`[sync] "${workItemName}" createdAtRaw=${JSON.stringify(createdAtRaw)} → createdYear=${createdYear}`);
 
   let packageQrUrl = '';
   let packageDownloadUrl = '';
