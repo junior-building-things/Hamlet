@@ -1,5 +1,5 @@
 import { Priority, Feature, MeegoComment } from './types';
-import { extractFigmaUrlFromPrd, searchAbReport, joinFeatureChat, getPackageQrUrl, searchLibraInChat } from './lark';
+import { extractFigmaUrlFromPrd, searchAbReport, joinFeatureChat, addBotToChat, getPackageQrUrl, searchLibraInChat } from './lark';
 
 const MEEGO_MCP_URL = 'https://meego.larkoffice.com/mcp_server/v1';
 const MY_EMAIL = process.env.OWNER_EMAIL!;
@@ -900,6 +900,19 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     try {
       if (!chatId) {
         chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl, createdYear < 2026)) ?? '';
+      }
+      // For 2026+ stories, ensure the bot is actually a member of the
+      // chat (idempotent — addBotToChat returns true if already in).
+      // Needed when chatId came from the cache: an earlier sync may
+      // have resolved the chatId via the bot-not-yet-a-member search
+      // path (skipJoin=true) and stamped the id on the cache without
+      // ever joining.
+      if (chatId && createdYear >= 2026) {
+        try {
+          await addBotToChat(chatId, userAccessToken);
+        } catch (e) {
+          console.warn(`[sync] "${workItemName}" addBotToChat failed:`, e);
+        }
       }
       if (chatId) {
         const pkg = await getPackageQrUrl(chatId);
