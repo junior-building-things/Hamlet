@@ -58,16 +58,32 @@ export interface CronDestination {
 }
 
 const HAMLET_DAILY = 'hamlet-daily-digest';
+const REFRESH_FEATURE_CACHE = 'refresh-feature-cache';
 
 export const CRON_REGISTRY: CronJobDef[] = [
   // ── Cloud Scheduler jobs ──────────────────────────────────────────────────
   {
-    id: HAMLET_DAILY,
-    name: 'Hamlet — Daily digest run',
+    id: REFRESH_FEATURE_CACHE,
+    name: 'Refresh feature cache',
     description:
-      'Master daily run: discovers all PM-owned features, fetches Meego state, evaluates risk, ' +
-      'detects PRD changes + AB transitions, scans for unanswered questions, then sends every ' +
-      'enabled sub-card below to the digest target chat.',
+      'Pulls Meego state for every PM-owned feature, detects status transitions + PRD changes, ' +
+      'updates the GCS feature cache and writes feature-snapshots.json. Queues per-section cards ' +
+      'into DigestState. Sends NO cards itself — the per-section crons below send.',
+    schedule: '0 0,10 * * *',
+    scheduleTime: '8am/6pm SGT',
+    scheduleFrequency: 'Daily',
+    target: 'GCS cache + DigestState queues',
+    kind: 'cloud_scheduler',
+    cloudSchedulerJobId: REFRESH_FEATURE_CACHE,
+    cloudSchedulerService: 'hamlet',
+    destinations: [],
+  },
+  {
+    id: HAMLET_DAILY,
+    name: 'Hamlet — Daily digest (legacy)',
+    description:
+      'Legacy bundled run kept for manual triggers. Sub-sections now have their own crons; ' +
+      'this fires the unified pipeline (data fetch + every card) end-to-end.',
     schedule: '0 14 * * 1-5',
     scheduleTime: '10am SGT',
     scheduleFrequency: 'Weekdays',
@@ -93,7 +109,9 @@ export const CRON_REGISTRY: CronJobDef[] = [
     destinations: [{ kind: 'compliance', label: 'Compliance' }],
   },
 
-  // ── Sub-sections of the daily digest ──────────────────────────────────────
+  // ── Per-section digest crons ──────────────────────────────────────────────
+  // Each is its own Cloud Scheduler job hitting POST /api/digests/section/<id>.
+  // Refresh-feature-cache (above) populates queues / snapshots; these consume.
   {
     id: 'digest.risk',
     name: 'Daily risk digest',
@@ -104,26 +122,26 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleTime: '10am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
-    kind: 'digest_section',
+    kind: 'cloud_scheduler',
+    cloudSchedulerJobId: 'digest-risk',
+    cloudSchedulerService: 'hamlet',
     sectionKey: 'risk',
-    inheritsSchedule: true,
-    parentCronId: HAMLET_DAILY,
     destinations: [{ kind: 'team_thomas', label: 'Team Thomas' }],
   },
   {
     id: 'digest.prd_changes',
     name: 'PRD change-log digest',
     description:
-      'Detects PRDs that have been edited since the last snapshot, summarises what changed via ' +
-      'Gemini, appends a Change Log entry to each PRD, and aggregates today\'s changes into a card.',
+      'Sends the queue of PRD changes detected by the refresh job (Gemini-summarised diffs ' +
+      'appended to each PRD\'s Change Log section).',
     schedule: '0 14 * * 1-5',
     scheduleTime: '10am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
-    kind: 'digest_section',
+    kind: 'cloud_scheduler',
+    cloudSchedulerJobId: 'digest-prd-changes',
+    cloudSchedulerService: 'hamlet',
     sectionKey: 'prd_changes',
-    inheritsSchedule: true,
-    parentCronId: HAMLET_DAILY,
     destinations: [
       { kind: 'team_thomas', label: 'Team Thomas' },
       { kind: 'feature_group', label: 'Feature group' },
@@ -139,10 +157,10 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleTime: '10am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
-    kind: 'digest_section',
+    kind: 'cloud_scheduler',
+    cloudSchedulerJobId: 'digest-unanswered',
+    cloudSchedulerService: 'hamlet',
     sectionKey: 'unanswered',
-    inheritsSchedule: true,
-    parentCronId: HAMLET_DAILY,
     destinations: [
       { kind: 'team_thomas', label: 'Team Thomas' },
       { kind: 'feature_group', label: 'Feature group' },
@@ -152,16 +170,16 @@ export const CRON_REGISTRY: CronJobDef[] = [
     id: 'digest.ab_open',
     name: 'AB-open digest',
     description:
-      'Notifies once per feature whose Meego status transitions to 实验中 (AB Testing). One card ' +
-      'per run aggregating all transitions; per-feature Send-to-PM-Group + Edit buttons.',
+      'Sends the queue of features whose Meego status transitioned to 实验中 (AB Testing) ' +
+      'since the last refresh. One aggregate card with per-feature Send-to-PM-Group + Edit buttons.',
     schedule: '0 14 * * 1-5',
     scheduleTime: '10am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
-    kind: 'digest_section',
+    kind: 'cloud_scheduler',
+    cloudSchedulerJobId: 'digest-ab-open',
+    cloudSchedulerService: 'hamlet',
     sectionKey: 'ab_open',
-    inheritsSchedule: true,
-    parentCronId: HAMLET_DAILY,
     destinations: [
       { kind: 'team_thomas', label: 'Team Thomas' },
       { kind: 'progress_update', label: 'Progress update' },
@@ -177,10 +195,10 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleTime: '10am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
-    kind: 'digest_section',
+    kind: 'cloud_scheduler',
+    cloudSchedulerJobId: 'digest-ab-concluded',
+    cloudSchedulerService: 'hamlet',
     sectionKey: 'ab_concluded',
-    inheritsSchedule: true,
-    parentCronId: HAMLET_DAILY,
     destinations: [
       { kind: 'team_thomas', label: 'Team Thomas' },
       { kind: 'progress_update', label: 'Progress update' },
@@ -190,16 +208,16 @@ export const CRON_REGISTRY: CronJobDef[] = [
     id: 'digest.line_review',
     name: 'Line Review (PRD Ready) cards',
     description:
-      'Fires once per feature whose status transitions into 待线内评审 (Line Review). One card per ' +
-      'transition sent to the feature\'s group chat with the PRD link.',
+      'Sends the queue of features whose Meego status just transitioned to 待线内评审 ' +
+      '(Line Review). One feature card per transition, sent to the feature\'s group chat.',
     schedule: '0 14 * * 1-5',
     scheduleTime: '10am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Per-feature group chat',
-    kind: 'digest_section',
+    kind: 'cloud_scheduler',
+    cloudSchedulerJobId: 'digest-line-review',
+    cloudSchedulerService: 'hamlet',
     sectionKey: 'line_review',
-    inheritsSchedule: true,
-    parentCronId: HAMLET_DAILY,
     destinations: [{ kind: 'feature_group', label: 'Feature group' }],
   },
 ];

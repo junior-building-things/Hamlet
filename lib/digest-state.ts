@@ -255,6 +255,50 @@ export interface DigestStateFile {
    * flag here for consistent UI rendering.
    */
   cronPaused?: string[];
+
+  /**
+   * Pending Line Review (PRD Ready ✅) cards queued by the
+   * `refresh-feature-cache` job. Consumed + cleared by the
+   * `digest-line-review` cron. Each entry produces one feature card
+   * sent to the feature's group chat.
+   */
+  pendingLineReviewCards?: Array<{
+    workItemId: string;
+    name: string;
+    meegoUrl: string;
+    prdUrl?: string;
+    priority: string;
+    queuedAtIso: string;
+  }>;
+
+  /**
+   * Pending AB-open cards queued by the refresh job. Consumed + cleared
+   * by the `digest-ab-open` cron, which loads the full MeegoFeature
+   * from the feature-snapshots file by workItemId before sending the
+   * aggregate card.
+   */
+  pendingAbOpenCards?: Array<{
+    workItemId: string;
+    libraUrl: string;
+    queuedAtIso: string;
+  }>;
+
+  /**
+   * Pending PRD-change cards queued by the refresh job. The refresh
+   * job runs the PRD content diff + Gemini summarisation and stores
+   * the result here; the `digest-prd-changes` cron sends the aggregate
+   * card and clears the queue.
+   */
+  pendingPrdChanges?: Array<{
+    name: string;
+    prdUrl: string;
+    meegoUrl: string;
+    summary: string;
+    chatId?: string;
+    workItemId?: string;
+    pocEmails?: string[];
+    queuedAtIso: string;
+  }>;
 }
 
 /**
@@ -357,6 +401,15 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const cronPaused = Array.isArray(obj.cronPaused)
     ? (obj.cronPaused as unknown[]).map(String)
     : undefined;
+  const pendingLineReviewCards = Array.isArray(obj.pendingLineReviewCards)
+    ? (obj.pendingLineReviewCards as DigestStateFile['pendingLineReviewCards'])
+    : undefined;
+  const pendingAbOpenCards = Array.isArray(obj.pendingAbOpenCards)
+    ? (obj.pendingAbOpenCards as DigestStateFile['pendingAbOpenCards'])
+    : undefined;
+  const pendingPrdChanges = Array.isArray(obj.pendingPrdChanges)
+    ? (obj.pendingPrdChanges as DigestStateFile['pendingPrdChanges'])
+    : undefined;
 
   return {
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
@@ -376,6 +429,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     juniorCommentThreads,
     postFeatureMap,
     cronPaused,
+    pendingLineReviewCards,
+    pendingAbOpenCards,
+    pendingPrdChanges,
   };
 }
 

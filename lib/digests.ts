@@ -232,11 +232,35 @@ function shouldSendSection(
   return true;
 }
 
+/**
+ * Run mode for runDailyDigests.
+ *  - 'full' (default, back-compat): pull Meego, detect transitions/PRD changes, send all cards.
+ *    Used by the manual /api/digests/run endpoint and the legacy hamlet-daily-digest cron.
+ *  - 'refresh': pull Meego, detect transitions/PRD changes, write feature-snapshots.json,
+ *    QUEUE cards into DigestState (don't send). Used by refresh-feature-cache cron.
+ *  - 'sections-only': skip Meego pull (load from snapshots), skip detection (refresh did it),
+ *    only send the section in `sectionFilter`. Used by the per-section crons.
+ */
+export type DigestRunMode = 'full' | 'refresh' | 'sections-only';
+
 export interface DigestRunOptions {
+  /** Default 'full'. See DigestRunMode for details. */
+  mode?: DigestRunMode;
   /** When set, only this digest section's send fires. Other sections
    *  still do their data work (because sections share fetches), but
    *  the card-send for non-matching sections is skipped. */
   sectionFilter?: string;
+}
+
+/**
+ * In refresh + full mode, returns whether the section should send NOW
+ * (paused check + sectionFilter check). In refresh mode we never SEND;
+ * we always QUEUE — but we still respect the paused flag so a paused
+ * section's queue doesn't grow unbounded.
+ */
+function shouldQueueSection(state: DigestStateFile, id: string): boolean {
+  if (Array.isArray(state.cronPaused) && state.cronPaused.includes(id)) return false;
+  return true;
 }
 
 export interface UnansweredQuestion {
@@ -3198,6 +3222,28 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
       const isForwardTransition = prevStatus === 'PRD/Design Prep';
       const alreadyNotified = lineReviewNotified.has(f.workItemId);
       if (isLineReviewNow && isForwardTransition && !alreadyNotified) {
+        if (opts.mode === 'refresh') {
+          // Refresh mode: queue for the digest-line-review cron to consume.
+          if (!shouldQueueSection(state, 'digest.line_review')) {
+            console.log(`[digests] Line Review queue skipped (paused): "${f.name}"`);
+            continue;
+          }
+          console.log(`[digests] PRD Ready queued → "${f.name}" (PRD/Design Prep → Line Review)`);
+          lineReviewNotified.add(f.workItemId);
+          notifiedSetChanged = true;
+          state.pendingLineReviewCards = [
+            ...(state.pendingLineReviewCards ?? []),
+            {
+              workItemId: f.workItemId,
+              name: f.name,
+              meegoUrl: f.meegoUrl,
+              prdUrl: f.prd,
+              priority: f.priority ?? 'P1',
+              queuedAtIso: new Date().toISOString(),
+            },
+          ];
+          continue;
+        }
         if (!shouldSendSection(state, opts, 'digest.line_review')) {
           console.log(`[digests] Line Review card skipped (paused or section-filtered): "${f.name}"`);
           continue;
@@ -3241,7 +3287,23 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     // Send the aggregated AB-open card after the loop. Fire-and-forget
     // (with .catch) because a slow PRD parse shouldn't block the rest
     // of the digest pipeline.
-    if (abOpenTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_open')) {
+    if (opts.mode === 'refresh') {
+      // Refresh mode: queue each transition for the digest-ab-open cron.
+      if (abOpenTransitions.length > 0 && shouldQueueSection(state, 'digest.ab_open')) {
+        const now = new Date().toISOString();
+        state.pendingAbOpenCards = [
+          ...(state.pendingAbOpenCards ?? []),
+          ...abOpenTransitions.map(t => ({
+            workItemId: t.feature.workItemId,
+            libraUrl: t.libraUrl,
+            queuedAtIso: now,
+          })),
+        ];
+        console.log(`[digests] AB-open queued ${abOpenTransitions.length} transitions`);
+      } else if (abOpenTransitions.length > 0) {
+        console.log('[digests] AB-open queue skipped (paused)');
+      }
+    } else if (abOpenTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_open')) {
       sendAbOpenDigestCard(abOpenTransitions)
         .catch(e => console.warn('[digests] AB-open digest card send failed:', e));
     } else if (abOpenTransitions.length > 0) {
@@ -3435,7 +3497,19 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // time out the whole digest run. This ensures the PRD digest is delivered
   // even if later steps fail.
   let prdChangesSentEarly = false;
-  if (prdChanges.length > 0 && !shouldSendSection(state, opts, 'digest.prd_changes')) {
+  if (opts.mode === 'refresh') {
+    // Refresh mode: queue for the digest-prd-changes cron to consume.
+    if (prdChanges.length > 0 && shouldQueueSection(state, 'digest.prd_changes')) {
+      const now = new Date().toISOString();
+      state.pendingPrdChanges = [
+        ...(state.pendingPrdChanges ?? []),
+        ...prdChanges.map(p => ({ ...p, queuedAtIso: now })),
+      ];
+      console.log(`[digests] PRD changes queued: ${prdChanges.length}`);
+    } else if (prdChanges.length > 0) {
+      console.log('[digests] PRD changes queue skipped (paused)');
+    }
+  } else if (prdChanges.length > 0 && !shouldSendSection(state, opts, 'digest.prd_changes')) {
     console.log('[digests] PRD changes digest skipped (paused or section-filtered)');
   } else if (prdChanges.length > 0) {
     const card = buildPrdChangesDigestCard(prdChanges);
@@ -3839,7 +3913,14 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     }
     console.log(`[digests] AB-concluded scan: ${scanned} chats scanned, ${matched} matched`);
     if (abConcludedChanged) state.abConcludedNotified = [...abConcluded];
-    if (abConcludedTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_concluded')) {
+    if (opts.mode === 'refresh') {
+      // Refresh mode doesn't send AB-concluded — the digest-ab-concluded
+      // cron does its own scan against snapshots. We still mark transitions
+      // as notified above so we don't double-fire on the next refresh.
+      if (abConcludedTransitions.length > 0) {
+        console.log(`[digests] AB-concluded scan found ${abConcludedTransitions.length} (skipped send: refresh mode)`);
+      }
+    } else if (abConcludedTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_concluded')) {
       sendAbConcludedDigestCard(abConcludedTransitions)
         .catch(e => console.warn('[digests] AB-concluded digest card send failed:', e));
     } else if (abConcludedTransitions.length > 0) {
@@ -4064,7 +4145,9 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // Step 7: Send risk digest (always) — interactive card with per-feature
   // buttons, posted to the PM group chat.
   let riskSent = false;
-  if (rioToken && !shouldSendSection(state, opts, 'digest.risk')) {
+  if (opts.mode === 'refresh') {
+    console.log('[digests] risk digest skipped (refresh mode — sent by digest-risk cron)');
+  } else if (rioToken && !shouldSendSection(state, opts, 'digest.risk')) {
     console.log('[digests] risk digest skipped (paused or section-filtered)');
   } else if (rioToken) {
     const card = await buildRiskDigestCard(riskFindings);
@@ -4081,7 +4164,9 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // Hamlet/Junior bot identity so card-action button clicks
   // (Let me Reply) route to Hamlet's `/api/lark/card-action`.
   let unansweredSent = false;
-  if (unansweredFindings.length > 0 && !shouldSendSection(state, opts, 'digest.unanswered')) {
+  if (opts.mode === 'refresh') {
+    console.log('[digests] unanswered digest skipped (refresh mode — sent by digest-unanswered cron)');
+  } else if (unansweredFindings.length > 0 && !shouldSendSection(state, opts, 'digest.unanswered')) {
     console.log('[digests] unanswered digest skipped (paused or section-filtered)');
   } else if (unansweredFindings.length > 0) {
     const sendToken = botToken || rioToken;
@@ -4104,6 +4189,29 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // to avoid timeout issues. Re-used flag for the return type.
   const prdChangesSent = prdChangesSentEarly;
 
+  // Refresh mode: write the feature-snapshots file so per-section crons
+  // can read fully-resolved MeegoFeatures (incl. iosVersion, chatId,
+  // serverPlannedLaunchDate) without re-pulling Meego. Save state too,
+  // so queue updates persist.
+  if (opts.mode === 'refresh') {
+    try {
+      const { saveFeatureSnapshots } = await import('./feature-snapshots');
+      const snapshotMap: Record<string, MeegoFeature> = {};
+      for (const f of features) snapshotMap[f.workItemId] = f;
+      await saveFeatureSnapshots({
+        refreshedAtIso: new Date().toISOString(),
+        features: snapshotMap,
+        inDevIds: inDev.map(f => f.workItemId),
+        juniorChats,
+      });
+      console.log(`[digests] feature-snapshots.json written: ${features.length} features, ${inDev.length} inDev, ${juniorChats.length} juniorChats`);
+    } catch (e) {
+      console.warn('[digests] saveFeatureSnapshots failed:', e);
+    }
+    // Persist the queue updates added during this run.
+    await saveDigestState(state);
+  }
+
   return {
     featuresChecked: inDev.length,
     riskSent,
@@ -4116,3 +4224,141 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
 
 // Silence unused import warnings — kept for when chatId resolution is added.
 export type { Feature };
+
+// ─── Per-section digest entrypoints ───────────────────────────────────────
+//
+// The legacy daily digest pulls Meego + sends every card in one cron.
+// We now split that into:
+//   1. refresh-feature-cache cron → runDailyDigests({ mode: 'refresh' })
+//      Pulls Meego, queues line_review/ab_open/prd_changes cards, writes
+//      feature-snapshots.json. Sends NO cards.
+//   2. Per-section crons → runDigestSection(<id>)
+//      Each section is its own Cloud Scheduler job.
+//      - Queue-based (line_review, ab_open, prd_changes): drain queue, send card.
+//      - Scan-based (risk, unanswered, ab_concluded): delegate to
+//        runDailyDigests({ mode: 'full', sectionFilter: id }) which still
+//        pulls Meego (for now — Phase B+ will switch to snapshot reads).
+
+export interface DigestSectionResult {
+  sectionId: string;
+  sent: boolean;
+  count: number;
+  note?: string;
+}
+
+export async function runDigestSection(sectionId: string): Promise<DigestSectionResult> {
+  switch (sectionId) {
+    case 'digest.line_review': return drainLineReviewQueue();
+    case 'digest.ab_open': return drainAbOpenQueue();
+    case 'digest.prd_changes': return drainPrdChangesQueue();
+    case 'digest.risk':
+    case 'digest.unanswered':
+    case 'digest.ab_concluded': {
+      // Scan-based sections: re-use runDailyDigests with a sectionFilter so
+      // we get the same scan + send logic, but only this card actually fires.
+      const result = await runDailyDigests({ mode: 'full', sectionFilter: sectionId });
+      const sent = sectionId === 'digest.risk' ? result.riskSent
+        : sectionId === 'digest.unanswered' ? result.unansweredSent
+        : false; // ab_concluded is fire-and-forget; can't tell from result
+      return { sectionId, sent, count: 1, note: 'scan-based' };
+    }
+    default:
+      throw new Error(`unknown digest section: ${sectionId}`);
+  }
+}
+
+async function drainLineReviewQueue(): Promise<DigestSectionResult> {
+  const state = await loadDigestState();
+  const queue = state.pendingLineReviewCards ?? [];
+  if (queue.length === 0) {
+    console.log('[digests:line_review] queue empty');
+    return { sectionId: 'digest.line_review', sent: false, count: 0, note: 'empty queue' };
+  }
+  let sent = 0;
+  for (const item of queue) {
+    try {
+      await sendFeatureCard({
+        name: item.name,
+        meegoUrl: item.meegoUrl,
+        prdUrl: item.prdUrl,
+        priority: item.priority,
+        headerTitle: 'PRD Ready ✅',
+        headerTemplate: 'green',
+      });
+      sent++;
+    } catch (e) {
+      console.warn(`[digests:line_review] send failed for "${item.name}":`, e);
+    }
+  }
+  state.pendingLineReviewCards = [];
+  await saveDigestState(state);
+  console.log(`[digests:line_review] sent ${sent}/${queue.length}, queue cleared`);
+  return { sectionId: 'digest.line_review', sent: sent > 0, count: sent };
+}
+
+async function drainAbOpenQueue(): Promise<DigestSectionResult> {
+  const state = await loadDigestState();
+  const queue = state.pendingAbOpenCards ?? [];
+  if (queue.length === 0) {
+    console.log('[digests:ab_open] queue empty');
+    return { sectionId: 'digest.ab_open', sent: false, count: 0, note: 'empty queue' };
+  }
+  // Hydrate full MeegoFeatures from the snapshots file.
+  const { loadFeatureSnapshots } = await import('./feature-snapshots');
+  const snapshots = await loadFeatureSnapshots();
+  if (!snapshots) {
+    console.warn('[digests:ab_open] no feature-snapshots.json — cannot hydrate; leaving queue intact for next refresh');
+    return { sectionId: 'digest.ab_open', sent: false, count: 0, note: 'snapshots missing' };
+  }
+  const transitions: Array<{ feature: MeegoFeature; libraUrl: string }> = [];
+  const missing: string[] = [];
+  for (const item of queue) {
+    const feature = snapshots.features[item.workItemId];
+    if (!feature) { missing.push(item.workItemId); continue; }
+    transitions.push({ feature, libraUrl: item.libraUrl });
+  }
+  if (missing.length > 0) {
+    console.warn(`[digests:ab_open] ${missing.length} queued items missing from snapshots: ${missing.join(',')}`);
+  }
+  if (transitions.length === 0) {
+    console.log('[digests:ab_open] no hydratable transitions');
+    return { sectionId: 'digest.ab_open', sent: false, count: 0, note: 'all missing' };
+  }
+  try {
+    await sendAbOpenDigestCard(transitions);
+    state.pendingAbOpenCards = [];
+    await saveDigestState(state);
+    console.log(`[digests:ab_open] sent ${transitions.length}, queue cleared`);
+    return { sectionId: 'digest.ab_open', sent: true, count: transitions.length };
+  } catch (e) {
+    console.warn('[digests:ab_open] send failed; queue left intact:', e);
+    return { sectionId: 'digest.ab_open', sent: false, count: 0, note: 'send failed' };
+  }
+}
+
+async function drainPrdChangesQueue(): Promise<DigestSectionResult> {
+  const state = await loadDigestState();
+  const queue = state.pendingPrdChanges ?? [];
+  if (queue.length === 0) {
+    console.log('[digests:prd_changes] queue empty');
+    return { sectionId: 'digest.prd_changes', sent: false, count: 0, note: 'empty queue' };
+  }
+  const card = buildPrdChangesDigestCard(queue);
+  try {
+    const juniorToken = await getLarkBotToken();
+    const id = await sendInteractiveCardToChat(
+      PM_GROUP_CHAT_ID, card.title, card.template, card.sections, juniorToken,
+    );
+    if (id) {
+      state.pendingPrdChanges = [];
+      await saveDigestState(state);
+      console.log(`[digests:prd_changes] sent ${queue.length}, queue cleared`);
+      return { sectionId: 'digest.prd_changes', sent: true, count: queue.length };
+    }
+    console.warn('[digests:prd_changes] send returned no id; queue left intact');
+    return { sectionId: 'digest.prd_changes', sent: false, count: 0, note: 'send returned null' };
+  } catch (e) {
+    console.warn('[digests:prd_changes] send failed; queue left intact:', e);
+    return { sectionId: 'digest.prd_changes', sent: false, count: 0, note: 'send failed' };
+  }
+}
