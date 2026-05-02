@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, Play, Pause, PlayCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { TIME_OPTIONS, FREQUENCY_OPTIONS } from '@/lib/cron-expr';
 
 type CronKind = 'cloud_scheduler' | 'digest_section';
 interface CronJob {
@@ -117,13 +118,33 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
   }
 
   const pausedBadgeCls = 'bg-gray-500/15 text-gray-600 border-gray-500/30';
-  const timeBadgeCls = 'bg-blue-500/15 text-blue-700 border-blue-500/30';
-  const FREQ_BADGE_CLS: Record<string, string> = {
+  const timeSelectCls = 'bg-blue-500/15 text-blue-700 border-blue-500/30';
+  const FREQ_SELECT_CLS: Record<string, string> = {
     'Daily':    'bg-emerald-500/15 text-emerald-700 border-emerald-500/30',
     'Weekdays': 'bg-amber-500/15 text-amber-700 border-amber-500/30',
   };
-  const freqBadgeCls = FREQ_BADGE_CLS[job.scheduleFrequency]
+  const freqSelectCls = FREQ_SELECT_CLS[job.scheduleFrequency]
     ?? 'bg-purple-500/15 text-purple-700 border-purple-500/30';
+  const editable = job.kind === 'cloud_scheduler';
+
+  async function updateSchedule(field: 'scheduleTime' | 'scheduleFrequency', value: string) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crons/${job.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Update failed');
+      toast.success(`${job.name} → ${value}`);
+      onChange();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Update failed');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl">
@@ -136,12 +157,38 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
                 Paused
               </span>
             )}
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${timeBadgeCls}`}>
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${timeSelectCls}`}>
               <Clock className="w-2.5 h-2.5" />
-              {job.scheduleTime}
+              <select
+                value={job.scheduleTime}
+                onChange={e => updateSchedule('scheduleTime', e.target.value)}
+                disabled={!editable || busy}
+                title={editable ? 'Change send time' : `Inherits from ${job.parentCronId}`}
+                className="bg-transparent border-0 text-[10px] font-semibold uppercase tracking-wide focus:outline-none disabled:opacity-100 disabled:cursor-not-allowed cursor-pointer pr-0.5"
+              >
+                {!TIME_OPTIONS.includes(job.scheduleTime as typeof TIME_OPTIONS[number]) && (
+                  <option value={job.scheduleTime}>{job.scheduleTime}</option>
+                )}
+                {TIME_OPTIONS.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
             </span>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${freqBadgeCls}`}>
-              {job.scheduleFrequency}
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${freqSelectCls}`}>
+              <select
+                value={job.scheduleFrequency}
+                onChange={e => updateSchedule('scheduleFrequency', e.target.value)}
+                disabled={!editable || busy}
+                title={editable ? 'Change frequency' : `Inherits from ${job.parentCronId}`}
+                className="bg-transparent border-0 text-[10px] font-semibold uppercase tracking-wide focus:outline-none disabled:opacity-100 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {!FREQUENCY_OPTIONS.includes(job.scheduleFrequency as typeof FREQUENCY_OPTIONS[number]) && (
+                  <option value={job.scheduleFrequency}>{job.scheduleFrequency}</option>
+                )}
+                {FREQUENCY_OPTIONS.map(f => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
             </span>
           </div>
           <div className="text-xs text-[var(--muted)] mb-2">{job.description}</div>
