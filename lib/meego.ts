@@ -878,13 +878,13 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   }
   console.log(`[sync] "${workItemName}" createdAtRaw=${JSON.stringify(createdAtRaw)} → createdYear=${createdYear}`);
   if (!createdAtRaw) {
-    // Diagnostic: dump every row that mentions a date / time field so
-    // we can find what the brief actually labels the creation time.
-    const dateLines = raw
-      .split('\n')
-      .filter((l: string) => l.includes('|') && (l.includes('时间') || /create|date|time/i.test(l)))
-      .slice(0, 8);
-    if (dateLines.length > 0) console.log(`[sync] "${workItemName}" date-like rows:\n${dateLines.join('\n')}`);
+    // Diagnostic: dump the start of the 工作项字段 table to see what
+    // label the brief uses for creation time (or whether it's missing).
+    const fieldsIdx = raw.indexOf('工作项字段');
+    const snippet = fieldsIdx >= 0
+      ? raw.slice(fieldsIdx, fieldsIdx + 1500)
+      : raw.slice(0, 1500);
+    console.log(`[sync] "${workItemName}" fields table snippet:\n${snippet}`);
   }
 
   let packageQrUrl = '';
