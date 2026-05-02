@@ -26,15 +26,17 @@ export async function GET() {
     const liveById = new Map(live.map(l => [l.id, l.info]));
 
     const jobs = CRON_REGISTRY.map(c => {
-      // Resolve schedule + lastAttemptTime:
+      // Resolve schedule + lastAttemptTime + GCP-side paused state:
       //   - cloud_scheduler: live value if available, else registry default
       //   - digest_section: parent's resolved value (sub-sections fire as part of parent run)
       let schedule = c.schedule;
       let lastAttemptTime: string | undefined;
+      let gcpPaused = false;
       if (c.kind === 'cloud_scheduler') {
         const info = liveById.get(c.id);
         if (info?.schedule) schedule = info.schedule;
         lastAttemptTime = info?.lastAttemptTime;
+        gcpPaused = info?.state === 'PAUSED';
       } else if (c.parentCronId) {
         const parentInfo = liveById.get(c.parentCronId);
         if (parentInfo?.schedule) schedule = parentInfo.schedule;
@@ -46,7 +48,7 @@ export async function GET() {
         schedule,
         scheduleTime: parsed?.time ?? c.scheduleTime,
         scheduleFrequency: parsed?.frequency ?? c.scheduleFrequency,
-        paused: paused.has(c.id),
+        paused: paused.has(c.id) || gcpPaused,
         lastAttemptTime,
       };
     });
