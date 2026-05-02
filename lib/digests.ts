@@ -3608,6 +3608,41 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     console.log(`[digests] resolved Lark chat for ${resolvedChats}/${inDev.length} in-dev features`);
   }
 
+  // ── Refresh-mode early return ─────────────────────────────────────────────
+  // Refresh's job is finished here: we have features with resolved chatIds
+  // + deadlines, queues populated by Steps 2b/2c, and notify sets updated.
+  // Skip Steps 4-8 (risk eval, link auto-fetch, Q&A scan, AB-concluded scan,
+  // version-delay cache patch, sends) — those belong to the per-section crons.
+  if (opts.mode === 'refresh') {
+    try {
+      const { saveFeatureSnapshots } = await import('./feature-snapshots');
+      const snapshotMap: Record<string, MeegoFeature> = {};
+      for (const f of features) snapshotMap[f.workItemId] = f;
+      await saveFeatureSnapshots({
+        refreshedAtIso: new Date().toISOString(),
+        features: snapshotMap,
+        inDevIds: inDev.map(f => f.workItemId),
+        juniorChats,
+      });
+      console.log(`[digests] feature-snapshots.json written: ${features.length} features, ${inDev.length} inDev, ${juniorChats.length} juniorChats`);
+    } catch (e) {
+      console.warn('[digests] saveFeatureSnapshots failed:', e);
+    }
+    if (notifiedSetChanged) {
+      state.abOpenNotified = [...abOpenNotified];
+      state.lineReviewNotified = [...lineReviewNotified];
+    }
+    await saveDigestState(state);
+    return {
+      featuresChecked: inDev.length,
+      riskSent: false,
+      unansweredSent: false,
+      prdChangesSent: false,
+      riskFindings: [],
+      unansweredFindings: [],
+    };
+  }
+
   // Step 4: Evaluate risk — Meego signals (deadline pressure) plus a
   // persistence-aware qualitative chat risk pass via Gemini 2.5 Flash Lite
   // (last 24h of chat messages, with prior state passed in so quiet days
@@ -3913,14 +3948,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     }
     console.log(`[digests] AB-concluded scan: ${scanned} chats scanned, ${matched} matched`);
     if (abConcludedChanged) state.abConcludedNotified = [...abConcluded];
-    if (opts.mode === 'refresh') {
-      // Refresh mode doesn't send AB-concluded — the digest-ab-concluded
-      // cron does its own scan against snapshots. We still mark transitions
-      // as notified above so we don't double-fire on the next refresh.
-      if (abConcludedTransitions.length > 0) {
-        console.log(`[digests] AB-concluded scan found ${abConcludedTransitions.length} (skipped send: refresh mode)`);
-      }
-    } else if (abConcludedTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_concluded')) {
+    if (abConcludedTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_concluded')) {
       sendAbConcludedDigestCard(abConcludedTransitions)
         .catch(e => console.warn('[digests] AB-concluded digest card send failed:', e));
     } else if (abConcludedTransitions.length > 0) {
@@ -4145,9 +4173,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // Step 7: Send risk digest (always) — interactive card with per-feature
   // buttons, posted to the PM group chat.
   let riskSent = false;
-  if (opts.mode === 'refresh') {
-    console.log('[digests] risk digest skipped (refresh mode — sent by digest-risk cron)');
-  } else if (rioToken && !shouldSendSection(state, opts, 'digest.risk')) {
+  if (rioToken && !shouldSendSection(state, opts, 'digest.risk')) {
     console.log('[digests] risk digest skipped (paused or section-filtered)');
   } else if (rioToken) {
     const card = await buildRiskDigestCard(riskFindings);
@@ -4164,9 +4190,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // Hamlet/Junior bot identity so card-action button clicks
   // (Let me Reply) route to Hamlet's `/api/lark/card-action`.
   let unansweredSent = false;
-  if (opts.mode === 'refresh') {
-    console.log('[digests] unanswered digest skipped (refresh mode — sent by digest-unanswered cron)');
-  } else if (unansweredFindings.length > 0 && !shouldSendSection(state, opts, 'digest.unanswered')) {
+  if (unansweredFindings.length > 0 && !shouldSendSection(state, opts, 'digest.unanswered')) {
     console.log('[digests] unanswered digest skipped (paused or section-filtered)');
   } else if (unansweredFindings.length > 0) {
     const sendToken = botToken || rioToken;
@@ -4188,29 +4212,6 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // Step 9: PRD Changes digest already sent at Step 2c.5 (before Q&A scan)
   // to avoid timeout issues. Re-used flag for the return type.
   const prdChangesSent = prdChangesSentEarly;
-
-  // Refresh mode: write the feature-snapshots file so per-section crons
-  // can read fully-resolved MeegoFeatures (incl. iosVersion, chatId,
-  // serverPlannedLaunchDate) without re-pulling Meego. Save state too,
-  // so queue updates persist.
-  if (opts.mode === 'refresh') {
-    try {
-      const { saveFeatureSnapshots } = await import('./feature-snapshots');
-      const snapshotMap: Record<string, MeegoFeature> = {};
-      for (const f of features) snapshotMap[f.workItemId] = f;
-      await saveFeatureSnapshots({
-        refreshedAtIso: new Date().toISOString(),
-        features: snapshotMap,
-        inDevIds: inDev.map(f => f.workItemId),
-        juniorChats,
-      });
-      console.log(`[digests] feature-snapshots.json written: ${features.length} features, ${inDev.length} inDev, ${juniorChats.length} juniorChats`);
-    } catch (e) {
-      console.warn('[digests] saveFeatureSnapshots failed:', e);
-    }
-    // Persist the queue updates added during this run.
-    await saveDigestState(state);
-  }
 
   return {
     featuresChecked: inDev.length,
