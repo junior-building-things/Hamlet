@@ -884,6 +884,12 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     }
   }
   console.log(`[sync] "${workItemName}" createdAtRaw=${JSON.stringify(createdAtRaw)} → createdYear=${createdYear}`);
+  if (!createdAtRaw) {
+    // Dump every "<key>":<value> JSON pair containing 'create' to find
+    // the right key name.
+    const matches = raw.match(/"[^"]*create[^"]*"\s*:\s*[^,}\]]+/gi) ?? [];
+    console.log(`[sync] "${workItemName}" create-* JSON keys: ${matches.slice(0, 10).join(' | ')}`);
+  }
 
   let packageQrUrl = '';
   let packageDownloadUrl = '';
