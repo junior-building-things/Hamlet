@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Priority } from '@/lib/types';
-import { Search, LayoutGrid, List, Plus, Layers, ArrowUpDown, ArrowUp, ArrowDown, CircleDot, Tag, Sun, Moon } from 'lucide-react';
+import { Search, Plus, Layers, ArrowUpDown, ArrowUp, ArrowDown, CircleDot, Tag, Sun, Moon } from 'lucide-react';
 import { CustomSelect, MultiSelect } from './AvatarSelect';
 
 export type GroupBy  = 'none' | 'priority' | 'status' | 'businessLine' | 'socialComponent';
@@ -13,11 +13,9 @@ interface Props {
   statusFilter: string[];
   statuses: string[];
   priorityFilter: string[];
-  view: 'grid' | 'list';
   onSearchChange: (v: string) => void;
   onStatusChange: (v: string[]) => void;
   onPriorityChange: (v: string[]) => void;
-  onViewChange: (v: 'grid' | 'list') => void;
   onAddFeature: () => void;
   hideAddButton?: boolean;
   groupBy: GroupBy;
@@ -32,8 +30,8 @@ const priorities: Priority[] = ['P0', 'P1', 'P2', 'P3'];
 const selectCls = 'min-w-[100px]';
 
 export function FilterBar({
-  search, statusFilter, statuses, priorityFilter, view,
-  onSearchChange, onStatusChange, onPriorityChange, onViewChange, onAddFeature, hideAddButton,
+  search, statusFilter, statuses, priorityFilter,
+  onSearchChange, onStatusChange, onPriorityChange, onAddFeature, hideAddButton,
   groupBy, onGroupByChange, sortBy, onSortByChange, sortDir, onSortDirToggle,
 }: Props) {
   return (
@@ -114,24 +112,6 @@ export function FilterBar({
           {sortDir === 'asc'
             ? <ArrowUp   className="w-4 h-4" />
             : <ArrowDown className="w-4 h-4" />}
-        </button>
-      </div>
-
-      {/* View toggle */}
-      <div className="flex bg-[var(--card)] border border-[var(--border)] rounded-lg overflow-hidden">
-        <button
-          onClick={() => onViewChange('grid')}
-          className={`px-3 py-2 transition-colors ${view === 'grid' ? 'bg-[var(--card-hover)] text-[var(--foreground)]' : 'text-gray-500 hover:text-[var(--foreground)]'}`}
-          title="Grid view"
-        >
-          <LayoutGrid className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => onViewChange('list')}
-          className={`px-3 py-2 transition-colors ${view === 'list' ? 'bg-[var(--card-hover)] text-[var(--foreground)]' : 'text-gray-500 hover:text-[var(--foreground)]'}`}
-          title="List view"
-        >
-          <List className="w-4 h-4" />
         </button>
       </div>
 

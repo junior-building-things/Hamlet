@@ -3,7 +3,6 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Feature, Priority } from '@/lib/types';
 import { FilterBar, GroupBy, SortBy, SortDir } from '@/components/FilterBar';
 import { useSync } from '@/components/SyncContext';
-import { FeatureCard } from '@/components/FeatureCard';
 import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
@@ -75,7 +74,6 @@ interface Props {
 }
 
 export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Props) {
-  const [view,           setView]           = useState<'grid' | 'list'>('list');
   const [search,         setSearch]         = useState('');
   const [statusFilter,   setStatusFilterState]   = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
@@ -731,9 +729,9 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       <div className="shrink-0">
         <FilterBar
           search={search} statusFilter={statusFilter} statuses={uniqueStatuses}
-          priorityFilter={priorityFilter} view={view}
+          priorityFilter={priorityFilter}
           onSearchChange={setSearch} onStatusChange={setStatusFilter}
-          onPriorityChange={setPriority} onViewChange={setView}
+          onPriorityChange={setPriority}
           onAddFeature={() => {}} hideAddButton
           groupBy={groupBy}  onGroupByChange={setGroupBy}
           sortBy={sortBy}    onSortByChange={setSortBy}
@@ -758,13 +756,6 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             <p className="text-sm">No features match your filters.</p>
             <button onClick={() => { setSearch(''); setStatusFilter([]); setPriority([]); }}
               className="text-xs text-blue-400 hover:text-blue-300 underline">Clear filters</button>
-          </div>
-        ) : view === 'grid' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-            {sorted.map(f => (
-              <FeatureCard key={f.id} feature={f} syncing={syncingIds.has(f.id)}
-                onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne} />
-            ))}
           </div>
         ) : groups ? (
           // ── Grouped list view ──────────────────────────────────────────────
