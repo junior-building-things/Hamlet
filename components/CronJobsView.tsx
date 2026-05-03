@@ -208,29 +208,16 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
           <DestinationBadge key={d.kind} dest={d} />
         ))}
         <div className="ml-auto flex items-center gap-1.5">
-          <button
-            onClick={togglePause}
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text)] hover:bg-[var(--bg-elev-3)] hover:border-[var(--hairline-strong)] text-[12px] transition-colors disabled:opacity-50"
-          >
+          <button onClick={togglePause} disabled={busy} className="hm-btn">
             {busy
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : (job.paused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />)}
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : (job.paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />)}
             {job.paused ? 'Resume' : 'Pause'}
           </button>
-          <button
-            onClick={triggerOnce}
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--r-sm)] text-[12px] transition-colors disabled:opacity-50"
-            style={{
-              background: 'var(--ai-soft)',
-              color: 'var(--ai)',
-              border: '1px solid oklch(0.82 0.14 var(--ai-h) / 0.3)',
-            }}
-          >
+          <button onClick={triggerOnce} disabled={busy} className="hm-btn hm-btn-ai">
             {busy
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : <PlayCircle className="w-3 h-3" />}
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <PlayCircle className="w-3.5 h-3.5" />}
             Trigger once
           </button>
         </div>

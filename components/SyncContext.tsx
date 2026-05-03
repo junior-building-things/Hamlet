@@ -20,6 +20,8 @@ import { createContext, useContext, useRef, useState, useCallback, ReactNode } f
 interface SyncState {
   syncingAll: boolean;
   detailSyncTotal: number;
+  /** ISO timestamp of the last completed sync (any kind). null until first sync. */
+  lastSyncedAt?: string | null;
 }
 
 interface SyncContextValue extends SyncState {
@@ -29,6 +31,8 @@ interface SyncContextValue extends SyncState {
   registerSyncAll: (fn: () => void | Promise<void>) => void;
   /** Called by ProjectView to push state changes up. */
   setSyncState: (s: SyncState) => void;
+  /** Mark "now" as the latest sync time (called after sync completes). */
+  markSynced: () => void;
 }
 
 const SyncContext = createContext<SyncContextValue | null>(null);
@@ -36,7 +40,7 @@ const SyncContext = createContext<SyncContextValue | null>(null);
 const noop = () => {};
 
 export function SyncProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<SyncState>({ syncingAll: false, detailSyncTotal: 0 });
+  const [state, setState] = useState<SyncState>({ syncingAll: false, detailSyncTotal: 0, lastSyncedAt: null });
   const handlerRef = useRef<() => void | Promise<void>>(noop);
 
   const registerSyncAll = useCallback((fn: () => void | Promise<void>) => {
@@ -44,7 +48,17 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setSyncState = useCallback((s: SyncState) => {
-    setState(s);
+    // Preserve lastSyncedAt unless caller explicitly overrode it.
+    setState(prev => ({
+      ...prev,
+      syncingAll: s.syncingAll,
+      detailSyncTotal: s.detailSyncTotal,
+      lastSyncedAt: s.lastSyncedAt !== undefined ? s.lastSyncedAt : prev.lastSyncedAt,
+    }));
+  }, []);
+
+  const markSynced = useCallback(() => {
+    setState(prev => ({ ...prev, lastSyncedAt: new Date().toISOString() }));
   }, []);
 
   const syncAll = useCallback(() => {
@@ -56,9 +70,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       value={{
         syncingAll: state.syncingAll,
         detailSyncTotal: state.detailSyncTotal,
+        lastSyncedAt: state.lastSyncedAt,
         syncAll,
         registerSyncAll,
         setSyncState,
+        markSynced,
       }}
     >
       {children}

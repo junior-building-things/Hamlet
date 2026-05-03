@@ -175,7 +175,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="grid place-items-center bg-[var(--bg-elev-1)] border border-[var(--hairline-strong)] rounded-[var(--r-md)] w-8 h-8 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elev-3)] transition-colors shrink-0"
+      className="hm-icon-btn shrink-0"
       title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
     >
       {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}

@@ -56,37 +56,32 @@ export function JuniorContextView() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 px-6 pt-7 pb-2 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
-            Junior Context
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Context included each time Junior replies. Edits propagate within 1 min.
-          </p>
+      <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
+        <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Junior Context</div>
+        <div className="text-[12px] text-[var(--text-muted)] mt-0.5">
+          Context included each time Junior replies. Edits propagate within 1 min.
         </div>
-        {/* New file lives in the bottom-of-list affordance now to avoid
-            overlapping with the floating GlobalActions in the top-right. */}
-        <div aria-hidden className="invisible" />
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto px-6 pb-16 mt-4">
+      <div className="flex-1 overflow-y-auto px-5 py-4 pb-16">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+          <div className="flex flex-col items-center justify-center py-24 gap-3 text-[var(--text-muted)]">
+            <Loader2 className="w-8 h-8 animate-spin text-[var(--ai)]" />
           </div>
         ) : (
           <div className="flex flex-col gap-2">
             {/* System context cells: live (recent chat) + stored history */}
             <SystemCell
-              icon={<Activity className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+              kind="live"
+              icon={<Activity className="w-3.5 h-3.5" />}
               name="Recent chat snapshot"
               description="Last 15 messages of the current chat, fetched live from Lark on every Junior turn."
-              right="live"
+              live
             />
             <SystemCell
-              icon={<History className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+              kind="history"
+              icon={<History className="w-3.5 h-3.5" />}
               name="Conversation history (chat-level)"
               description="Per-chat back-and-forth Junior remembers, keyed by chatId. Replayed as user/model turns to Gemini."
               right={stats.chat ? `${stats.chat.fileCount} chats · ${stats.chat.totalMessages} msgs` : '—'}
@@ -94,7 +89,8 @@ export function JuniorContextView() {
               onCleared={refresh}
             />
             <SystemCell
-              icon={<History className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
+              kind="history"
+              icon={<History className="w-3.5 h-3.5" />}
               name="Conversation history (user-level)"
               description="Per-user cross-chat history Junior remembers, keyed by openId. Merged with chat-level on each turn."
               right={stats.user ? `${stats.user.fileCount} users · ${stats.user.totalMessages} msgs` : '—'}
@@ -129,14 +125,16 @@ export function JuniorContextView() {
 }
 
 function SystemCell({
-  icon, name, description, right, clearScope, onCleared,
+  kind, icon, name, description, right, clearScope, onCleared, live,
 }: {
+  kind: 'live' | 'history' | 'plain';
   icon: React.ReactNode;
   name: string;
   description: string;
-  right: string;
+  right?: string;
   clearScope?: 'chat' | 'user';
   onCleared?: () => void;
+  live?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -158,29 +156,38 @@ function SystemCell({
   }
 
   return (
-    <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl">
-      <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            {icon}
-            <span className="text-sm font-medium text-[var(--foreground)]">{name}</span>
-          </div>
-          <div className="text-xs text-[var(--muted)] truncate">{description}</div>
-        </div>
-        <div className="text-right shrink-0 flex items-center gap-3">
-          <div className="text-[10px] text-gray-500 font-mono">{right}</div>
-          {clearScope && (
-            <button
-              onClick={handleClear}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-400 hover:text-red-300 border border-[var(--border)] rounded-lg disabled:opacity-50"
-              title={`Clear all ${clearScope}-level history`}
-            >
-              {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-              Clear context
-            </button>
+    <div className="context-card">
+      <div className={`icon-wrap ${kind === 'live' ? 'live' : kind === 'history' ? 'history' : ''}`}>
+        {icon}
+      </div>
+      <div className="body">
+        <div className="ctx-name">
+          {name}
+          {live && (
+            <span className="live-pill"><span className="pulse" />LIVE</span>
           )}
         </div>
+        <div className="ctx-desc">{description}</div>
+      </div>
+      <div className="ctx-meta flex flex-col items-end gap-1.5">
+        {right && <div>{right}</div>}
+        {clearScope && (
+          <button
+            onClick={handleClear}
+            disabled={busy}
+            className="hm-btn"
+            style={{
+              height: 26,
+              color: 'var(--rose)',
+              borderColor: 'oklch(0.62 0.20 22 / 0.3)',
+              background: 'oklch(0.62 0.20 22 / 0.08)',
+            }}
+            title={`Clear all ${clearScope}-level history`}
+          >
+            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+            Clear context
+          </button>
+        )}
       </div>
     </div>
   );
@@ -235,22 +242,19 @@ function ContextCard({ file, expanded, onToggle, onSaved }: {
   const desc = describe(file.name);
 
   return (
-    <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--card-hover)] rounded-xl transition-colors"
-      >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-            <span className="text-sm font-medium text-[var(--foreground)] font-mono">{file.name}</span>
-          </div>
-          {desc && <div className="text-xs text-[var(--muted)] truncate">{desc}</div>}
+    <div>
+      <button onClick={onToggle} className="context-card w-full text-left">
+        <div className="icon-wrap">
+          <FileText className="w-3.5 h-3.5" />
         </div>
-        <div className="text-right shrink-0">
-          <div className="text-[10px] text-gray-500">{file.content.length.toLocaleString()} chars</div>
+        <div className="body">
+          <div className="ctx-name font-mono">{file.name}</div>
+          {desc && <div className="ctx-desc">{desc}</div>}
+        </div>
+        <div className="ctx-meta">
+          <div>{file.content.length.toLocaleString()} chars</div>
           {file.updatedAt && (
-            <div className="text-[10px] text-gray-500 mt-0.5">
+            <div className="mt-0.5">
               {new Date(file.updatedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}
             </div>
           )}
@@ -258,21 +262,14 @@ function ContextCard({ file, expanded, onToggle, onSaved }: {
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 border-t border-[var(--border)]">
-          <div className="mt-3 mb-2 flex items-center justify-end gap-2">
-            <button
-              onClick={handleDelete}
-              disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-400 hover:text-red-300 border border-[var(--border)] rounded-lg disabled:opacity-50"
-            >
+        <div className="bg-[var(--bg-elev-1)] border border-[var(--hairline)] border-t-0 rounded-b-[var(--r-md)] -mt-px px-4 pb-4">
+          <div className="mt-3 mb-2 flex items-center justify-end gap-1.5">
+            <button onClick={handleDelete} disabled={saving} className="hm-btn"
+              style={{ height: 26, color: 'var(--rose)', borderColor: 'oklch(0.62 0.20 22 / 0.3)', background: 'oklch(0.62 0.20 22 / 0.08)' }}>
               <Trash2 className="w-3 h-3" />
               Delete
             </button>
-            <button
-              onClick={handleSave}
-              disabled={!isDirty || saving}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium bg-blue-700 hover:bg-blue-600 text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
+            <button onClick={handleSave} disabled={!isDirty || saving} className="hm-btn hm-btn-ai" style={{ height: 26 }}>
               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
               Save
             </button>

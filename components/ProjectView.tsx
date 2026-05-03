@@ -92,7 +92,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   const [syncingIds,     setSyncingIds]      = useState<Set<string>>(new Set());
   const [detailSyncCount, setDetailSyncCount] = useState(0);
   const [detailSyncTotal, setDetailSyncTotal] = useState(0);
-  const { setSyncState, registerSyncAll } = useSync();
+  const { setSyncState, registerSyncAll, markSynced } = useSync();
   const [modalMode,      setModalMode]      = useState<'edit' | null>(null);
   const [editingFeature, setEditing]        = useState<Feature | undefined>();
   const [completingId,   setCompletingId]   = useState<string | null>(null);
@@ -284,6 +284,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             };
           });
         });
+        markSynced();
         return data.features;
       }
       setFetchError('No features returned from Meego');
@@ -293,7 +294,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       setFetchError(msg);
       return null;
     }
-  }, [setFeatures]);
+  }, [setFeatures, markSynced]);
 
   // ── Initial load ───────────────────────────────────────────────────────────
 
@@ -320,6 +321,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
             }
             setFeatures(cacheData.features);
             setLoading(false);
+            markSynced();
             // Backfill avatars for people who only show up in
             // pocEmails but never had their avatar written into
             // any feature.avatars (PMs / DAs / TPMs). Sends one
