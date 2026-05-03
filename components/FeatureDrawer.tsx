@@ -103,7 +103,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
       {/* Backdrop — fixed so it covers the sidebar too */}
       <div
         onClick={onClose}
-        className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-[2px] transition-opacity"
+        className="fixed inset-0 z-[90] bg-black/60 transition-opacity"
         aria-hidden
       />
 

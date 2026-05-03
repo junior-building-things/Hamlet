@@ -424,7 +424,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
   // (which uses `feature`, now shadowed by createdFeature).
   if (mode === 'add' && !createdFeature) {
     return (
-      <div className="fixed inset-0 z-[100] grid place-items-center p-10 bg-black/60 backdrop-blur-[8px]" onClick={onClose}>
+      <div className="fixed inset-0 z-[100] grid place-items-center p-10 bg-black/60" onClick={onClose}>
         <div
           onClick={e => e.stopPropagation()}
           className="relative bg-[var(--bg-elev-1)] border border-[var(--hairline-strong)] rounded-[var(--r-xl)] w-[520px] max-w-full max-h-[90vh] flex flex-col overflow-hidden"
