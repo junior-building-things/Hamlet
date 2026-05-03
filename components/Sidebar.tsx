@@ -56,7 +56,7 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Pro
     .toUpperCase();
 
   return (
-    <aside className="sidebar-panel w-[232px] shrink-0 flex flex-col px-3 pt-3.5 pb-3 relative z-10 h-[calc(100vh-24px)] my-3 ml-3">
+    <aside className="sidebar-panel w-[232px] shrink-0 flex flex-col px-3 pt-3.5 pb-3 relative z-10 h-full">
       {/* User identity */}
       <div className="flex items-center gap-2.5 px-1.5 pb-4 pt-1 relative">
         <div className="user-mark">

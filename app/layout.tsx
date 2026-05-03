@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-screen">
+      <body className="h-screen overflow-hidden">
         <div className="app-bg" aria-hidden />
         {children}
         <Toaster position="bottom-right" richColors />
