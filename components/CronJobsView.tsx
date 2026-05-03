@@ -113,7 +113,7 @@ export function CronJobsView() {
   });
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
         <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Cron Jobs</div>
         <div className="text-[12px] text-[var(--text-muted)] mt-0.5">

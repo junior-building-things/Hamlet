@@ -54,7 +54,7 @@ export function JuniorContextView() {
   useEffect(() => { refresh(); }, [refresh]);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="shrink-0 px-6 pt-7 pb-2 flex items-center justify-between">
         <div>

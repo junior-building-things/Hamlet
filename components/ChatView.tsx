@@ -153,7 +153,7 @@ export function ChatView({ onFeatureCreated }: Props) {
   }
 
   return (
-    <div className="chat-shell h-screen">
+    <div className="chat-shell h-full">
       {/* ── Header ────────────────────────────────────────────────────────────── */}
       <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
         <div className="flex items-center gap-2.5">

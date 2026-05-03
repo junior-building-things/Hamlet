@@ -716,7 +716,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
 
       {/* Page header (sticky) — title + subtitle only.
           Sync/theme buttons render via the page-level <GlobalActions />

@@ -178,7 +178,7 @@ export function TodoView({ features, setFeatures }: Props) {
   const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content] sm:gap-x-1.5 sm:gap-y-1';
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
 
       {/* Header (sticky) */}
       <div className="shrink-0 px-6 pt-7 pb-2 flex items-center justify-between">
