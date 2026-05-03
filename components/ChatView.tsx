@@ -1,7 +1,29 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2 } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import type { Feature } from '@/lib/types';
+
+const SUGGESTIONS = [
+  'Summarize this week\'s PRD changes',
+  'Which features are at risk?',
+  'Show me my To Dos',
+  'What\'s blocking line review?',
+];
+
+/** Render a chat-bubble line — supports **bold** segments. */
+function renderInline(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const re = /\*\*(.+?)\*\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(<strong key={parts.length}>{m[1]}</strong>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
 
 interface Link { label: string; url: string }
 interface Msg { role: 'user' | 'assistant'; content: string; links?: Link[]; isWelcome?: boolean }
@@ -131,72 +153,79 @@ export function ChatView({ onFeatureCreated }: Props) {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: '100vh' }}>
-
+    <div className="chat-shell h-screen">
       {/* ── Header ────────────────────────────────────────────────────────────── */}
-      <div className="px-6 pt-7 pb-5 shrink-0 border-b border-[var(--border)]">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
-            Hamlet
-          </h1>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-xs text-gray-500">Online</span>
-          </div>
+      <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
+        <div className="flex items-center gap-2.5">
+          <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Chat with Junior</div>
+          <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--ai)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--ai)] animate-pulse shadow-[0_0_8px_var(--ai-glow)]" />
+            Online
+          </span>
         </div>
-        <p className="text-sm text-gray-500 mt-1">Your personal PM assistant</p>
+        <div className="text-[12px] text-[var(--text-muted)] mt-0.5">
+          Ask about ongoing projects, draft updates, or kick off a new feature.
+        </div>
       </div>
 
       {/* ── Messages ──────────────────────────────────────────────────────────── */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-2xl flex flex-col gap-4">
+      <div ref={containerRef} className="chat-scroll">
+        <div className="chat-stream">
           {!historyLoaded ? (
             <div className="flex justify-center py-12">
-              <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+              <Loader2 className="w-5 h-5 animate-spin text-[var(--ai)]" />
             </div>
           ) : (
-            messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.role === 'user'
-                    ? 'bg-blue-700 text-[var(--foreground)] rounded-br-sm'
-                    : 'bg-[var(--card-hover)] text-gray-200 rounded-bl-sm'
-                }`}>
-                  {msg.content}
-
-                  {msg.links && msg.links.length > 0 && (
-                    <div className="flex flex-wrap gap-3 mt-2.5 pt-2.5 border-t border-white/10">
-                      {msg.links.map(l => (
-                        <a
-                          key={l.url}
-                          href={l.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-300 hover:text-blue-100 transition-colors"
-                          style={{ textDecoration: 'none' }}
-                        >
-                          {l.label}
-                        </a>
+            messages.map((msg, i) => {
+              const isUser = msg.role === 'user';
+              return (
+                <div key={i} className={`chat-msg ${isUser ? 'user' : 'junior'}`}>
+                  <div className={`chat-avatar ${isUser ? 'user' : 'junior'}`}>
+                    {isUser ? 'TS' : <Sparkles className="w-2.5 h-2.5" />}
+                  </div>
+                  <div className="chat-bubble-wrap">
+                    <div className="chat-name">
+                      {isUser ? 'You' : 'Junior'}
+                      <span className="chat-time"> · {isUser ? 'now' : 'reply'}</span>
+                    </div>
+                    <div className={`chat-bubble ${isUser ? 'user' : 'junior'}`}>
+                      {msg.content.split('\n').map((line, j) => (
+                        <div key={j}>{renderInline(line) as React.ReactNode}</div>
                       ))}
                     </div>
-                  )}
+                    {msg.links && msg.links.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {msg.links.map(l => (
+                          <a
+                            key={l.url}
+                            href={l.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 h-6 px-2 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--hairline-strong)] text-[10.5px] transition-colors"
+                          >
+                            {l.label}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
 
           {/* Typing indicator */}
           {loading && (
-            <div className="flex justify-start">
-              <div className="bg-[var(--card-hover)] px-4 py-3 rounded-2xl rounded-bl-sm">
-                <div className="flex gap-1 items-center h-3">
-                  {[0, 150, 300].map(d => (
-                    <span
-                      key={d}
-                      className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: `${d}ms` }}
-                    />
-                  ))}
+            <div className="chat-msg junior">
+              <div className="chat-avatar junior">
+                <Sparkles className="w-2.5 h-2.5" />
+              </div>
+              <div className="chat-bubble-wrap">
+                <div className="chat-name">
+                  Junior <span className="chat-time">· thinking</span>
+                </div>
+                <div className="chat-bubble junior">
+                  <div className="chat-typing"><span /><span /><span /></div>
                 </div>
               </div>
             </div>
@@ -204,9 +233,9 @@ export function ChatView({ onFeatureCreated }: Props) {
         </div>
       </div>
 
-      {/* ── Input ─────────────────────────────────────────────────────────────── */}
-      <div className="px-6 pb-8 pt-4 shrink-0 border-t border-[var(--border)]">
-        <div className="max-w-2xl flex gap-2 items-end">
+      {/* ── Composer ─────────────────────────────────────────────────────────── */}
+      <div className="chat-composer">
+        <div className="chat-input-row">
           <textarea
             ref={textareaRef}
             value={input}
@@ -214,21 +243,36 @@ export function ChatView({ onFeatureCreated }: Props) {
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
             }}
-            rows={2}
-            placeholder="Ask Hamlet anything…"
+            rows={1}
+            placeholder="Ask Junior anything…"
             disabled={loading}
-            className="flex-1 bg-[var(--background)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm text-[var(--foreground)] placeholder-gray-500 resize-none focus:outline-none focus:border-blue-600 transition-colors disabled:opacity-60"
+            className="chat-input"
           />
           <button
             onClick={send}
             disabled={loading || !input.trim()}
-            className="p-3 bg-blue-700 text-[var(--foreground)] rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[var(--r-sm)] text-[12px] transition-colors disabled:opacity-50 shrink-0"
+            style={{
+              background: 'var(--ai-soft)',
+              color: 'var(--ai)',
+              border: '1px solid oklch(0.82 0.14 var(--ai-h) / 0.3)',
+            }}
           >
-            {loading
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : <Send className="w-4 h-4" />
-            }
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            Send
           </button>
+        </div>
+        <div className="chat-suggestions">
+          {SUGGESTIONS.map(s => (
+            <button
+              key={s}
+              type="button"
+              className="chat-suggestion"
+              onClick={() => { setInput(s); textareaRef.current?.focus(); }}
+            >
+              {s}
+            </button>
+          ))}
         </div>
       </div>
     </div>
