@@ -647,7 +647,11 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   const hideStatus   = groupBy === 'status';
   const hidePriority = groupBy === 'priority';
   const gridTemplateColumns = (() => {
-    const cols = ['minmax(0,500px)']; // Feature
+    // Feature gets the leftover space (`1fr`) with a 280px floor so the
+    // table doesn't collapse when names are short. Matches the design's
+    // `minmax(280px, 1fr)`. Notes is capped at 200px so the Feature
+    // column gets first dibs on growth.
+    const cols = ['minmax(280px,1fr)'];           // Feature
     if (!hideStatus)   cols.push('max-content'); // Status
     cols.push('max-content');                    // Version
     if (!hidePriority) cols.push('max-content'); // Priority
