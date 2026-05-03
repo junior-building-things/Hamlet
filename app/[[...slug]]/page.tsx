@@ -153,7 +153,7 @@ export default function Home() {
 
   return (
     <SyncProvider>
-      <main className="flex min-h-screen">
+      <main className="flex h-screen relative z-10">
         <Sidebar
           activeView={activeView}
           onViewChange={handleViewChange}
@@ -161,7 +161,11 @@ export default function Home() {
           user={user}
         />
 
-        <div id="main-scroll" className="flex-1 overflow-y-auto min-h-screen relative">
+        <div
+          id="main-scroll"
+          className="flex-1 overflow-y-auto h-full relative ml-3 mr-3 my-3 rounded-[var(--r-xl)] bg-[var(--bg-elev-1)] border border-[var(--hairline)]"
+          style={{ boxShadow: 'var(--shadow-md)' }}
+        >
           {/* Floating top-right actions, present on every tab. */}
           <div className="absolute top-7 right-6 z-20">
             <GlobalActions />

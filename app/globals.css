@@ -1,8 +1,86 @@
 @import "tailwindcss";
 
-/* Always show the hand cursor on clickable elements. Browsers default
-   <button> to the arrow cursor (a longstanding quirk); this matches
-   the user expectation that "if it's clickable, the cursor changes". */
+/* ============================================================
+   Hamlet design tokens (Phase A redesign)
+   Extends — does not replace — the original token set so
+   existing components (which reference --background, --card,
+   --foreground, --border, --muted) keep rendering.
+   ============================================================ */
+
+:root {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Design system tokens — Light (default) */
+  --bg: #f6f7f8;
+  --bg-elev-1: #ffffff;
+  --bg-elev-2: #fafbfc;
+  --bg-elev-3: #f1f2f4;
+  --panel: rgba(255, 255, 255, 0.78);
+  --panel-solid: #ffffff;
+  --hairline: rgba(15, 17, 22, 0.07);
+  --hairline-strong: rgba(15, 17, 22, 0.14);
+  --text: #14161a;
+  --text-muted: #5c6066;
+  --text-dim: #8b9098;
+
+  --ai-h: 175;
+  --ai: oklch(0.55 0.13 var(--ai-h));
+  --ai-soft: oklch(0.55 0.13 var(--ai-h) / 0.10);
+  --ai-glow: oklch(0.55 0.13 var(--ai-h) / 0.25);
+
+  --green: oklch(0.65 0.16 155);
+  --amber: oklch(0.72 0.16 75);
+  --rose: oklch(0.62 0.20 22);
+  --violet: oklch(0.58 0.18 295);
+  --blue: oklch(0.58 0.16 240);
+
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-2xl: 20px;
+
+  --shadow-sm: 0 1px 2px rgba(15,17,22,0.06);
+  --shadow-md: 0 6px 20px rgba(15,17,22,0.08), 0 1px 3px rgba(15,17,22,0.05);
+  --shadow-lg: 0 18px 48px rgba(15,17,22,0.12), 0 2px 8px rgba(15,17,22,0.06);
+
+  /* Legacy aliases — keep existing components working */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--bg-elev-1);
+  --card-hover: var(--bg-elev-3);
+  --border: var(--hairline-strong);
+  --muted: var(--text-muted);
+  --muted-dark: var(--text-dim);
+  --link-circle: var(--bg-elev-3);
+  --dot-color: var(--hairline-strong);
+}
+
+[data-theme="dark"] {
+  --bg: #0a0b0d;
+  --bg-elev-1: #111316;
+  --bg-elev-2: #16191e;
+  --bg-elev-3: #1c2027;
+  --panel: rgba(17, 19, 22, 0.72);
+  --panel-solid: #111316;
+  --hairline: rgba(255, 255, 255, 0.06);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+  --text: #e8eaed;
+  --text-muted: #8b9098;
+  --text-dim: #5c6066;
+
+  --ai: oklch(0.82 0.14 var(--ai-h));
+  --ai-soft: oklch(0.82 0.14 var(--ai-h) / 0.14);
+  --ai-glow: oklch(0.82 0.14 var(--ai-h) / 0.4);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.3);
+  --shadow-lg: 0 24px 60px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.4);
+}
+
+* { box-sizing: border-box; }
+
 button:not(:disabled),
 a[href],
 [role="button"]:not([aria-disabled="true"]),
@@ -19,46 +97,144 @@ button:disabled,
   cursor: not-allowed;
 }
 
-:root {
-  --background: #f5f6fa;
-  --foreground: #111827;
-  --card: #ffffff;
-  --card-hover: #f3f4f6;
-  --border: #e0e2ea;
-  --muted: #6b7280;
-  --muted-dark: #9ca3af;
-  --link-circle: #F3F4F6;
-  --dot-color: #00000010;
-}
-
-[data-theme="dark"] {
-  --background: #0c0e1a;
-  --foreground: #ffffff;
-  --card: #13162a;
-  --card-hover: #1e2240;
-  --border: #2e3460;
-  --muted: #9ca3af;
-  --muted-dark: #6b7280;
-  --link-circle: #000000;
-  --dot-color: #ffffff08;
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-* {
-  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--background); }
-::-webkit-scrollbar-thumb { background: var(--card-hover); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--border); }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--bg-elev-3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--hairline-strong); }
 
-/* Inline editable cells */
+/* ============================================================
+   App background — dotted grid + soft mint/violet radials.
+   Rendered as a <div class="app-bg"> at the top of <body>.
+   ============================================================ */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 0%, oklch(0.82 0.14 var(--ai-h) / 0.06), transparent 50%),
+    radial-gradient(circle at 90% 90%, oklch(0.74 0.14 295 / 0.05), transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+.app-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--hairline-strong) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: 0 0;
+  opacity: 0.55;
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+          mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+}
+
+/* ============================================================
+   Sidebar — floating glass panel
+   ============================================================ */
+.sidebar-panel {
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+          backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+.sidebar-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, oklch(0.82 0.14 var(--ai-h) / 0.04), transparent 30%);
+  pointer-events: none;
+}
+
+/* User-identity / brand mark at the top of the sidebar */
+.user-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: conic-gradient(from 0deg, var(--ai), oklch(0.74 0.14 295), var(--ai));
+  display: grid;
+  place-items: center;
+  position: relative;
+  box-shadow: 0 0 18px var(--ai-glow);
+  flex-shrink: 0;
+}
+.user-mark::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 7px;
+  background: var(--bg-elev-1);
+}
+.user-mark > span {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: -0.04em;
+}
+
+/* Active nav item indicator (left mint bar) */
+.nav-active-bar::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--ai);
+  box-shadow: 0 0 8px var(--ai-glow);
+}
+
+/* AI-tagged dot indicator (right side of nav-item) */
+.ai-dot::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ai);
+  box-shadow: 0 0 6px var(--ai-glow);
+}
+
+/* Mint v0.42 pill */
+.version-pill {
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--ai-soft);
+  color: var(--ai);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   Inline editable cells (carried over from previous redesign)
+   ============================================================ */
 .editable-cell {
   border-radius: 6px;
   padding: 2px 6px;

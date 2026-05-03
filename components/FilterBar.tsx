@@ -147,10 +147,10 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="bg-[var(--card)] border border-[var(--border)] rounded-lg px-2.5 py-2 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors shrink-0"
+      className="grid place-items-center bg-[var(--bg-elev-1)] border border-[var(--hairline-strong)] rounded-[var(--r-md)] w-8 h-8 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elev-3)] transition-colors shrink-0"
       title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
     >
-      {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
     </button>
   );
 }
