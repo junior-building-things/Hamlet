@@ -226,17 +226,28 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
     <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 15)} height={Math.min(link.iconH, 15)} className="shrink-0" style={invertStyle} />
   );
 
+  // Design spec: 22×22 rounded-square tiles, 1.5px bg-elev-1 border with
+  // an outer 0.5px hairline shadow (so neighbouring tiles don't blur into
+  // each other), -7px overlap (about a third per icon, like the team
+  // avatars), and a hover lift. Matches `.link-icon` from the redesign CSS.
+  const tileCls =
+    'inline-flex items-center justify-center w-[22px] h-[22px] rounded-[6px] bg-[var(--bg-elev-1)] cursor-pointer relative transition-transform duration-150 hover:-translate-y-[2px]';
+  const tileStyle: React.CSSProperties = {
+    zIndex: showBubble ? 30 : total - index,
+    marginLeft: index === 0 ? 0 : -7,
+    border: '1.5px solid var(--bg-elev-1)',
+    boxShadow: '0 0 0 0.5px var(--hairline)',
+  };
+
   const chip = link.url ? (
     <a ref={ref as React.Ref<HTMLAnchorElement>} href={link.url} target="_blank" rel="noreferrer"
-      className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--link-circle)] cursor-pointer hover:brightness-125 relative"
-      style={{ zIndex: showBubble ? 30 : total - index, marginLeft: index === 0 ? 0 : -4 }}
+      className={tileCls} style={tileStyle}
       onMouseEnter={show} onMouseLeave={scheduleHide}>
       {iconEl}
     </a>
   ) : (
     <button ref={ref as React.Ref<HTMLButtonElement>}
-      className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--link-circle)] cursor-pointer hover:brightness-125 relative"
-      style={{ zIndex: showBubble ? 30 : total - index, marginLeft: index === 0 ? 0 : -4 }}
+      className={tileCls} style={tileStyle}
       onMouseEnter={show} onMouseLeave={scheduleHide} onClick={link.onClick}>
       {iconEl}
     </button>
@@ -330,10 +341,15 @@ function AddLinkButton({ feature, onLinkUpdate }: {
       <button
         ref={ref}
         onClick={toggle}
-        className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--link-circle)] cursor-pointer hover:brightness-125 relative ml-[-4px]"
-        style={{ zIndex: 0 }}
+        className="inline-flex items-center justify-center w-[22px] h-[22px] rounded-[6px] bg-transparent text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer relative transition-transform duration-150 hover:-translate-y-[2px]"
+        style={{
+          zIndex: 0,
+          marginLeft: -7,
+          border: '1.5px dashed var(--hairline-strong)',
+        }}
+        title="Add link"
       >
-        <Plus className="w-3 h-3 text-[var(--muted)]" />
+        <Plus className="w-3 h-3" />
       </button>
       {showMenu && mounted && createPortal(
         <div
