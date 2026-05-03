@@ -2,7 +2,7 @@
 import { useEffect } from 'react';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
-import { X, Sparkles } from 'lucide-react';
+import { X, AlertTriangle, Activity } from 'lucide-react';
 import Image from 'next/image';
 
 /**
@@ -92,11 +92,42 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   if (feature.complianceUrl) links.push({ kind: 'compliance', label: 'Compliance',url: feature.complianceUrl, icon: '/compliance.png' });
   if (feature.abReportUrl)   links.push({ kind: 'ab',         label: 'AB Report', url: feature.abReportUrl,   icon: '/abreport.png' });
 
-  const activity = (feature.versionChanges ?? []).slice(-6).reverse();
+  // ── Junior insight: important vs idle ──────────────────────────────────────
+  // "Important" if Junior has anything worth surfacing — risk flagged red /
+  // yellow, explicit risk reasons, or a recent version slip (PRD/release).
+  const hasRiskFlag    = feature.riskLevel === 'red' || feature.riskLevel === 'yellow';
+  const hasRiskNotes   = !!feature.riskNotes && feature.riskNotes.length > 0;
+  const hasVersionSlip = !!feature.versionChanges && feature.versionChanges.length > 0;
+  const isImportant    = hasRiskFlag || hasRiskNotes || hasVersionSlip;
 
-  const insightSummary = (feature.riskNotes && feature.riskNotes.length > 0)
-    ? feature.riskNotes.join(' · ')
-    : 'No active risk signals. Junior is monitoring this feature for status changes, PRD edits, and unresolved questions.';
+  const insightSummary = isImportant
+    ? [
+        ...(hasRiskNotes ? feature.riskNotes! : []),
+        ...(hasVersionSlip
+          ? feature.versionChanges!.slice(-1).map(c => `Planned version slip: ${c.from} → ${c.to}`)
+          : []),
+      ].join(' · ') || 'Risk flagged — review the activity feed below.'
+    : 'Nothing to callout. Junior is monitoring this feature for risk, PRD edits, and unresolved questions.';
+
+  // ── Activity feed: combine version slips + a "Last synced" entry ──────────
+  // Risk transitions + PRD-update events aren't tracked historically yet
+  // (that needs backend changes to feature cache). When they land, prepend
+  // them here as additional `ActivityEntry` items.
+  type ActivityEntry =
+    | { kind: 'version_slip'; date: string; from: string; to: string }
+    | { kind: 'sync';         iso: string };
+
+  const activity: ActivityEntry[] = [
+    ...(feature.versionChanges ?? []).slice(-6).reverse().map(c => ({
+      kind: 'version_slip' as const,
+      date: c.date,
+      from: c.from,
+      to: c.to,
+    })),
+  ];
+  if (feature.lastUpdated) {
+    activity.push({ kind: 'sync', iso: feature.lastUpdated });
+  }
 
   return (
     <>
@@ -137,15 +168,33 @@ export function FeatureDrawer({ feature, onClose }: Props) {
         {/* Body (scrolls) */}
         <div className="px-[22px] py-[18px] overflow-y-auto flex-1 flex flex-col gap-[18px]">
 
-          {/* Junior insight */}
-          <div className="px-4 py-3.5 rounded-[var(--r-lg)] border flex gap-3.5 items-start"
-               style={{
-                 background: 'linear-gradient(135deg, var(--ai-soft), oklch(0.74 0.14 295 / 0.08))',
-                 borderColor: 'oklch(0.82 0.14 var(--ai-h) / 0.2)',
-               }}>
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[var(--bg)] font-mono text-[9.5px] uppercase tracking-[0.1em] shrink-0"
-                  style={{ color: 'var(--ai)', borderColor: 'oklch(0.82 0.14 var(--ai-h) / 0.3)', borderWidth: 1, borderStyle: 'solid' }}>
-              <Sparkles className="w-2.5 h-2.5" /> Junior
+          {/* Junior insight — important = blue-glow box + warning icon,
+              idle = neutral box + activity icon. */}
+          <div
+            className="px-4 py-3.5 rounded-[var(--r-lg)] border flex gap-3.5 items-start transition-shadow"
+            style={
+              isImportant
+                ? {
+                    background: 'linear-gradient(135deg, var(--ai-soft), oklch(0.74 0.14 295 / 0.06))',
+                    borderColor: 'oklch(0.78 0.16 var(--ai-h) / 0.4)',
+                    boxShadow: '0 0 0 3px var(--ai-soft), 0 0 24px var(--ai-glow)',
+                  }
+                : {
+                    background: 'var(--bg-elev-2)',
+                    borderColor: 'var(--hairline)',
+                  }
+            }
+          >
+            <span
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[var(--bg)] font-mono text-[9.5px] uppercase tracking-[0.1em] shrink-0 border"
+              style={
+                isImportant
+                  ? { color: 'var(--ai)', borderColor: 'oklch(0.78 0.16 var(--ai-h) / 0.3)' }
+                  : { color: 'var(--text-muted)', borderColor: 'var(--hairline-strong)' }
+              }
+            >
+              {isImportant ? <AlertTriangle className="w-2.5 h-2.5" /> : <Activity className="w-2.5 h-2.5" />}
+              Junior
             </span>
             <div className="flex-1 min-w-0">
               <div className="text-[12.5px] leading-[1.5] text-[var(--text)]">{insightSummary}</div>
@@ -196,30 +245,16 @@ export function FeatureDrawer({ feature, onClose }: Props) {
             </Section>
           )}
 
-          {/* Activity (versionChanges) */}
+          {/* Activity feed: version slips (= delays) + last sync. Risk
+              transition history + per-PRD edit events aren't tracked yet —
+              extending here is a backend follow-up. */}
           <Section title="Activity">
             {activity.length === 0 ? (
-              <div className="text-[12px] text-[var(--text-muted)]">No version changes recorded.</div>
+              <div className="text-[12px] text-[var(--text-muted)]">No activity yet.</div>
             ) : (
               <div className="flex flex-col gap-2.5">
                 {activity.map((a, i) => (
-                  <div key={i} className="flex items-start gap-2.5">
-                    <div className="w-5 h-5 rounded-full grid place-items-center font-mono text-[9px] shrink-0"
-                         style={{
-                           background: 'var(--ai-soft)',
-                           color: 'var(--ai)',
-                           border: '1px solid oklch(0.82 0.14 var(--ai-h) / 0.3)',
-                         }}>
-                      <Sparkles className="w-2.5 h-2.5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[12px]">
-                        <span className="text-[var(--ai)] font-medium">Hamlet</span>{' '}
-                        <span className="text-[var(--text-muted)]">version {a.from} → {a.to}</span>
-                      </div>
-                      <div className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">{a.date}</div>
-                    </div>
-                  </div>
+                  <ActivityItem key={i} entry={a} />
                 ))}
               </div>
             )}
@@ -281,4 +316,47 @@ function formatRel(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.round(h / 24);
   return `${d}d ago`;
+}
+
+type ActivityEntryT =
+  | { kind: 'version_slip'; date: string; from: string; to: string }
+  | { kind: 'sync';         iso: string };
+
+function ActivityItem({ entry }: { entry: ActivityEntryT }) {
+  if (entry.kind === 'version_slip') {
+    return (
+      <div className="flex items-start gap-2.5">
+        <div
+          className="w-5 h-5 rounded-full grid place-items-center shrink-0 border"
+          style={{ background: 'var(--ai-soft)', color: 'var(--ai)', borderColor: 'oklch(0.78 0.16 var(--ai-h) / 0.3)' }}
+        >
+          <AlertTriangle className="w-2.5 h-2.5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px]">
+            <span className="text-[var(--ai)] font-medium">Hamlet</span>{' '}
+            <span className="text-[var(--text-muted)]">flagged version slip {entry.from} → {entry.to}</span>
+          </div>
+          <div className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">{entry.date}</div>
+        </div>
+      </div>
+    );
+  }
+  // Sync entry
+  return (
+    <div className="flex items-start gap-2.5">
+      <div
+        className="w-5 h-5 rounded-full grid place-items-center shrink-0 border border-[var(--hairline-strong)] text-[var(--text-muted)] bg-[var(--bg-elev-2)]"
+      >
+        <Activity className="w-2.5 h-2.5" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[12px]">
+          <span className="text-[var(--text)] font-medium">Synced</span>{' '}
+          <span className="text-[var(--text-muted)]">from Meego</span>
+        </div>
+        <div className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">{formatRel(entry.iso)}</div>
+      </div>
+    </div>
+  );
 }
