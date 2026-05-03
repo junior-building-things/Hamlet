@@ -4,6 +4,7 @@ import { Feature, Priority } from '@/lib/types';
 import { FeatureListHeader } from './FeatureListHeader';
 import { FeatureListItem } from './FeatureListItem';
 import { FeatureModal } from './FeatureModal';
+import { FeatureDrawer } from './FeatureDrawer';
 import { ThemeToggle } from './FilterBar';
 import { statusStyle } from './StatusBadge';
 import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
@@ -44,6 +45,7 @@ export function TodoView({ features, setFeatures }: Props) {
   const [syncingIds,    setSyncingIds]    = useState<Set<string>>(new Set());
   const [editingFeature, setEditing]      = useState<Feature | undefined>();
   const [modalMode,     setModalMode]     = useState<'edit' | null>(null);
+  const [drawerFeature, setDrawerFeature] = useState<Feature | null>(null);
 
   // Features where the user is the assignee on an active node (excluding completed ones)
   const todos = features.filter(f =>
@@ -245,6 +247,7 @@ export function TodoView({ features, setFeatures }: Props) {
                     feature={f}
                     syncing={syncingIds.has(f.id)}
                     onEdit={openDetail}
+                    onOpenDetail={setDrawerFeature}
                     onSync={syncOne}
                     completing={completingId === f.id}
                     onComplete={handleComplete}
@@ -275,7 +278,18 @@ export function TodoView({ features, setFeatures }: Props) {
         )}
       </div>
 
-      {/* Detail modal */}
+      {/* Detail drawer */}
+      <FeatureDrawer
+        feature={drawerFeature}
+        onClose={() => setDrawerFeature(null)}
+        onEdit={feat => {
+          setEditing(feat);
+          setModalMode('edit');
+          setDrawerFeature(null);
+        }}
+      />
+
+      {/* Detail modal (full edit) — opened from drawer */}
       {modalMode === 'edit' && editingFeature && (
         <FeatureModal
           mode="edit"

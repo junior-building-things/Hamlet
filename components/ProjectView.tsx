@@ -6,6 +6,7 @@ import { useSync } from '@/components/SyncContext';
 import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
+import { FeatureDrawer } from '@/components/FeatureDrawer';
 import { statusStyle } from '@/components/StatusBadge';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -95,6 +96,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   const [modalMode,      setModalMode]      = useState<'edit' | null>(null);
   const [editingFeature, setEditing]        = useState<Feature | undefined>();
   const [completingId,   setCompletingId]   = useState<string | null>(null);
+  // Phase C: row clicks open the detail drawer instead of jumping to
+  // the full edit modal. The modal is reachable via the drawer's
+  // Edit button (or directly when a sync triggers an open).
+  const [drawerFeature,  setDrawerFeature]  = useState<Feature | null>(null);
 
   // ── Persisted group + sort preferences ───────────────────────────────────
 
@@ -701,7 +706,9 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   function renderListRows(items: Feature[]) {
     return items.map(f => (
       <FeatureListItem key={f.id} feature={f} syncing={syncingIds.has(f.id)}
-        onEdit={feat => { setEditing(feat); setModalMode('edit'); }} onSync={syncOne}
+        onEdit={feat => { setEditing(feat); setModalMode('edit'); }}
+        onOpenDetail={setDrawerFeature}
+        onSync={syncOne}
         completing={completingId === f.id} onComplete={handleComplete}
         pinned={f.id === pinnedId} onToggleAgent={handleToggleAgent}
         onFieldUpdate={handleFieldUpdate} />
@@ -775,6 +782,19 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         )}
 
       </div>
+
+      {/* Detail drawer — slides in from the right of the main panel.
+          Renders inside the main scroll container (which is `relative`)
+          so the drawer + backdrop don't cover the sidebar. */}
+      <FeatureDrawer
+        feature={drawerFeature}
+        onClose={() => setDrawerFeature(null)}
+        onEdit={feat => {
+          setEditing(feat);
+          setModalMode('edit');
+          setDrawerFeature(null);
+        }}
+      />
 
       {modalMode === 'edit' && editingFeature && (
         <FeatureModal

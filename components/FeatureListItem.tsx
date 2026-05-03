@@ -15,6 +15,9 @@ interface Props {
   feature: Feature;
   syncing: boolean;
   onEdit: (feature: Feature) => void;
+  /** Open the detail drawer (replaces immediate row → modal click).
+   *  When omitted, row clicks fall back to onEdit. */
+  onOpenDetail?: (feature: Feature) => void;
   onSync: (feature: Feature) => void;
   completing?: boolean;
   onComplete?: (feature: Feature) => void;
@@ -210,9 +213,12 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
+  // Row clicks open the drawer (Phase C). Falls back to onEdit when no
+  // drawer handler was provided (e.g. TodoView reuse without wiring it).
+  const openRow = (f: Feature) => (onOpenDetail ?? onEdit)(f);
 
   function handleLinkUpdate(linkKey: string, newUrl: string) {
     if (!onFieldUpdate) return;
@@ -233,7 +239,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       <div className="sm:hidden px-4 py-3 flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
           <button
-            onClick={() => onEdit(feature)}
+            onClick={() => openRow(feature)}
             className="text-[var(--foreground)] text-sm font-semibold leading-tight text-left hover:text-blue-300 transition-colors cursor-pointer"
           >
             {feature.name}
@@ -303,7 +309,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
           </div>
         ) : (
           <button
-            onClick={() => onEdit(feature)}
+            onClick={() => openRow(feature)}
             className="flex items-center gap-2 w-full min-w-0 text-left text-[var(--foreground)] text-xs font-medium hover:text-blue-300 transition-colors cursor-pointer"
           >
             <span className="truncate">{feature.name}</span>
@@ -312,15 +318,15 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
         )}
       </div>
 
-      <div className="hidden sm:flex py-1.5 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
+      <div className="hidden sm:flex py-1.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
         <StatusBadge status={feature.status} />
       </div>
 
-      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
+      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
         <VersionBadge version={feature.iosVersion} versionHistory={feature.versionHistory} />
       </div>
 
-      <div className="hidden sm:flex py-1.5 cursor-pointer" onClick={() => onEdit(feature)}>
+      <div className="hidden sm:flex py-1.5 cursor-pointer" onClick={() => openRow(feature)}>
         <PriorityBadge priority={feature.priority} />
       </div>
 
@@ -331,13 +337,13 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
       </div>
 
       {/* Team avatars */}
-      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => onEdit(feature)}>
+      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
         <TeamAvatars feature={feature} ringColor="var(--card)" onToggleAgent={onToggleAgent} />
       </div>
 
       {/* Risk (with reasons tooltip on hover) */}
       <div className="hidden sm:flex items-center py-1.5 pl-4">
-        <RiskBadge feature={feature} onClick={() => onEdit(feature)} />
+        <RiskBadge feature={feature} onClick={() => openRow(feature)} />
       </div>
 
       {/* Notes (editable, manual user input) */}
