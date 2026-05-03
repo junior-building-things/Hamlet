@@ -84,6 +84,24 @@ export interface Feature {
    * and the list is shown on hover (formatted as "M/D: from → to").
    */
   versionChanges?: Array<{ date: string; from: string; to: string }>;
+  /**
+   * Chronological log of risk-level transitions detected by the daily
+   * digest. Each entry records the change Junior observed between two
+   * consecutive runs. Capped to the last ~20 entries; older history is
+   * dropped to keep the feature cache compact. Surfaced in the feature
+   * drawer's Activity section.
+   *
+   *   { date: 'YYYY-MM-DD', from: 'green', to: 'yellow' }
+   */
+  riskHistory?: Array<{ date: string; from: 'red' | 'yellow' | 'green' | 'none'; to: 'red' | 'yellow' | 'green' | 'none' }>;
+  /**
+   * Chronological log of PRD content updates detected by the digest.
+   * Each entry is the Gemini-summarised diff that was appended to the
+   * PRD's Change Log section. Capped to the last ~20.
+   *
+   *   { date: 'YYYY-MM-DD', summary: 'Added migration plan…' }
+   */
+  prdUpdates?: Array<{ date: string; summary: string }>;
   // Free-form user notes (manually entered in the Notes column)
   notes?: string;
   // Fields manually edited in the UI — protected from sync overwrites

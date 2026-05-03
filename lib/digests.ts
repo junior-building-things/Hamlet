@@ -3351,6 +3351,13 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     console.warn('[digests] feature cache update / transition detection failed:', e);
   }
 
+  // Helpers shared by Step 2c (PRD updates) and Step 6b (risk transitions)
+  // for appending to per-feature history arrays in the cache. Caps each
+  // history at the last 20 entries so the cache stays compact.
+  function appendCappedHistory<T>(prev: T[] | undefined, entry: T, max = 20): T[] {
+    return [...(prev ?? []).slice(-(max - 1)), entry];
+  }
+
   // Step 2c: PRD Change Log auto-update — scan each feature's PRD for
   // content changes since the last run. If the text differs, use Gemini
   // to summarize what changed and append it to the Change Log section.
@@ -3478,6 +3485,23 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             workItemId: f.workItemId,
             pocEmails,
           });
+
+          // Append the diff summary to feature.prdUpdates in the cache so
+          // the FeatureDrawer's Activity feed can show "Junior summarised
+          // PRD edits". Best-effort — failures here don't block anything
+          // downstream.
+          try {
+            const cache = await readFeatureCache();
+            const cached = cache?.features.find(
+              cf => cf.id === f.workItemId || cf.meegoIssueId === f.workItemId,
+            );
+            if (cached) {
+              const next = appendCappedHistory(cached.prdUpdates, { date: today, summary });
+              await patchFeaturesInCache(new Map([[f.workItemId, { prdUpdates: next }]]));
+            }
+          } catch (e) {
+            console.warn(`[digests] prdUpdates append failed for "${f.name}":`, e);
+          }
         }
 
         // Update snapshot (always, even on first run)
@@ -3967,6 +3991,24 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
       const riskByWorkItemId = new Map(riskFindings.map(r => [r.feature.workItemId, r]));
       const featureByWorkItemId = new Map(features.map(f => [f.workItemId, f]));
       const deltas = new Map<string, Partial<import('./types').Feature>>();
+      const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+      // When delta.riskLevel was explicitly set (one of the 3 patch
+      // branches below), append a riskHistory entry if the level changed
+      // from the cached previous value. The 4th branch (preserve previous
+      // risk) intentionally doesn't call this — undefined means "keep".
+      function trackRiskTransition(
+        delta: Partial<import('./types').Feature>,
+        cached: import('./types').Feature,
+      ) {
+        const prev = cached.riskLevel ?? 'none';
+        const next = delta.riskLevel ?? 'none';
+        if (prev === next) return;
+        delta.riskHistory = appendCappedHistory(cached.riskHistory, {
+          date: todayDate,
+          from: prev as 'red' | 'yellow' | 'green' | 'none',
+          to:   next as 'red' | 'yellow' | 'green' | 'none',
+        });
+      }
       let versionScanned = 0;
       let versionDelayed = 0;
       for (const cached of featureCache.features) {
@@ -4115,6 +4157,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           }
           delta.riskLevel = undefined;
           delta.riskNotes = undefined;
+          trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
           continue;
         }
@@ -4136,6 +4179,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           const notes: string[] = [...finding.reasons];
           if (finding.delay) notes.unshift(finding.delay.detail);
           delta.riskNotes = notes.length > 0 ? notes : undefined;
+          trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
           continue;
         }
@@ -4145,6 +4189,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           const latest = nextVersionChanges![nextVersionChanges!.length - 1];
           delta.riskLevel = 'red';
           delta.riskNotes = [`${latest.from} → ${latest.to}`];
+          trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
           continue;
         }
@@ -4153,6 +4198,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         if (statusName === '技术方案设计中' || statusName === '开发中') {
           delta.riskLevel = 'green';
           delta.riskNotes = undefined;
+          trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
           continue;
         }

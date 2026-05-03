@@ -2,7 +2,7 @@
 import { useEffect } from 'react';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
-import { X, AlertTriangle, Activity } from 'lucide-react';
+import { X, AlertTriangle, Activity, FileText } from 'lucide-react';
 import Image from 'next/image';
 
 /**
@@ -94,11 +94,15 @@ export function FeatureDrawer({ feature, onClose }: Props) {
 
   // ── Junior insight: important vs idle ──────────────────────────────────────
   // "Important" if Junior has anything worth surfacing — risk flagged red /
-  // yellow, explicit risk reasons, or a recent version slip (PRD/release).
-  const hasRiskFlag    = feature.riskLevel === 'red' || feature.riskLevel === 'yellow';
-  const hasRiskNotes   = !!feature.riskNotes && feature.riskNotes.length > 0;
-  const hasVersionSlip = !!feature.versionChanges && feature.versionChanges.length > 0;
-  const isImportant    = hasRiskFlag || hasRiskNotes || hasVersionSlip;
+  // yellow, explicit risk reasons, a recent version slip, a recent risk
+  // worsening, or a PRD update in the last 7 days.
+  const hasRiskFlag      = feature.riskLevel === 'red' || feature.riskLevel === 'yellow';
+  const hasRiskNotes     = !!feature.riskNotes && feature.riskNotes.length > 0;
+  const hasVersionSlip   = !!feature.versionChanges && feature.versionChanges.length > 0;
+  const sevenDaysAgo     = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const recentPrdUpdate  = (feature.prdUpdates ?? []).find(p => p.date >= sevenDaysAgo);
+  const recentRiskChange = (feature.riskHistory ?? []).find(r => r.date >= sevenDaysAgo && (r.to === 'red' || r.to === 'yellow'));
+  const isImportant      = hasRiskFlag || hasRiskNotes || hasVersionSlip || !!recentPrdUpdate || !!recentRiskChange;
 
   const insightSummary = isImportant
     ? [
@@ -106,25 +110,34 @@ export function FeatureDrawer({ feature, onClose }: Props) {
         ...(hasVersionSlip
           ? feature.versionChanges!.slice(-1).map(c => `Planned version slip: ${c.from} → ${c.to}`)
           : []),
+        ...(recentPrdUpdate ? [`Recent PRD update: ${recentPrdUpdate.summary}`] : []),
       ].join(' · ') || 'Risk flagged — review the activity feed below.'
     : 'Nothing to callout. Junior is monitoring this feature for risk, PRD edits, and unresolved questions.';
 
-  // ── Activity feed: combine version slips + a "Last synced" entry ──────────
-  // Risk transitions + PRD-update events aren't tracked historically yet
-  // (that needs backend changes to feature cache). When they land, prepend
-  // them here as additional `ActivityEntry` items.
+  // ── Activity feed: merge version slips, risk transitions, and PRD
+  // updates (all populated by the digest pipeline), then sort newest-first
+  // and cap to the last 12. Last sync time is appended as a tail entry.
   type ActivityEntry =
-    | { kind: 'version_slip'; date: string; from: string; to: string }
-    | { kind: 'sync';         iso: string };
+    | { kind: 'version_slip';   date: string; from: string; to: string }
+    | { kind: 'risk_change';    date: string; from: string; to: string }
+    | { kind: 'prd_update';     date: string; summary: string }
+    | { kind: 'sync';           iso: string };
 
-  const activity: ActivityEntry[] = [
-    ...(feature.versionChanges ?? []).slice(-6).reverse().map(c => ({
-      kind: 'version_slip' as const,
-      date: c.date,
-      from: c.from,
-      to: c.to,
+  type DatedEntry = Exclude<ActivityEntry, { kind: 'sync' }>;
+  const dated: DatedEntry[] = [
+    ...(feature.versionChanges ?? []).map((c): DatedEntry => ({
+      kind: 'version_slip', date: c.date, from: c.from, to: c.to,
+    })),
+    ...(feature.riskHistory ?? []).map((r): DatedEntry => ({
+      kind: 'risk_change', date: r.date, from: r.from, to: r.to,
+    })),
+    ...(feature.prdUpdates ?? []).map((p): DatedEntry => ({
+      kind: 'prd_update', date: p.date, summary: p.summary,
     })),
   ];
+  // Sort newest first by ISO date.
+  dated.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const activity: ActivityEntry[] = dated.slice(0, 12);
   if (feature.lastUpdated) {
     activity.push({ kind: 'sync', iso: feature.lastUpdated });
   }
@@ -320,42 +333,120 @@ function formatRel(iso: string): string {
 
 type ActivityEntryT =
   | { kind: 'version_slip'; date: string; from: string; to: string }
+  | { kind: 'risk_change';  date: string; from: string; to: string }
+  | { kind: 'prd_update';   date: string; summary: string }
   | { kind: 'sync';         iso: string };
+
+const RISK_COLOR: Record<string, { bg: string; fg: string; border: string }> = {
+  red:    { bg: 'oklch(0.72 0.18 22 / 0.12)',  fg: 'var(--rose)',       border: 'oklch(0.62 0.20 22 / 0.3)'  },
+  yellow: { bg: 'oklch(0.82 0.14 75 / 0.14)',  fg: 'var(--amber)',      border: 'oklch(0.55 0.16 75 / 0.3)'  },
+  green:  { bg: 'oklch(0.78 0.14 155 / 0.12)', fg: 'var(--green)',      border: 'oklch(0.50 0.16 155 / 0.3)' },
+  none:   { bg: 'var(--bg-elev-2)',             fg: 'var(--text-muted)', border: 'var(--hairline-strong)'    },
+};
+
+function riskLabel(level: string): string {
+  if (level === 'red')    return 'High';
+  if (level === 'yellow') return 'Medium';
+  if (level === 'green')  return 'Low';
+  return 'None';
+}
 
 function ActivityItem({ entry }: { entry: ActivityEntryT }) {
   if (entry.kind === 'version_slip') {
     return (
-      <div className="flex items-start gap-2.5">
-        <div
-          className="w-5 h-5 rounded-full grid place-items-center shrink-0 border"
-          style={{ background: 'var(--ai-soft)', color: 'var(--ai)', borderColor: 'oklch(0.78 0.16 var(--ai-h) / 0.3)' }}
-        >
-          <AlertTriangle className="w-2.5 h-2.5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[12px]">
-            <span className="text-[var(--ai)] font-medium">Hamlet</span>{' '}
-            <span className="text-[var(--text-muted)]">flagged version slip {entry.from} → {entry.to}</span>
-          </div>
-          <div className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">{entry.date}</div>
-        </div>
-      </div>
+      <ActivityRow
+        iconBg="var(--ai-soft)"
+        iconFg="var(--ai)"
+        iconBorder="oklch(0.78 0.16 var(--ai-h) / 0.3)"
+        icon={<AlertTriangle className="w-2.5 h-2.5" />}
+        actor="Hamlet"
+        actorColor="var(--ai)"
+        body={`flagged version slip ${entry.from} → ${entry.to}`}
+        meta={entry.date}
+      />
+    );
+  }
+  if (entry.kind === 'risk_change') {
+    const tone = RISK_COLOR[entry.to] ?? RISK_COLOR.none;
+    return (
+      <ActivityRow
+        iconBg={tone.bg}
+        iconFg={tone.fg}
+        iconBorder={tone.border}
+        icon={<AlertTriangle className="w-2.5 h-2.5" />}
+        actor="Junior"
+        actorColor="var(--ai)"
+        body={
+          <>
+            risk changed{' '}
+            <strong style={{ color: 'var(--text)', fontWeight: 500 }}>
+              {riskLabel(entry.from)} → {riskLabel(entry.to)}
+            </strong>
+          </>
+        }
+        meta={entry.date}
+      />
+    );
+  }
+  if (entry.kind === 'prd_update') {
+    return (
+      <ActivityRow
+        iconBg="oklch(0.74 0.14 295 / 0.14)"
+        iconFg="var(--violet)"
+        iconBorder="oklch(0.55 0.18 295 / 0.3)"
+        icon={<FileText className="w-2.5 h-2.5" />}
+        actor="Junior"
+        actorColor="var(--ai)"
+        body={
+          <>
+            updated PRD — <span style={{ color: 'var(--text-muted)' }}>{entry.summary}</span>
+          </>
+        }
+        meta={entry.date}
+      />
     );
   }
   // Sync entry
   return (
+    <ActivityRow
+      iconBg="var(--bg-elev-2)"
+      iconFg="var(--text-muted)"
+      iconBorder="var(--hairline-strong)"
+      icon={<Activity className="w-2.5 h-2.5" />}
+      actor="Synced"
+      actorColor="var(--text)"
+      body="from Meego"
+      meta={formatRel(entry.iso)}
+    />
+  );
+}
+
+function ActivityRow({
+  iconBg, iconFg, iconBorder, icon, actor, actorColor, body, meta,
+}: {
+  iconBg: string;
+  iconFg: string;
+  iconBorder: string;
+  icon: React.ReactNode;
+  actor: string;
+  actorColor: string;
+  body: React.ReactNode;
+  meta: string;
+}) {
+  return (
     <div className="flex items-start gap-2.5">
       <div
-        className="w-5 h-5 rounded-full grid place-items-center shrink-0 border border-[var(--hairline-strong)] text-[var(--text-muted)] bg-[var(--bg-elev-2)]"
+        className="w-5 h-5 rounded-full grid place-items-center shrink-0 border"
+        style={{ background: iconBg, color: iconFg, borderColor: iconBorder }}
       >
-        <Activity className="w-2.5 h-2.5" />
+        {icon}
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-[12px]">
-          <span className="text-[var(--text)] font-medium">Synced</span>{' '}
-          <span className="text-[var(--text-muted)]">from Meego</span>
+          <span className="font-medium" style={{ color: actorColor }}>{actor}</span>{' '}
+          <span className="text-[var(--text-muted)]">{body}</span>
         </div>
-        <div className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">{formatRel(entry.iso)}</div>
+        <div className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">{meta}</div>
       </div>
     </div>
   );
