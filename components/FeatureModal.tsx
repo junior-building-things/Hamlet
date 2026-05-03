@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Feature, Priority } from '@/lib/types';
-import { X, Loader2, CheckCircle2, WandSparkles } from 'lucide-react';
+import { X, Loader2, CheckCircle2, WandSparkles, Plus } from 'lucide-react';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
@@ -203,7 +203,9 @@ function FormLabel({ children, required }: { children: React.ReactNode; required
   );
 }
 
-const inputCls = 'w-full bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 placeholder-gray-600';
+// Design-token input styling — matches the redesign's `.input` rule
+// (compact 8/10 padding, hairline border, mint focus ring).
+const inputCls = 'w-full bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text)] text-[12.5px] rounded-[var(--r-sm)] px-2.5 py-2 focus:outline-none focus:border-[oklch(0.82_0.14_var(--ai-h)/0.5)] focus:shadow-[0_0_0_3px_var(--ai-soft)] placeholder-[var(--text-dim)] transition-colors';
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -422,14 +424,27 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
   // (which uses `feature`, now shadowed by createdFeature).
   if (mode === 'add' && !createdFeature) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-[var(--background)] border border-[var(--border)] rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="fixed inset-0 z-[100] grid place-items-center p-10 bg-black/60 backdrop-blur-[8px]" onClick={onClose}>
+        <div
+          onClick={e => e.stopPropagation()}
+          className="relative bg-[var(--bg-elev-1)] border border-[var(--hairline-strong)] rounded-[var(--r-xl)] w-[520px] max-w-full max-h-[90vh] flex flex-col overflow-hidden"
+          style={{ boxShadow: 'var(--shadow-lg)' }}
+        >
+          {/* Mint hairline at the top edge of the modal */}
+          <div
+            aria-hidden
+            className="absolute top-0 left-0 right-0 h-px opacity-60"
+            style={{ background: 'linear-gradient(90deg, transparent, var(--ai), transparent)' }}
+          />
 
-          <div className="px-6 py-4 border-b border-[var(--border)] shrink-0 flex items-center justify-between">
-            <h2 className="text-[var(--foreground)] font-semibold text-lg">New Feature</h2>
-            <button onClick={onClose} className="text-gray-500 hover:text-[var(--foreground)] transition-colors">
-              <X className="w-5 h-5" />
+          <div className="px-[22px] py-[18px] border-b border-[var(--hairline)] shrink-0 flex items-center justify-between gap-3">
+            <h2 className="text-[var(--text)] font-semibold text-[15px] tracking-[-0.02em]">New Feature</h2>
+            <button
+              onClick={onClose}
+              className="grid place-items-center w-8 h-8 rounded-[var(--r-sm)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elev-2)] hover:border-[var(--hairline-strong)] transition-colors"
+              title="Close"
+            >
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
 
@@ -579,14 +594,21 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
                 <p className="text-xs text-red-500 mb-2">{createError}</p>
               </div>
             )}
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-[var(--border)] shrink-0">
-              <button type="button" onClick={onClose} disabled={creating}
-                className="px-5 py-2 bg-[var(--card-hover)] text-[var(--foreground)] hover:opacity-80 disabled:opacity-50 text-sm font-semibold rounded-lg transition-colors">
+            <div className="flex justify-end gap-2 px-[22px] py-3.5 border-t border-[var(--hairline)] bg-[var(--bg-elev-2)] shrink-0">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={creating}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text)] hover:bg-[var(--bg-elev-3)] hover:border-[var(--hairline-strong)] text-[12px] transition-colors disabled:opacity-50"
+              >
                 Cancel
               </button>
-              <button type="submit" disabled={!form.name.trim() || creating}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2">
-                {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <button
+                type="submit"
+                disabled={!form.name.trim() || creating}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[var(--r-sm)] bg-[var(--text)] text-[var(--bg)] text-[12px] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {creating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                 {creating ? 'Creating…' : 'Create Feature'}
               </button>
             </div>
@@ -599,17 +621,30 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
   // ── Edit mode ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-[var(--background)] border border-[var(--border)] rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-[100] grid place-items-center p-10 bg-black/60 backdrop-blur-[8px]" onClick={onClose}>
+      <div
+        onClick={e => e.stopPropagation()}
+        className="relative bg-[var(--bg-elev-1)] border border-[var(--hairline-strong)] rounded-[var(--r-xl)] w-[520px] max-w-full max-h-[90vh] flex flex-col overflow-hidden"
+        style={{ boxShadow: 'var(--shadow-lg)' }}
+      >
+        {/* Mint hairline at the top edge of the modal */}
+        <div
+          aria-hidden
+          className="absolute top-0 left-0 right-0 h-px opacity-60"
+          style={{ background: 'linear-gradient(90deg, transparent, var(--ai), transparent)' }}
+        />
 
-        <div className="px-6 py-4 border-b border-[var(--border)] shrink-0">
+        <div className="px-[22px] py-[18px] border-b border-[var(--hairline)] shrink-0">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-[var(--foreground)] font-semibold text-lg leading-snug pr-2">
+            <h2 className="text-[var(--text)] font-semibold text-[15px] tracking-[-0.02em] leading-snug pr-2">
               {feature?.name ?? 'Feature'}
             </h2>
-            <button onClick={onClose} className="text-gray-500 hover:text-[var(--foreground)] transition-colors shrink-0 mt-0.5">
-              <X className="w-5 h-5" />
+            <button
+              onClick={onClose}
+              className="grid place-items-center w-8 h-8 rounded-[var(--r-sm)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elev-2)] hover:border-[var(--hairline-strong)] transition-colors shrink-0"
+              title="Close"
+            >
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
           {isMeego && (
@@ -709,9 +744,11 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
 
         </div>
 
-        <div className="flex justify-end px-6 py-4 border-t border-[var(--border)] shrink-0">
-          <button onClick={onClose}
-            className="px-5 py-2 bg-[var(--card-hover)] text-[var(--foreground)] hover:opacity-80 text-sm font-semibold rounded-lg transition-colors">
+        <div className="flex justify-end px-[22px] py-3.5 border-t border-[var(--hairline)] bg-[var(--bg-elev-2)] shrink-0">
+          <button
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text)] hover:bg-[var(--bg-elev-3)] hover:border-[var(--hairline-strong)] text-[12px] transition-colors"
+          >
             Close
           </button>
         </div>
