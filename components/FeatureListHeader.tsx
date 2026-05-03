@@ -7,9 +7,9 @@ interface Props {
 
 export function FeatureListHeader({ hideStatus, hidePriority }: Props) {
   // Mirror the row's column order (Feature, Status?, Version, Priority?,
-  // Links, Team, Risk, Notes, Action, Sync). Hidden columns are simply
-  // not rendered so the subgrid track count matches ProjectView's
-  // dynamic gridTemplateColumns.
+  // Links, Team, Risk, Notes, Action, Sync). Each label uses the same
+  // `pl-4` left padding the row cells use, so header text aligns flush
+  // with the column values below it.
   const labels: Array<string | null> = [
     'Feature',
     hideStatus   ? null : 'Status',
@@ -25,13 +25,12 @@ export function FeatureListHeader({ hideStatus, hidePriority }: Props) {
 
   return (
     <div
-      className="hidden sm:grid sm:col-span-full sm:[grid-template-columns:subgrid] py-2.5 px-5 sticky top-0 bg-[var(--bg-elev-1)] border-b border-[var(--hairline)] z-10"
+      className="hidden sm:grid sm:col-span-full sm:[grid-template-columns:subgrid] py-2.5 sticky top-0 bg-[var(--bg-elev-1)] border-b border-[var(--hairline)] z-10"
     >
       {labels.map((label, i) => (
         <span
           key={i}
-          className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-dim)]"
-          style={{ paddingLeft: i === 0 || label == null ? 0 : 4 }}
+          className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-dim)] pl-4"
         >
           {label ?? ''}
         </span>

@@ -20,10 +20,15 @@ export function Tip({
   children,
   content,
   delay = 350,
+  wrapClassName,
 }: {
   children: React.ReactNode;
   content: React.ReactNode;
   delay?: number;
+  /** Optional class composed onto the .tip-wrap span. Useful when the
+   *  wrapper needs to participate in flex layout (e.g. flex-1 min-w-0
+   *  so its truncating child has a real width to overflow against). */
+  wrapClassName?: string;
 }) {
   const [shown, setShown]   = useState(false);
   const [pos, setPos]       = useState({ x: 0, y: 0 });
@@ -53,7 +58,7 @@ export function Tip({
   return (
     <span
       ref={wrapRef}
-      className="tip-wrap"
+      className={`tip-wrap ${wrapClassName ?? ''}`.trim()}
       onMouseEnter={show}
       onMouseLeave={hide}
     >

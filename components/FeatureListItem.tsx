@@ -317,19 +317,22 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
       <div className="hidden sm:flex items-center pl-4 py-2.5 w-full min-w-0">
         {onFieldUpdate ? (
           <div className="flex items-center gap-2 w-full min-w-0">
-            <Tip content={
-              <>
-                <div className="tip-label" style={{ marginBottom: 4 }}>Feature</div>
-                <div style={{ fontSize: 12.5, lineHeight: 1.4 }}>{feature.name}</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  FEATURE-{(feature.meegoIssueId ?? feature.id).slice(-7)}
-                </div>
-              </>
-            }>
+            <Tip
+              wrapClassName="!flex flex-1 min-w-0"
+              content={
+                <>
+                  <div className="tip-label" style={{ marginBottom: 4 }}>Feature</div>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.4 }}>{feature.name}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    FEATURE-{(feature.meegoIssueId ?? feature.id).slice(-7)}
+                  </div>
+                </>
+              }
+            >
               <EditableText
                 value={feature.name}
                 onSave={v => onFieldUpdate(feature.id, { name: v })}
-                className="text-[var(--foreground)] text-xs font-medium truncate"
+                className="text-[var(--foreground)] text-xs font-medium truncate block w-full"
               />
             </Tip>
             {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
