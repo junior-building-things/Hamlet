@@ -641,8 +641,26 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const gridCols = 'sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content]';
-  const listGridCls = `flex flex-col sm:grid ${gridCols} sm:gap-x-3 sm:gap-y-0`;
+  // Hide the column whose value drives the current grouping — its value
+  // is already on the group header, and showing it on every row is just
+  // noise. Adjust the grid template + skip the cell in the header / row.
+  const hideStatus   = groupBy === 'status';
+  const hidePriority = groupBy === 'priority';
+  const gridTemplateColumns = (() => {
+    const cols = ['minmax(0,500px)']; // Feature
+    if (!hideStatus)   cols.push('max-content'); // Status
+    cols.push('max-content');                    // Version
+    if (!hidePriority) cols.push('max-content'); // Priority
+    cols.push('max-content');                    // Links
+    cols.push('max-content');                    // Team
+    cols.push('max-content');                    // Risk
+    cols.push('minmax(0,200px)');                // Notes
+    cols.push('max-content');                    // Action
+    cols.push('max-content');                    // Sync
+    return cols.join(' ');
+  })();
+  const listGridCls = 'flex flex-col sm:grid sm:gap-x-3 sm:gap-y-0';
+  const listGridStyle = { gridTemplateColumns } as const;
 
   async function handleComplete(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
@@ -759,7 +777,9 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         onSync={syncOne}
         completing={completingId === f.id} onComplete={handleComplete}
         pinned={f.id === pinnedId} onToggleAgent={handleToggleAgent}
-        onFieldUpdate={handleFieldUpdate} />
+        onFieldUpdate={handleFieldUpdate}
+        hideStatus={hideStatus}
+        hidePriority={hidePriority} />
     ));
   }
 
@@ -807,8 +827,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           </div>
         ) : groups ? (
           // ── Grouped list view ──────────────────────────────────────────────
-          <div className={listGridCls}>
-            <FeatureListHeader />
+          <div className={listGridCls} style={listGridStyle}>
+            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} />
             {/* Render pinned feature above all groups */}
             {pinnedId && (() => {
               const pinned = features.find(f => f.id === pinnedId);
@@ -823,8 +843,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           </div>
         ) : (
           // ── Plain list view ────────────────────────────────────────────────
-          <div className={listGridCls}>
-            <FeatureListHeader />
+          <div className={listGridCls} style={listGridStyle}>
+            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} />
             {renderListRows(sorted)}
           </div>
         )}

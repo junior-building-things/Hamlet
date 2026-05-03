@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useRef, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useRef, useState, useCallback, useEffect, ReactNode } from 'react';
 
 /**
  * Shared sync state surfaced to every tab.
@@ -33,6 +33,10 @@ interface SyncContextValue extends SyncState {
   setSyncState: (s: SyncState) => void;
   /** Mark "now" as the latest sync time (called after sync completes). */
   markSynced: () => void;
+  /** ISO timestamp of the most recent refresh-feature-cache cron run.
+   *  Polled once at mount + after every Sync All so the drawer's
+   *  "Updated Xh ago" line stays roughly fresh without spamming the API. */
+  refreshCronLastRunAt?: string | null;
 }
 
 const SyncContext = createContext<SyncContextValue | null>(null);
@@ -41,7 +45,21 @@ const noop = () => {};
 
 export function SyncProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SyncState>({ syncingAll: false, detailSyncTotal: 0, lastSyncedAt: null });
+  const [refreshCronLastRunAt, setRefreshCronLastRunAt] = useState<string | null>(null);
   const handlerRef = useRef<() => void | Promise<void>>(noop);
+
+  // Pull the refresh-feature-cache cron's lastAttemptTime once on mount
+  // and re-poll lazily after every sync-all completion. The drawer reads
+  // this to compute the "Updated Xh ago" line.
+  const refetchCronTimes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/crons');
+      const data = await res.json() as { jobs?: Array<{ id: string; lastAttemptTime?: string | null }> };
+      const job = (data.jobs ?? []).find(j => j.id === 'refresh-feature-cache');
+      setRefreshCronLastRunAt(job?.lastAttemptTime ?? null);
+    } catch { /* best-effort */ }
+  }, []);
+  useEffect(() => { refetchCronTimes(); }, [refetchCronTimes]);
 
   const registerSyncAll = useCallback((fn: () => void | Promise<void>) => {
     handlerRef.current = fn;
@@ -59,7 +77,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   const markSynced = useCallback(() => {
     setState(prev => ({ ...prev, lastSyncedAt: new Date().toISOString() }));
-  }, []);
+    // Re-poll cron times (in case the user manually triggered the
+    // refresh cron and just got a fresh value).
+    void refetchCronTimes();
+  }, [refetchCronTimes]);
 
   const syncAll = useCallback(() => {
     void handlerRef.current();
@@ -71,6 +92,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         syncingAll: state.syncingAll,
         detailSyncTotal: state.detailSyncTotal,
         lastSyncedAt: state.lastSyncedAt,
+        refreshCronLastRunAt,
         syncAll,
         registerSyncAll,
         setSyncState,

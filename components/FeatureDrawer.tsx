@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
+import { useSync } from '@/components/SyncContext';
 import { X, AlertTriangle, Activity, FileText } from 'lucide-react';
 import Image from 'next/image';
 
@@ -68,6 +69,8 @@ function featureCode(f: Feature): string {
 }
 
 export function FeatureDrawer({ feature, onClose }: Props) {
+  const { lastSyncedAt, refreshCronLastRunAt } = useSync();
+
   // Close on Escape.
   useEffect(() => {
     if (!feature) return;
@@ -91,6 +94,21 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   if (feature.libraUrl)      links.push({ kind: 'libra',      label: 'Libra',     url: feature.libraUrl,      icon: '/libra.png' });
   if (feature.complianceUrl) links.push({ kind: 'compliance', label: 'Compliance',url: feature.complianceUrl, icon: '/compliance.png' });
   if (feature.abReportUrl)   links.push({ kind: 'ab',         label: 'AB Report', url: feature.abReportUrl,   icon: '/abreport.png' });
+
+  // ── Freshness for "Updated Xh ago" ────────────────────────────────────────
+  // Prefer the most recent of:
+  //   (a) refresh-feature-cache cron's last run (only counts if within 24h)
+  //   (b) the user's last manual Sync All / individual sync (lastSyncedAt)
+  //   (c) the feature's own lastUpdated (Meego sync timestamp)
+  const cronWithin24h = (() => {
+    if (!refreshCronLastRunAt) return null;
+    const ms = Date.now() - new Date(refreshCronLastRunAt).getTime();
+    return Number.isFinite(ms) && ms < 24 * 60 * 60 * 1000 ? refreshCronLastRunAt : null;
+  })();
+  const updatedAtIso = [cronWithin24h, lastSyncedAt, feature.lastUpdated]
+    .filter((s): s is string => !!s && Number.isFinite(new Date(s).getTime()))
+    .sort()
+    .pop() ?? null;
 
   // ── Junior insight: important vs idle ──────────────────────────────────────
   // "Important" if Junior has anything worth surfacing — risk flagged red /
@@ -138,8 +156,8 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   // Sort newest first by ISO date.
   dated.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const activity: ActivityEntry[] = dated.slice(0, 12);
-  if (feature.lastUpdated) {
-    activity.push({ kind: 'sync', iso: feature.lastUpdated });
+  if (updatedAtIso) {
+    activity.push({ kind: 'sync', iso: updatedAtIso });
   }
 
   return (
@@ -181,30 +199,21 @@ export function FeatureDrawer({ feature, onClose }: Props) {
         {/* Body (scrolls) */}
         <div className="px-[22px] py-[18px] overflow-y-auto flex-1 flex flex-col gap-[18px]">
 
-          {/* Junior insight — important = blue-glow box + warning icon,
-              idle = neutral box + activity icon. */}
+          {/* Junior insight — both states use the design's blue gradient
+              + blue stroke. Important also adds a soft glow ring. */}
           <div
             className="px-4 py-3.5 rounded-[var(--r-lg)] border flex gap-3.5 items-start transition-shadow"
-            style={
-              isImportant
-                ? {
-                    background: 'linear-gradient(135deg, var(--ai-soft), oklch(0.74 0.14 295 / 0.06))',
-                    borderColor: 'oklch(0.78 0.16 var(--ai-h) / 0.4)',
-                    boxShadow: '0 0 0 3px var(--ai-soft), 0 0 24px var(--ai-glow)',
-                  }
-                : {
-                    background: 'var(--bg-elev-2)',
-                    borderColor: 'var(--hairline)',
-                  }
-            }
+            style={{
+              background: 'linear-gradient(135deg, var(--ai-soft), oklch(0.74 0.14 295 / 0.06))',
+              borderColor: isImportant
+                ? 'oklch(0.55 0.13 var(--ai-h) / 0.4)'
+                : 'oklch(0.55 0.13 var(--ai-h) / 0.25)',
+              boxShadow: isImportant ? '0 0 0 3px var(--ai-soft), 0 0 24px var(--ai-glow)' : 'none',
+            }}
           >
             <span
               className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[var(--bg)] font-mono text-[9.5px] uppercase tracking-[0.1em] shrink-0 border"
-              style={
-                isImportant
-                  ? { color: 'var(--ai)', borderColor: 'oklch(0.78 0.16 var(--ai-h) / 0.3)' }
-                  : { color: 'var(--text-muted)', borderColor: 'var(--hairline-strong)' }
-              }
+              style={{ color: 'var(--ai)', borderColor: 'oklch(0.55 0.13 var(--ai-h) / 0.3)' }}
             >
               {isImportant ? <AlertTriangle className="w-2.5 h-2.5" /> : <Activity className="w-2.5 h-2.5" />}
               Junior
@@ -212,7 +221,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
             <div className="flex-1 min-w-0">
               <div className="text-[12.5px] leading-[1.5] text-[var(--text)]">{insightSummary}</div>
               <div className="font-mono text-[10px] text-[var(--text-muted)] mt-1">
-                {feature.lastUpdated ? `Synced ${formatRel(feature.lastUpdated)}` : 'No sync time recorded'}
+                {updatedAtIso ? `Updated ${formatRel(updatedAtIso)}` : 'Never updated'}
               </div>
             </div>
           </div>
@@ -413,9 +422,9 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
       iconFg="var(--text-muted)"
       iconBorder="var(--hairline-strong)"
       icon={<Activity className="w-2.5 h-2.5" />}
-      actor="Synced"
+      actor="Updated"
       actorColor="var(--text)"
-      body="from Meego"
+      body="latest sync"
       meta={formatRel(entry.iso)}
     />
   );

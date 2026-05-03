@@ -25,6 +25,10 @@ interface Props {
   pinned?: boolean;
   onToggleAgent?: (featureId: string, agentKey: string) => void;
   onFieldUpdate?: (featureId: string, updates: Partial<Feature>) => void;
+  /** Skip the Status cell (used when the table is grouped by status). */
+  hideStatus?: boolean;
+  /** Skip the Priority cell (used when the table is grouped by priority). */
+  hidePriority?: boolean;
 }
 
 // ─── Inline editable text field ─────────────────────────────────────────────
@@ -226,7 +230,7 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate, hideStatus, hidePriority }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
   // Row clicks open the drawer (Phase C). Falls back to onEdit when no
@@ -341,17 +345,21 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
         )}
       </div>
 
-      <div className="hidden sm:flex py-2.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
-        <StatusBadge status={feature.status} />
-      </div>
+      {!hideStatus && (
+        <div className="hidden sm:flex py-2.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
+          <StatusBadge status={feature.status} />
+        </div>
+      )}
 
       <div className="hidden sm:flex items-center py-2.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
         <VersionBadge version={feature.iosVersion} versionHistory={feature.versionHistory} />
       </div>
 
-      <div className="hidden sm:flex py-2.5 cursor-pointer" onClick={() => openRow(feature)}>
-        <PriorityBadge priority={feature.priority} />
-      </div>
+      {!hidePriority && (
+        <div className="hidden sm:flex py-2.5 cursor-pointer" onClick={() => openRow(feature)}>
+          <PriorityBadge priority={feature.priority} />
+        </div>
+      )}
 
       <div className="hidden sm:flex items-center py-2.5 pl-4 overflow-visible relative">
         <LinkIcons feature={feature} ringColor="var(--card)"
