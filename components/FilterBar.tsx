@@ -129,12 +129,13 @@ export function FilterBar({
           placeholder="Sort"
           allowDeselect
           className={selectCls}
+          triggerClassName={chipCls}
         />
         <button
           onClick={onSortDirToggle}
           disabled={sortBy === 'none'}
           title={sortDir === 'asc' ? 'Ascending (click to reverse)' : 'Descending (click to reverse)'}
-          className="bg-[var(--bg-elev-2)] border border-[var(--hairline)] rounded-[var(--r-sm)] h-7 px-2 text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--hairline-strong)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+          className="inline-flex items-center justify-center w-7 h-7 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--hairline-strong)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
         >
           {sortDir === 'asc'
             ? <ArrowUp   className="w-3 h-3" />

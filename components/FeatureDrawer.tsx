@@ -100,16 +100,16 @@ export function FeatureDrawer({ feature, onClose }: Props) {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — fixed so it covers the sidebar too */}
       <div
         onClick={onClose}
-        className="absolute inset-0 z-[49] bg-black/25 transition-opacity"
+        className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-[2px] transition-opacity"
         aria-hidden
       />
 
-      {/* Drawer */}
+      {/* Drawer pinned to the right edge of the viewport */}
       <aside
-        className="absolute top-0 right-0 bottom-0 w-[460px] max-w-[100vw] z-[50] flex flex-col bg-[var(--bg-elev-1)] border-l border-[var(--hairline-strong)]"
+        className="fixed top-0 right-0 bottom-0 w-[460px] max-w-[100vw] z-[91] flex flex-col bg-[var(--bg-elev-1)] border-l border-[var(--hairline-strong)]"
         style={{ boxShadow: '-16px 0 48px rgba(0,0,0,0.4)' }}
         role="dialog"
         aria-label={`Detail for ${feature.name}`}
