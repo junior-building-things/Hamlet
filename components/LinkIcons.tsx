@@ -108,23 +108,21 @@ function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
     } catch { /* ignore */ }
   }
 
-  // Match POC avatar tooltip style: rounded-xl, shadow-2xl, py-2 px-3
-  const baseCls = "fixed flex items-center gap-2 py-2 px-3 rounded-xl bg-[var(--card)] border border-[var(--border)] shadow-2xl";
-  const style = {
+  // Use the shared `.tip` styling: first row = mono uppercase platform
+  // label, second row = URL as blue underlined link + copy + edit icon
+  // buttons all on the same row.
+  const style: React.CSSProperties = {
     top: anchor.top - 8,
     left: anchor.left + anchor.width / 2,
     transform: 'translate(-50%, -100%)',
     zIndex: 9999,
-    ...(editing ? { minWidth: 360 } : {}),
+    ...(editing ? { minWidth: 320 } : { minWidth: 240 }),
   };
 
-  const arrow = (
-    <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
-  );
-
   if (editing) {
-    const el = (
-      <div className={baseCls} style={style} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+    return createPortal(
+      <div className="tip shown" style={style} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+        <div className="tip-label" style={{ marginBottom: 4 }}>{link.label}</div>
         <input
           ref={inputRef}
           value={draft}
@@ -134,58 +132,77 @@ function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
             if (e.key === 'Enter') { e.preventDefault(); commit(); }
             if (e.key === 'Escape') { setDraft(link.url ?? ''); setEditing(false); }
           }}
-          className="flex-1 text-xs bg-transparent border-none outline-none text-[var(--foreground)] min-w-0"
+          className="w-full text-[11.5px] bg-[var(--bg-elev-2)] border border-[var(--hairline)] rounded-[var(--r-sm)] px-2 py-1.5 outline-none text-[var(--text)]"
           placeholder="Paste URL…"
+          style={{ fontFamily: 'var(--font-mono)' }}
         />
-        {arrow}
-      </div>
+      </div>,
+      document.body,
     );
-    return createPortal(el, document.body);
   }
 
-  const inner = (
+  const tipBody = (
     <>
-      <span className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap">
-        {link.label}
-      </span>
-      {link.url && (
-        <button
-          onClick={handleCopy}
-          className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-          title={copied ? 'Copied!' : 'Copy link'}
-        >
-          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-        </button>
-      )}
-      {onLinkUpdate && link.url && (
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditing(true); }}
-          className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-          title="Edit link"
-        >
-          <Pencil className="w-3 h-3" />
-        </button>
-      )}
+      <div className="tip-label" style={{ marginBottom: 4 }}>{link.label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {link.url ? (
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{
+              flex: 1, minWidth: 0,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10.5,
+              color: 'var(--blue)',
+              wordBreak: 'break-all',
+              textDecoration: 'underline',
+              textUnderlineOffset: 2,
+            }}
+          >
+            {link.url}
+          </a>
+        ) : (
+          <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-dim)' }}>
+            (no URL set)
+          </span>
+        )}
+        {link.url && (
+          <button
+            onClick={handleCopy}
+            className="hm-icon-btn"
+            style={{ width: 24, height: 24 }}
+            title={copied ? 'Copied!' : 'Copy link'}
+          >
+            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          </button>
+        )}
+        {onLinkUpdate && (
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditing(true); }}
+            className="hm-icon-btn"
+            style={{ width: 24, height: 24 }}
+            title="Edit link"
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+        )}
+      </div>
     </>
   );
 
-  const cls = `${baseCls} cursor-pointer hover:bg-[var(--card-hover)] transition-colors`;
-
-  const el = link.url ? (
-    <a href={link.url} target="_blank" rel="noreferrer" className={cls} style={style}
-      onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      {inner}
-      {arrow}
-    </a>
-  ) : (
-    <button className={cls} style={style}
-      onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={link.onClick}>
-      {inner}
-      {arrow}
-    </button>
+  return createPortal(
+    <div
+      className="tip shown"
+      style={style}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+    >
+      {tipBody}
+    </div>,
+    document.body,
   );
-
-  return createPortal(el, document.body);
 }
 
 // ─── Single stacked icon chip with its own hover tooltip ────────────────────

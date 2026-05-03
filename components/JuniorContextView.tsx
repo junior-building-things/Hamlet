@@ -77,7 +77,6 @@ export function JuniorContextView() {
               icon={<Activity className="w-3.5 h-3.5" />}
               name="Recent chat snapshot"
               description="Last 15 messages of the current chat, fetched live from Lark on every Junior turn."
-              live
             />
             <SystemCell
               kind="history"
@@ -125,7 +124,7 @@ export function JuniorContextView() {
 }
 
 function SystemCell({
-  kind, icon, name, description, right, clearScope, onCleared, live,
+  kind, icon, name, description, right, clearScope, onCleared,
 }: {
   kind: 'live' | 'history' | 'plain';
   icon: React.ReactNode;
@@ -134,7 +133,6 @@ function SystemCell({
   right?: string;
   clearScope?: 'chat' | 'user';
   onCleared?: () => void;
-  live?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -161,12 +159,7 @@ function SystemCell({
         {icon}
       </div>
       <div className="body">
-        <div className="ctx-name">
-          {name}
-          {live && (
-            <span className="live-pill"><span className="pulse" />LIVE</span>
-          )}
-        </div>
+        <div className="ctx-name">{name}</div>
         <div className="ctx-desc">{description}</div>
       </div>
       <div className="ctx-meta flex flex-col items-end gap-1.5">

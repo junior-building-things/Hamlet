@@ -87,16 +87,16 @@ export function VersionBadge({ version }: { version?: string; versionHistory?: s
       </span>
       {mergeDate && showTooltip && mounted && createPortal(
         <div
-          className="fixed px-2.5 py-1.5 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-xl text-[11px] text-[var(--foreground)] whitespace-nowrap pointer-events-none"
+          className="tip shown"
           style={{
-            top: anchor.top - 6,
+            top: anchor.top - 8,
             left: anchor.left + anchor.width / 2,
             transform: 'translate(-50%, -100%)',
             zIndex: 9999,
           }}
         >
-          Merge: {mergeDate}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
+          <div className="tip-label" style={{ marginBottom: 4 }}>Version {version}</div>
+          <div style={{ fontSize: 12, lineHeight: 1.4 }}>Merge: {mergeDate}</div>
         </div>,
         document.body,
       )}

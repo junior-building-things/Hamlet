@@ -60,7 +60,7 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
   if (!mounted) return null;
   return createPortal(
     <div
-      className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 min-w-[160px]"
+      className="tip shown"
       style={{
         top:       pos.top - 8,
         left:      pos.left,
@@ -70,19 +70,16 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      {/* Arrow pointing downward */}
-      <div
-        className="absolute top-full left-1/2 -translate-x-1/2
-                   border-l-[5px] border-r-[5px] border-t-[5px]
-                   border-l-transparent border-r-transparent border-t-[var(--card)]"
-      />
-      <div className="flex flex-col gap-1.5">
-        {pocs.map(poc => (
-          <div key={poc.name} className="flex items-center gap-2">
-            <UserAvatar name={poc.name} url={poc.url} size={5} />
-            <div className="min-w-0">
-              <p className="text-xs text-[var(--foreground)] leading-tight truncate">{poc.name}</p>
-              <p className="text-[10px] text-gray-500 leading-tight">{poc.role}</p>
+      <div className="flex flex-col gap-2.5">
+        {pocs.map((poc, i) => (
+          <div
+            key={poc.name}
+            className={`flex flex-col gap-1.5 ${i > 0 ? 'pt-2.5 border-t border-[var(--hairline)]' : ''}`}
+          >
+            <div className="tip-label">{poc.role}</div>
+            <div className="flex items-center gap-2">
+              <UserAvatar name={poc.name} url={poc.url} size={5} />
+              <span className="text-[12.5px] text-[var(--text)] truncate">{poc.name}</span>
             </div>
           </div>
         ))}
@@ -92,7 +89,7 @@ function PocTooltip({ pocs, pos, mounted, onEnter, onLeave, onAddClick }: {
               const r = e.currentTarget.getBoundingClientRect();
               onAddClick({ top: r.top, left: r.left + r.width / 2 });
             }}
-            className="flex items-center gap-2 py-1 px-1 -mx-1 rounded-lg hover:bg-[var(--card-hover)] transition-colors cursor-pointer"
+            className="flex items-center gap-2 mt-1 py-1 px-1 -mx-1 rounded-md hover:bg-[var(--bg-elev-2)] transition-colors cursor-pointer"
           >
             <div className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center">
               <Plus className="w-3 h-3 text-purple-400" />

@@ -43,28 +43,9 @@ function formatRelativeTime(iso?: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-const DESTINATION_ICONS: Partial<Record<CronDestinationKind, string>> = {
-  team_thomas:     '/team_thomas.png',
-  progress_update: '/progress.png',
-  feature_group:   '/feature_group.png',
-  hamlet:          '/hamlet.png',
-};
-
 function DestinationBadge({ dest }: { dest: CronDestination }) {
-  const icon = DESTINATION_ICONS[dest.kind];
-  return (
-    <span className={`meta-tag tone-${dest.kind} ${icon ? 'has-icon' : ''}`}>
-      {icon && (
-        <img
-          src={icon}
-          alt=""
-          className="meta-tag-icon"
-          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-        />
-      )}
-      {dest.label}
-    </span>
-  );
+  // Per the design: leading colored dot via ::before, no icon image.
+  return <span className={`meta-tag tone-${dest.kind}`}>{dest.label}</span>;
 }
 
 
