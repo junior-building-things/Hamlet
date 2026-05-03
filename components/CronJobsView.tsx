@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Play, Pause, PlayCircle, Clock } from 'lucide-react';
+import { Loader2, Play, Pause, PlayCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { TIME_OPTIONS, FREQUENCY_OPTIONS } from '@/lib/cron-expr';
+import { MetaSelect } from '@/components/MetaCard';
 
 type CronKind = 'cloud_scheduler' | 'digest_section';
 type CronDestinationKind = 'team_thomas' | 'progress_update' | 'feature_group' | 'compliance' | 'hamlet';
@@ -42,31 +43,22 @@ function formatRelativeTime(iso?: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-const DESTINATION_STYLES: Record<CronDestinationKind, string> = {
-  team_thomas:     'bg-blue-500/15 text-blue-700 border-blue-500/30',
-  progress_update: 'bg-yellow-500/15 text-yellow-700 border-yellow-500/30',
-  feature_group:   'bg-teal-500/15 text-teal-700 border-teal-500/30',
-  compliance:      'bg-orange-500/15 text-orange-700 border-orange-500/30',
-  hamlet:          'bg-indigo-500/15 text-indigo-700 border-indigo-500/30',
-};
-
 const DESTINATION_ICONS: Partial<Record<CronDestinationKind, string>> = {
-  team_thomas: '/team_thomas.png',
+  team_thomas:     '/team_thomas.png',
   progress_update: '/progress.png',
-  feature_group: '/feature_group.png',
-  hamlet: '/hamlet.png',
+  feature_group:   '/feature_group.png',
+  hamlet:          '/hamlet.png',
 };
 
 function DestinationBadge({ dest }: { dest: CronDestination }) {
-  const cls = DESTINATION_STYLES[dest.kind];
   const icon = DESTINATION_ICONS[dest.kind];
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${cls}`}>
+    <span className={`meta-tag tone-${dest.kind} ${icon ? 'has-icon' : ''}`}>
       {icon && (
         <img
           src={icon}
           alt=""
-          className="w-3 h-3 rounded-full object-cover"
+          className="meta-tag-icon"
           onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
         />
       )}
@@ -74,6 +66,7 @@ function DestinationBadge({ dest }: { dest: CronDestination }) {
     </span>
   );
 }
+
 
 export function CronJobsView() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
@@ -121,19 +114,14 @@ export function CronJobsView() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      <div className="shrink-0 px-6 pt-7 pb-2 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
-            Cron Jobs
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Scheduled jobs and digest sub-sections. Toggle pause to skip a job; trigger to fire it now.
-          </p>
+      <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
+        <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Cron Jobs</div>
+        <div className="text-[12px] text-[var(--text-muted)] mt-0.5">
+          Scheduled jobs and digest sub-sections. Toggle pause to skip a job; trigger to fire it now.
         </div>
-        <div aria-hidden className="invisible" />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-16 mt-4">
+      <div className="flex-1 overflow-y-auto px-5 py-4 pb-16">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
@@ -189,9 +177,7 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
     }
   }
 
-  const pausedBadgeCls = 'bg-gray-500/15 text-gray-600 border-gray-500/30';
   const editable = job.kind === 'cloud_scheduler';
-  const selectCls = `text-[11px] bg-[var(--card-hover)] border border-[var(--border)] rounded px-2 py-0.5 text-[var(--foreground)] focus:outline-none focus:border-blue-500 disabled:opacity-60 ${editable ? 'cursor-pointer' : 'cursor-not-allowed'}`;
 
   async function updateSchedule(field: 'scheduleTime' | 'scheduleFrequency', value: string) {
     setBusy(true);
@@ -213,78 +199,65 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
   }
 
   return (
-    <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl">
-      <div className="flex items-start justify-between gap-3 px-4 py-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-sm font-medium text-[var(--foreground)]">{job.name}</span>
-            {job.paused && (
-              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${pausedBadgeCls}`}>
-                Paused
-              </span>
-            )}
-            {(job.destinations ?? []).map(d => (
-              <DestinationBadge key={d.kind} dest={d} />
-            ))}
-          </div>
-          <div className="text-xs text-[var(--muted)] mb-2">{job.description}</div>
-          <div className="flex items-center gap-3 flex-wrap text-[11px] text-[var(--muted)]">
-            <label className="inline-flex items-center gap-1.5">
-              <Clock className="w-3 h-3" />
-              <select
-                value={job.scheduleTime}
-                onChange={e => updateSchedule('scheduleTime', e.target.value)}
-                disabled={!editable || busy}
-                title={editable ? 'Change send time' : `Inherits from ${job.parentCronId}`}
-                className={selectCls}
-              >
-                {!TIME_OPTIONS.includes(job.scheduleTime as typeof TIME_OPTIONS[number]) && (
-                  <option value={job.scheduleTime}>{job.scheduleTime}</option>
-                )}
-                {TIME_OPTIONS.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </label>
-            <select
-              value={job.scheduleFrequency}
-              onChange={e => updateSchedule('scheduleFrequency', e.target.value)}
-              disabled={!editable || busy}
-              title={editable ? 'Change frequency' : `Inherits from ${job.parentCronId}`}
-              className={selectCls}
-            >
-              {!FREQUENCY_OPTIONS.includes(job.scheduleFrequency as typeof FREQUENCY_OPTIONS[number]) && (
-                <option value={job.scheduleFrequency}>{job.scheduleFrequency}</option>
-              )}
-              {FREQUENCY_OPTIONS.map(f => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-          </div>
-          <div className="mt-1.5 text-[11px] text-gray-500">Last run: {formatRelativeTime(job.lastAttemptTime)}</div>
-        </div>
-        <div className="shrink-0 flex items-center gap-2">
+    <div className={`meta-card ${job.paused ? 'paused' : ''}`}>
+      {/* Head: name + tags + actions */}
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <span className="text-[13px] font-medium text-[var(--text)]">{job.name}</span>
+        {job.paused && <span className="meta-tag tone-paused">Paused</span>}
+        {(job.destinations ?? []).map(d => (
+          <DestinationBadge key={d.kind} dest={d} />
+        ))}
+        <div className="ml-auto flex items-center gap-1.5">
           <button
             onClick={togglePause}
             disabled={busy}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50 transition-colors ${
-              job.paused
-                ? 'bg-emerald-700 hover:bg-emerald-600 text-white'
-                : 'bg-[var(--card-hover)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]'
-            }`}
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text)] hover:bg-[var(--bg-elev-3)] hover:border-[var(--hairline-strong)] text-[12px] transition-colors disabled:opacity-50"
           >
-            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : (job.paused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />)}
+            {busy
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : (job.paused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />)}
             {job.paused ? 'Resume' : 'Pause'}
           </button>
           <button
             onClick={triggerOnce}
             disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-700 hover:bg-blue-600 text-white rounded-lg disabled:opacity-40 transition-colors"
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--r-sm)] text-[12px] transition-colors disabled:opacity-50"
+            style={{
+              background: 'var(--ai-soft)',
+              color: 'var(--ai)',
+              border: '1px solid oklch(0.82 0.14 var(--ai-h) / 0.3)',
+            }}
           >
-            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <PlayCircle className="w-3 h-3" />}
+            {busy
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : <PlayCircle className="w-3 h-3" />}
             Trigger once
           </button>
         </div>
+      </div>
+
+      {/* Description */}
+      <div className="text-[11.5px] text-[var(--text-muted)] leading-[1.45]">{job.description}</div>
+
+      {/* Meta row: send time + frequency + last-run note */}
+      <div className="meta-row">
+        <MetaSelect
+          label="Send time"
+          value={job.scheduleTime}
+          options={TIME_OPTIONS}
+          disabled={!editable || busy}
+          title={editable ? 'Change send time' : `Inherits from ${job.parentCronId}`}
+          onChange={v => updateSchedule('scheduleTime', v)}
+        />
+        <MetaSelect
+          label="Frequency"
+          value={job.scheduleFrequency}
+          options={FREQUENCY_OPTIONS}
+          disabled={!editable || busy}
+          title={editable ? 'Change frequency' : `Inherits from ${job.parentCronId}`}
+          onChange={v => updateSchedule('scheduleFrequency', v)}
+        />
+        <span className="meta-note">Last run: {formatRelativeTime(job.lastAttemptTime)}</span>
       </div>
     </div>
   );
