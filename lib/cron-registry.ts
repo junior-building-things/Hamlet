@@ -50,7 +50,8 @@ export type CronDestinationKind =
   | 'team_thomas'      // Personal digest chat
   | 'progress_update'  // PM group via Send-to-PM-Group button
   | 'feature_group'    // Per-feature group chat
-  | 'compliance';      // Compliance review chat
+  | 'compliance'       // Compliance review chat
+  | 'hamlet';          // Internal — writes to Hamlet's GCS state, not a chat
 
 export interface CronDestination {
   kind: CronDestinationKind;
@@ -76,7 +77,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     kind: 'cloud_scheduler',
     cloudSchedulerJobId: REFRESH_FEATURE_CACHE,
     cloudSchedulerService: 'hamlet',
-    destinations: [],
+    destinations: [{ kind: 'hamlet', label: 'Hamlet' }],
   },
   {
     id: HAMLET_DAILY,

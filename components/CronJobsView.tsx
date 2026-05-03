@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { TIME_OPTIONS, FREQUENCY_OPTIONS } from '@/lib/cron-expr';
 
 type CronKind = 'cloud_scheduler' | 'digest_section';
-type CronDestinationKind = 'team_thomas' | 'progress_update' | 'feature_group' | 'compliance';
+type CronDestinationKind = 'team_thomas' | 'progress_update' | 'feature_group' | 'compliance' | 'hamlet';
 interface CronDestination { kind: CronDestinationKind; label: string }
 interface CronJob {
   id: string;
@@ -47,12 +47,14 @@ const DESTINATION_STYLES: Record<CronDestinationKind, string> = {
   progress_update: 'bg-yellow-500/15 text-yellow-700 border-yellow-500/30',
   feature_group:   'bg-teal-500/15 text-teal-700 border-teal-500/30',
   compliance:      'bg-orange-500/15 text-orange-700 border-orange-500/30',
+  hamlet:          'bg-indigo-500/15 text-indigo-700 border-indigo-500/30',
 };
 
 const DESTINATION_ICONS: Partial<Record<CronDestinationKind, string>> = {
   team_thomas: '/team_thomas.png',
   progress_update: '/progress.png',
   feature_group: '/feature_group.png',
+  hamlet: '/hamlet.png',
 };
 
 function DestinationBadge({ dest }: { dest: CronDestination }) {
@@ -92,9 +94,28 @@ export function CronJobsView() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Group: cloud_scheduler first (top-level), then digest_section.
+  // Display order is hand-curated: refresh first, then sections roughly in
+  // their workflow order (line review → AB → PRD changes → Q&A → risk),
+  // with the legacy bundled run last. Ids not in this list fall through
+  // alphabetically so a new job doesn't disappear silently.
+  const ORDER: string[] = [
+    'refresh-feature-cache',
+    'digest.line_review',
+    'poll-prd-ready',
+    'digest.ab_open',
+    'digest.ab_concluded',
+    'digest.prd_changes',
+    'digest.unanswered',
+    'digest.risk',
+    'hamlet-daily-digest',
+  ];
+  const orderIndex = (id: string) => {
+    const i = ORDER.indexOf(id);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
   const ordered = [...jobs].sort((a, b) => {
-    if (a.kind !== b.kind) return a.kind === 'cloud_scheduler' ? -1 : 1;
+    const ai = orderIndex(a.id), bi = orderIndex(b.id);
+    if (ai !== bi) return ai - bi;
     return a.name.localeCompare(b.name);
   });
 
