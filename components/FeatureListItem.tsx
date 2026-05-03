@@ -8,6 +8,7 @@ import { VersionBadge } from './VersionBadge';
 import { TeamAvatars } from './TeamAvatars';
 import { LinkIcons } from './LinkIcons';
 import { PackageModal } from './PackageModal';
+import { Tip } from './Tip';
 import Image from 'next/image';
 import { RefreshCw, CheckCircle2, Loader2 } from 'lucide-react';
 
@@ -162,6 +163,18 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
     ? 'Delayed'
     : (effectiveLevel === 'red' ? 'High' : effectiveLevel === 'yellow' ? 'Medium' : 'Low');
 
+  // Design tokens: dot + colored text. Color matches `.risk-low / med / high`.
+  const dotColor =
+    effectiveLevel === 'red' ? 'var(--rose)' :
+    effectiveLevel === 'yellow' ? 'var(--amber)' :
+    'var(--green)';
+  const textColor = dotColor;
+  const dotShadow = effectiveLevel === 'red'
+    ? '0 0 6px oklch(0.62 0.20 22 / 0.5)'
+    : effectiveLevel === 'green'
+      ? '0 0 6px oklch(0.65 0.16 155 / 0.5)'
+      : 'none';
+
   return (
     <>
       <span
@@ -169,18 +182,18 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
         onClick={onClick}
         onMouseEnter={handleEnter}
         onMouseLeave={handleLeave}
-        className={`inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
-          effectiveLevel === 'red' ? 'text-red-600' :
-          effectiveLevel === 'yellow' ? 'text-amber-600' :
-          'text-emerald-600'
-        }`}
+        className="inline-flex items-center gap-1.5 text-[11.5px] whitespace-nowrap cursor-pointer"
+        style={{ color: textColor }}
       >
-        <span>{effectiveLevel === 'red' ? '🔴' : effectiveLevel === 'yellow' ? '🟡' : '🟢'}</span>
+        <span
+          className="inline-block w-1.5 h-1.5 rounded-full"
+          style={{ background: dotColor, boxShadow: dotShadow }}
+        />
         <span>{label}</span>
       </span>
       {showTip && mounted && createPortal(
         <div
-          className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 text-xs text-[var(--foreground)] max-w-[400px] pointer-events-none"
+          className="tip shown"
           style={{
             top: anchor.top - 8,
             left: anchor.left + anchor.width / 2,
@@ -188,22 +201,22 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
             zIndex: 9999,
           }}
         >
+          <div className="tip-label" style={{ marginBottom: 4 }}>{label} risk</div>
           {isDelayed ? (
             <ul className="list-none space-y-0.5">
               {versionChanges!.map((c, i) => {
                 const [, mm, dd] = c.date.split('-');
                 const short = `${parseInt(mm, 10)}/${parseInt(dd, 10)}`;
-                return <li key={i}>{short}: {c.from} → {c.to}</li>;
+                return <li key={i} style={{ fontSize: 12, lineHeight: 1.45 }}>{short}: {c.from} → {c.to}</li>;
               })}
             </ul>
           ) : reasons.length === 1 ? (
-            <span>{reasons[0]}</span>
+            <div style={{ fontSize: 12, lineHeight: 1.45 }}>{reasons[0]}</div>
           ) : (
             <ul className="list-disc list-inside space-y-0.5">
-              {reasons.map((r, i) => <li key={i}>{r}</li>)}
+              {reasons.map((r, i) => <li key={i} style={{ fontSize: 12, lineHeight: 1.45 }}>{r}</li>)}
             </ul>
           )}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
         </div>,
         document.body,
       )}
@@ -297,14 +310,24 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
       {/* Desktop cells — direct subgrid children */}
 
       {/* Name (editable) */}
-      <div className="hidden sm:flex items-center pl-4 py-1.5 w-full min-w-0">
+      <div className="hidden sm:flex items-center pl-4 py-2.5 w-full min-w-0">
         {onFieldUpdate ? (
           <div className="flex items-center gap-2 w-full min-w-0">
-            <EditableText
-              value={feature.name}
-              onSave={v => onFieldUpdate(feature.id, { name: v })}
-              className="text-[var(--foreground)] text-xs font-medium truncate"
-            />
+            <Tip content={
+              <>
+                <div className="tip-label" style={{ marginBottom: 4 }}>Feature</div>
+                <div style={{ fontSize: 12.5, lineHeight: 1.4 }}>{feature.name}</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  FEATURE-{(feature.meegoIssueId ?? feature.id).slice(-7)}
+                </div>
+              </>
+            }>
+              <EditableText
+                value={feature.name}
+                onSave={v => onFieldUpdate(feature.id, { name: v })}
+                className="text-[var(--foreground)] text-xs font-medium truncate"
+              />
+            </Tip>
             {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
           </div>
         ) : (
@@ -318,36 +341,36 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
         )}
       </div>
 
-      <div className="hidden sm:flex py-1.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
+      <div className="hidden sm:flex py-2.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
         <StatusBadge status={feature.status} />
       </div>
 
-      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
+      <div className="hidden sm:flex items-center py-2.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
         <VersionBadge version={feature.iosVersion} versionHistory={feature.versionHistory} />
       </div>
 
-      <div className="hidden sm:flex py-1.5 cursor-pointer" onClick={() => openRow(feature)}>
+      <div className="hidden sm:flex py-2.5 cursor-pointer" onClick={() => openRow(feature)}>
         <PriorityBadge priority={feature.priority} />
       </div>
 
-      <div className="hidden sm:flex items-center py-1.5 pl-4 overflow-visible relative">
+      <div className="hidden sm:flex items-center py-2.5 pl-4 overflow-visible relative">
         <LinkIcons feature={feature} ringColor="var(--card)"
           onPackageClick={(ios) => { setShowPackage(true); if (ios) setShowIos(true); }}
           onLinkUpdate={onFieldUpdate ? handleLinkUpdate : undefined} />
       </div>
 
       {/* Team avatars */}
-      <div className="hidden sm:flex items-center py-1.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
+      <div className="hidden sm:flex items-center py-2.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
         <TeamAvatars feature={feature} ringColor="var(--card)" onToggleAgent={onToggleAgent} />
       </div>
 
       {/* Risk (with reasons tooltip on hover) */}
-      <div className="hidden sm:flex items-center py-1.5 pl-4">
+      <div className="hidden sm:flex items-center py-2.5 pl-4">
         <RiskBadge feature={feature} onClick={() => openRow(feature)} />
       </div>
 
       {/* Notes (editable, manual user input) */}
-      <div className="hidden sm:flex items-center py-1.5 pl-4 max-w-[200px]">
+      <div className="hidden sm:flex items-center py-2.5 pl-4 max-w-[200px]">
         {onFieldUpdate ? (
           <EditableText
             value={feature.notes ?? ''}
@@ -367,7 +390,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
       </div>
 
       {/* Action */}
-      <div className="hidden sm:flex items-center pr-4 py-1.5 pl-4">
+      <div className="hidden sm:flex items-center pr-4 py-2.5 pl-4">
         {feature.canCompleteNode && onComplete && (
           <button
             onClick={(e) => { e.stopPropagation(); onComplete(feature); }}
@@ -383,7 +406,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
       </div>
 
       {/* Sync button */}
-      <div className="hidden sm:flex items-center pr-4 py-1.5">
+      <div className="hidden sm:flex items-center pr-4 py-2.5">
         {feature.meegoUrl && (
           <button
             onClick={(e) => { e.stopPropagation(); onSync(feature); }}

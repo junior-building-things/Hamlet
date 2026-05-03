@@ -412,6 +412,43 @@ body {
 }
 
 /* ============================================================
+   Tooltip — used for table cell hover hints
+   ============================================================ */
+.tip-wrap { position: relative; display: inline-flex; }
+.tip {
+  position: fixed;
+  z-index: 200;
+  background: var(--bg-elev-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  padding: 10px 12px;
+  font-size: 11.5px;
+  color: var(--text);
+  min-width: 180px;
+  max-width: 280px;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.tip.shown { opacity: 1; }
+.tip-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.tip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.tip-row + .tip-row { border-top: 1px solid var(--hairline); }
+
+/* ============================================================
    Junior Context cards
    ============================================================ */
 .context-card {
