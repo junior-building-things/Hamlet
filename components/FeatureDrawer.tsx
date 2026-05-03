@@ -2,7 +2,7 @@
 import { useEffect } from 'react';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
-import { X, Pencil, Sparkles } from 'lucide-react';
+import { X, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 
 /**
@@ -25,6 +25,8 @@ import Image from 'next/image';
 interface Props {
   feature: Feature | null;
   onClose: () => void;
+  /** Optional — kept for callers that still want to wire a deeper edit
+   *  modal. The drawer no longer renders an Edit button itself. */
   onEdit?: (f: Feature) => void;
 }
 
@@ -65,7 +67,7 @@ function featureCode(f: Feature): string {
   return id ? `FEATURE-${id.padStart(5, '0').slice(-7)}` : `FEATURE-${(f.id ?? '').slice(-7).toUpperCase()}`;
 }
 
-export function FeatureDrawer({ feature, onClose, onEdit }: Props) {
+export function FeatureDrawer({ feature, onClose }: Props) {
   // Close on Escape.
   useEffect(() => {
     if (!feature) return;
@@ -116,24 +118,13 @@ export function FeatureDrawer({ feature, onClose, onEdit }: Props) {
         <div className="px-[22px] pt-[18px] pb-[14px] border-b border-[var(--hairline)] shrink-0">
           <div className="flex items-center gap-2.5 mb-2.5">
             <StatusBadge status={feature.status} />
-            <div className="ml-auto flex items-center gap-1.5">
-              {onEdit && (
-                <button
-                  onClick={() => onEdit(feature)}
-                  className="grid place-items-center w-8 h-8 rounded-[var(--r-sm)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elev-2)] hover:border-[var(--hairline-strong)] transition-colors"
-                  title="Edit feature"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              )}
-              <button
-                onClick={onClose}
-                className="grid place-items-center w-8 h-8 rounded-[var(--r-sm)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elev-2)] hover:border-[var(--hairline-strong)] transition-colors"
-                title="Close"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className="ml-auto grid place-items-center w-8 h-8 rounded-[var(--r-sm)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elev-2)] hover:border-[var(--hairline-strong)] transition-colors"
+              title="Close"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
           <div className="text-[18px] font-semibold leading-[1.3] tracking-[-0.02em] text-[var(--text)]">
             {feature.name}
