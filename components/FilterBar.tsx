@@ -1,7 +1,30 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Priority } from '@/lib/types';
-import { Search, Plus, Layers, ArrowUpDown, ArrowUp, ArrowDown, CircleDot, Tag, Sun, Moon } from 'lucide-react';
+import { Search, Plus, ArrowUp, ArrowDown, Sun, Moon } from 'lucide-react';
+
+// Inline SVG icons that match the design's distinct icon vocabulary.
+// Filter (funnel) for filter chips, Group (2x2 grid) for grouping,
+// Sort (up/down arrows) for sort, so the toolbar's chip purposes are
+// readable at a glance.
+const FilterIcon = ({ className = '' }: { className?: string }) => (
+  <svg viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 3.5h12M4 8h8M6 12.5h4" />
+  </svg>
+);
+const GroupIcon = ({ className = '' }: { className?: string }) => (
+  <svg viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2.5" width="5" height="5" rx="1" />
+    <rect x="9" y="2.5" width="5" height="5" rx="1" />
+    <rect x="2" y="9"   width="5" height="5" rx="1" />
+    <rect x="9" y="9"   width="5" height="5" rx="1" />
+  </svg>
+);
+const SortIcon = ({ className = '' }: { className?: string }) => (
+  <svg viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 3v10M5 13l-2-2M5 13l2-2M11 13V3M11 3 9 5M11 3l2 2" />
+  </svg>
+);
 import { CustomSelect, MultiSelect } from './AvatarSelect';
 
 export type GroupBy  = 'none' | 'priority' | 'status' | 'businessLine' | 'socialComponent';
@@ -27,7 +50,10 @@ interface Props {
 }
 
 const priorities: Priority[] = ['P0', 'P1', 'P2', 'P3'];
-const selectCls = 'min-w-[100px]';
+const selectCls = '';
+// Chip-style trigger button — matches the design's `.chip` rule.
+// 28px tall, mono-uppercase value with leading icon + chevron.
+const chipCls = 'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--hairline-strong)] text-[11.5px] font-mono uppercase tracking-[0.04em] transition-colors whitespace-nowrap';
 
 export function FilterBar({
   search, statusFilter, statuses, priorityFilter,
@@ -35,46 +61,46 @@ export function FilterBar({
   groupBy, onGroupByChange, sortBy, onSortByChange, sortDir, onSortDirToggle,
 }: Props) {
   return (
-    <div className="flex items-center gap-2 px-6 mt-5 flex-wrap">
+    <div className="flex items-center gap-2 px-5 py-3 border-b border-[var(--hairline)] bg-[var(--bg-elev-1)] flex-wrap">
 
       {/* Search */}
-      <div className="flex items-center gap-2 bg-[var(--card)] border border-[var(--border)] rounded-lg px-3 py-2 min-w-[180px]">
-        <Search className="w-4 h-4 text-gray-500 shrink-0" />
+      <div className="flex items-center gap-2 bg-[var(--bg-elev-2)] border border-[var(--hairline)] rounded-[var(--r-sm)] px-3 h-[30px] w-[240px] shrink-0">
+        <Search className="w-3.5 h-3.5 text-[var(--text-dim)] shrink-0" />
         <input
           type="text"
-          placeholder="Search features..."
+          placeholder="Search features, owners, PRDs…"
           value={search}
           onChange={e => onSearchChange(e.target.value)}
-          className="bg-transparent text-sm text-[var(--foreground)] placeholder-gray-500 outline-none w-full"
+          className="bg-transparent text-[12px] text-[var(--text)] placeholder-[var(--text-dim)] outline-none w-full"
         />
+        <span className="font-mono text-[9.5px] text-[var(--text-dim)] px-1 py-px rounded border border-[var(--hairline)]">⌘K</span>
       </div>
 
-      {/* Status filter (multi-select) */}
+      {/* Status filter */}
       <MultiSelect
-        icon={<CircleDot className="w-4 h-4" />}
+        icon={<FilterIcon className="w-3 h-3" />}
         options={statuses.map(s => ({ value: s, label: s }))}
         value={statusFilter}
         onChange={onStatusChange}
         placeholder="Status"
         className={selectCls}
+        triggerClassName={chipCls}
       />
 
-      {/* Priority filter (multi-select) */}
+      {/* Priority filter */}
       <MultiSelect
-        icon={<Tag className="w-4 h-4" />}
+        icon={<FilterIcon className="w-3 h-3" />}
         options={priorities.map(p => ({ value: p, label: p }))}
         value={priorityFilter}
         onChange={onPriorityChange}
         placeholder="Priority"
         className={selectCls}
+        triggerClassName={chipCls}
       />
-
-      {/* Divider */}
-      <div className="w-px h-6 bg-[var(--card-hover)]" />
 
       {/* Group By */}
       <CustomSelect
-        icon={<Layers className="w-4 h-4" />}
+        icon={<GroupIcon className="w-3 h-3" />}
         options={[
           { value: 'priority',        label: 'Priority' },
           { value: 'status',          label: 'Current Status' },
@@ -83,15 +109,16 @@ export function FilterBar({
         ]}
         value={groupBy === 'none' ? '' : groupBy}
         onChange={v => onGroupByChange((v || 'none') as GroupBy)}
-        placeholder="Group By"
+        placeholder="Group"
         allowDeselect
         className={selectCls}
+        triggerClassName={chipCls}
       />
 
       {/* Sort By + direction */}
       <div className="flex items-center gap-1">
         <CustomSelect
-          icon={<ArrowUpDown className="w-4 h-4" />}
+          icon={<SortIcon className="w-3 h-3" />}
           options={[
             { value: 'priority',    label: 'Priority' },
             { value: 'status',      label: 'Current Status' },
@@ -99,7 +126,7 @@ export function FilterBar({
           ]}
           value={sortBy === 'none' ? '' : sortBy}
           onChange={v => onSortByChange((v || 'none') as SortBy)}
-          placeholder="Sort By"
+          placeholder="Sort"
           allowDeselect
           className={selectCls}
         />
@@ -107,11 +134,11 @@ export function FilterBar({
           onClick={onSortDirToggle}
           disabled={sortBy === 'none'}
           title={sortDir === 'asc' ? 'Ascending (click to reverse)' : 'Descending (click to reverse)'}
-          className="bg-[var(--card)] border border-[var(--border)] rounded-lg px-2.5 py-2 text-gray-400 hover:text-[var(--foreground)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+          className="bg-[var(--bg-elev-2)] border border-[var(--hairline)] rounded-[var(--r-sm)] h-7 px-2 text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--hairline-strong)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
         >
           {sortDir === 'asc'
-            ? <ArrowUp   className="w-4 h-4" />
-            : <ArrowDown className="w-4 h-4" />}
+            ? <ArrowUp   className="w-3 h-3" />
+            : <ArrowDown className="w-3 h-3" />}
         </button>
       </div>
 
@@ -119,10 +146,10 @@ export function FilterBar({
       {!hideAddButton && (
         <button
           onClick={onAddFeature}
-          className="flex items-center gap-1.5 bg-[var(--foreground)] text-[var(--background)] text-sm font-semibold px-4 py-2 rounded-lg hover:opacity-80 transition-colors whitespace-nowrap ml-auto"
+          className="flex items-center gap-1.5 bg-[var(--text)] text-[var(--bg)] text-[12px] font-medium px-3 h-7 rounded-[var(--r-sm)] hover:opacity-90 transition-opacity whitespace-nowrap ml-auto"
         >
-          <Plus className="w-4 h-4" />
-          Create Feature
+          <Plus className="w-3 h-3" />
+          New Feature
         </button>
       )}
     </div>

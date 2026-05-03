@@ -225,9 +225,9 @@ export function FeatureListItem({ feature, syncing, onEdit, onSync, completing, 
   }
 
   return (
-    <div className={`bg-[var(--card)] border rounded-xl hover:border-[var(--border)] transition-colors
+    <div className={`bg-transparent border-b border-[var(--hairline)] hover:bg-[var(--bg-elev-2)] transition-colors
                     sm:col-span-full sm:grid sm:[grid-template-columns:subgrid] sm:items-center
-                    ${pinned ? 'border-blue-500/60 ring-1 ring-blue-500/30' : 'border-[var(--border)]'}`}>
+                    ${pinned ? 'bg-[var(--ai-soft)] shadow-[inset_2px_0_0_var(--ai)]' : ''}`}>
 
       {/* Mobile layout */}
       <div className="sm:hidden px-4 py-3 flex flex-col gap-2">

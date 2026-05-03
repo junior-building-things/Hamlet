@@ -71,13 +71,15 @@ export function VersionBadge({ version }: { version?: string; versionHistory?: s
   const hide = useCallback(() => setShowTooltip(false), []);
 
   if (!version) return null;
-  const config = versionColor(version);
+  // versionColor kept for back-compat with any non-list usage.
+  void versionColor;
 
   return (
     <>
       <span
         ref={ref}
-        className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${config.bg} ${config.text}`}
+        className="font-mono text-[11px] text-[var(--text-muted)] cursor-default whitespace-nowrap"
+        style={{ borderBottom: '1px dashed var(--hairline-strong)' }}
         onMouseEnter={show}
         onMouseLeave={hide}
       >

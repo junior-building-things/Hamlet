@@ -589,7 +589,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const gridCols = 'sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content]';
-  const listGridCls = `flex flex-col gap-2 sm:grid ${gridCols} sm:gap-x-1.5 sm:gap-y-1`;
+  const listGridCls = `flex flex-col sm:grid ${gridCols} sm:gap-x-3 sm:gap-y-0`;
 
   async function handleComplete(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
@@ -711,19 +711,12 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   return (
     <div className="h-screen flex flex-col overflow-hidden">
 
-      {/* Toolbar (sticky) */}
-      <div className="shrink-0 px-6 pt-7 pb-2 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
-            Project View
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">An overview of your projects</p>
-        </div>
-        {/* Theme toggle + Sync All live in the page-level GlobalActions
-            (top-right of every tab) so they stay visible + state-consistent
-            during cross-tab navigation. Spacer keeps the title area
-            unchanged width-wise. */}
-        <div aria-hidden className="invisible" />
+      {/* Page header (sticky) — title + subtitle only.
+          Sync/theme buttons render via the page-level <GlobalActions />
+          floating in the top-right corner. */}
+      <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
+        <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Ongoing Features</div>
+        <div className="text-[12px] text-[var(--text-muted)] mt-0.5">An overview of your projects</div>
       </div>
 
       <div className="shrink-0">

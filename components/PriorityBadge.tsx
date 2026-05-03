@@ -1,17 +1,20 @@
 'use client';
 import { Priority } from '@/lib/types';
 
-const priorityConfig: Record<Priority, { bg: string; text: string }> = {
-  P0: { bg: 'bg-red-500/15 border border-red-500/30',      text: 'text-red-700'    },
-  P1: { bg: 'bg-orange-500/15 border border-orange-500/30', text: 'text-orange-700' },
-  P2: { bg: 'bg-blue-500/15 border border-blue-500/30',     text: 'text-blue-700'   },
-  P3: { bg: 'bg-gray-500/15 border border-gray-500/30',     text: 'text-gray-600'   },
+const TONES: Record<Priority, { bg: string; fg: string; border: string }> = {
+  P0: { bg: 'oklch(0.72 0.18 22 / 0.10)', fg: 'oklch(0.55 0.20 22)', border: 'oklch(0.72 0.18 22 / 0.30)' },
+  P1: { bg: 'oklch(0.82 0.14 75 / 0.10)', fg: 'oklch(0.50 0.16 75)', border: 'oklch(0.82 0.14 75 / 0.30)' },
+  P2: { bg: 'transparent',                 fg: 'var(--text-muted)',  border: 'var(--hairline-strong)' },
+  P3: { bg: 'transparent',                 fg: 'var(--text-dim)',    border: 'var(--hairline)' },
 };
 
 export function PriorityBadge({ priority }: { priority: Priority }) {
-  const config = priorityConfig[priority] ?? { bg: 'bg-gray-500/15 border border-gray-500/30', text: 'text-gray-600' };
+  const t = TONES[priority] ?? TONES.P2;
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${config.bg} ${config.text}`}>
+    <span
+      className="inline-flex items-center font-mono text-[10.5px] uppercase tracking-[0.04em] px-1.5 py-0.5 rounded-[4px] border whitespace-nowrap"
+      style={{ background: t.bg, color: t.fg, borderColor: t.border }}
+    >
       {priority}
     </span>
   );

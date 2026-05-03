@@ -131,15 +131,17 @@ interface CustomSelectProps {
   allowDeselect?: boolean;
   icon?: React.ReactNode;
   className?: string;
+  /** Override the inner trigger button's className (defaults to triggerCls). */
+  triggerClassName?: string;
 }
 
-export function CustomSelect({ options, value, onChange, placeholder, allowDeselect, icon, className = 'w-full' }: CustomSelectProps) {
+export function CustomSelect({ options, value, onChange, placeholder, allowDeselect, icon, className = 'w-full', triggerClassName }: CustomSelectProps) {
   const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
   const selected = options.find(o => o.value === value);
 
   return (
     <div ref={ref} className={`relative ${className}`}>
-      <button type="button" onClick={() => open ? setOpen(false) : openDropdown()} className={triggerCls}>
+      <button type="button" onClick={() => open ? setOpen(false) : openDropdown()} className={triggerClassName ?? triggerCls}>
         {icon && <span className="text-gray-500 flex-shrink-0 flex items-center">{icon}</span>}
         <span className={`flex-1 text-left whitespace-nowrap ${!selected && placeholder ? 'text-gray-500' : ''}`}>
           {selected?.label ?? placeholder ?? '—'}
@@ -175,9 +177,10 @@ interface MultiSelectProps {
   placeholder?: string;
   icon?: React.ReactNode;
   className?: string;
+  triggerClassName?: string;
 }
 
-export function MultiSelect({ options, value, onChange, placeholder, icon, className = 'w-full' }: MultiSelectProps) {
+export function MultiSelect({ options, value, onChange, placeholder, icon, className = 'w-full', triggerClassName }: MultiSelectProps) {
   const { open, setOpen, openDropdown, maxHeight, ref } = useDropdown();
 
   // Tri-state: include "value", exclude "!value", or not present.
@@ -218,7 +221,7 @@ export function MultiSelect({ options, value, onChange, placeholder, icon, class
 
   return (
     <div ref={ref} className={`relative ${className}`}>
-      <button type="button" onClick={() => open ? setOpen(false) : openDropdown()} className={triggerCls}>
+      <button type="button" onClick={() => open ? setOpen(false) : openDropdown()} className={triggerClassName ?? triggerCls}>
         {icon && <span className="text-gray-500 flex-shrink-0 flex items-center">{icon}</span>}
         <span className="flex-1 text-left whitespace-nowrap">
           {label || placeholder || '—'}
