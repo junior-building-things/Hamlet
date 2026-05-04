@@ -42,7 +42,7 @@ interface Props {
 
 // ─── Inline editable text field ─────────────────────────────────────────────
 
-function EditableText({ value, displayValue, onSave, className, placeholder, allowEmpty, showTooltipIfTruncated }: {
+function EditableText({ value, displayValue, onSave, className, placeholder, allowEmpty, showTooltipIfTruncated, tooltipTitle }: {
   /** What goes into the input on edit. */
   value: string;
   /** What's rendered when NOT editing. Falls back to `value`. Lets the
@@ -53,6 +53,9 @@ function EditableText({ value, displayValue, onSave, className, placeholder, all
   placeholder?: string;
   allowEmpty?: boolean;
   showTooltipIfTruncated?: boolean;
+  /** Optional eyebrow rendered above the truncation tooltip text
+   *  (rendered in mono uppercase gray via the shared .tip-label style). */
+  tooltipTitle?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -132,6 +135,9 @@ function EditableText({ value, displayValue, onSave, className, placeholder, all
             zIndex: 9999,
           }}
         >
+          {tooltipTitle && (
+            <div className="tip-label" style={{ marginBottom: 4 }}>{tooltipTitle}</div>
+          )}
           {shown}
           <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
         </div>,
@@ -492,6 +498,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
                 placeholder="—"
                 allowEmpty
                 showTooltipIfTruncated
+                tooltipTitle="Feature notes"
               />
             ) : (
               display.text && (
