@@ -34,8 +34,7 @@ export default function AccessLimitedPage() {
           {/* Body */}
           <p className="mt-5 text-[14px] leading-[1.55] text-[var(--text-muted)]">
             Hamlet is an internal AI co-pilot for the product team — it<br />
-            watches features, drafts updates, and keeps PMs unblocked.<br />
-            Access is invite-only while we&apos;re in early preview.
+            watches features, drafts updates, and keeps PMs unblocked.
           </p>
         </div>
       </div>
