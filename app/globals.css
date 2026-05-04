@@ -747,19 +747,19 @@ body {
   content: '';
   position: absolute;
   top: 0;
-  left: -30%;
+  left: -40%;
   height: 1.5px;
-  width: 30%;
+  width: 40%;
   background: linear-gradient(
     90deg,
     transparent 0%,
     color-mix(in oklch, var(--ai) 55%, transparent) 50%,
     transparent 100%
   );
-  /* 2s pass + 3s wait off-screen → 5s total cycle. The waypoint at
-     40% holds the strip off-right for the rest of the cycle, so the
-     next pass starts cleanly from off-left. */
-  animation: junior-snake 5s linear infinite;
+  /* 1.5s pass + 2s wait off-screen → 3.5s total cycle. The waypoint
+     at ~43% holds the strip off-right for the rest of the cycle, so
+     the next pass starts cleanly from off-left. */
+  animation: junior-snake 3.5s linear infinite;
   pointer-events: none;
   z-index: 1;
 }

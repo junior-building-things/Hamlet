@@ -4,6 +4,7 @@ import { Loader2, Play, Pause, PlayCircle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { TIME_OPTIONS, FREQUENCY_OPTIONS } from '@/lib/cron-expr';
 import { MetaSelect } from '@/components/MetaCard';
+import { ServiceTag, stripServicePrefix } from '@/components/ServiceTag';
 
 type CronKind = 'cloud_scheduler' | 'digest_section';
 type CronService = 'hamlet' | 'junior' | 'rio' | 'mia';
@@ -227,7 +228,8 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
     <div className={`meta-card ${job.paused ? 'paused' : ''}`}>
       {/* Head: name + tags + actions */}
       <div className="flex items-center gap-2.5 flex-wrap">
-        <span className="text-[13px] font-medium text-[var(--text)]">{job.name}</span>
+        <span className="text-[13px] font-medium text-[var(--text)]">{stripServicePrefix(job.name)}</span>
+        <ServiceTag service={job.service} />
         {job.paused && <span className="meta-tag tone-paused">Paused</span>}
         {/* Destination badges removed per design — destinations are
             implicit from the job's name + description. */}

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Loader2, RotateCcw, Save, Check, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { MetaSelect } from '@/components/MetaCard';
+import { ServiceTag, stripServicePrefix } from '@/components/ServiceTag';
 
 type ThinkingBudget = 'dynamic' | 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
@@ -198,8 +199,9 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
         className="flex items-center gap-2.5 flex-wrap text-left bg-transparent w-full"
       >
         <span className="text-[13px] font-medium text-[var(--text)]">
-          {prompt.service.charAt(0).toUpperCase() + prompt.service.slice(1)} — {prompt.name}
+          {stripServicePrefix(prompt.name)}
         </span>
+        <ServiceTag service={prompt.service} />
         {prompt.isOverridden && (
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[9.5px] uppercase tracking-[0.08em]"
                 style={{ background: 'oklch(0.82 0.14 75 / 0.12)', color: 'var(--amber)' }}>
