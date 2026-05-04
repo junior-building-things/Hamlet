@@ -12,6 +12,7 @@ import { statusStyle, STATUS_TONE, STATUS_TONE_STYLES, type StatusTone } from '@
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AV } from '@/lib/avatars';
+import { useViewedFeatures } from '@/lib/viewedFeatures';
 
 // (localStorage feature cache removed — GCS cache is the source of truth)
 const STORAGE_GROUP_BY        = 'hamlet_group_by';
@@ -118,6 +119,11 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   // the full edit modal. The modal is reachable via the drawer's
   // Edit button (or directly when a sync triggers an open).
   const [drawerFeature,  setDrawerFeature]  = useState<Feature | null>(null);
+  const { hasUnread, markViewed } = useViewedFeatures();
+  const openDrawer = useCallback((f: Feature) => {
+    markViewed(f.id);
+    setDrawerFeature(f);
+  }, [markViewed]);
 
   // ── Persisted group + sort preferences ───────────────────────────────────
 
@@ -759,10 +765,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     return items.map(f => (
       <FeatureListItem key={f.id} feature={f} syncing={syncingIds.has(f.id)}
         onEdit={feat => { setEditing(feat); setModalMode('edit'); }}
-        onOpenDetail={setDrawerFeature}
+        onOpenDetail={openDrawer}
         onSync={syncOne}
         completing={completingId === f.id} onComplete={handleComplete}
-        pinned={f.id === pinnedId} onToggleAgent={handleToggleAgent}
+        pinned={f.id === pinnedId} hasUpdate={hasUnread(f)} onToggleAgent={handleToggleAgent}
         onFieldUpdate={handleFieldUpdate}
         hideStatus={hideStatus}
         hidePriority={hidePriority}

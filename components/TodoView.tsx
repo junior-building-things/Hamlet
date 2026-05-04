@@ -11,6 +11,7 @@ import { STATUS_TONE, STATUS_TONE_STYLES } from './StatusBadge';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AV } from '@/lib/avatars';
+import { useViewedFeatures } from '@/lib/viewedFeatures';
 
 const STATUS_GROUP_ORDER: Record<string, number> = {
   'AB Testing': 1, 'Merged': 2, 'QA Testing': 3, 'Development': 4,
@@ -56,6 +57,11 @@ export function TodoView({ features, setFeatures }: Props) {
   const [modalMode,     setModalMode]     = useState<'edit' | null>(null);
   const [drawerFeature, setDrawerFeature] = useState<Feature | null>(null);
   const [search,        setSearch]        = useState('');
+  const { hasUnread, markViewed } = useViewedFeatures();
+  const openDrawer = useCallback((f: Feature) => {
+    markViewed(f.id);
+    setDrawerFeature(f);
+  }, [markViewed]);
 
   // Features where the user is the assignee on an active node (excluding completed ones)
   const allTodos = features.filter(f =>
@@ -274,10 +280,11 @@ export function TodoView({ features, setFeatures }: Props) {
                     feature={f}
                     syncing={syncingIds.has(f.id)}
                     onEdit={openDetail}
-                    onOpenDetail={setDrawerFeature}
+                    onOpenDetail={openDrawer}
                     onSync={syncOne}
                     completing={completingId === f.id}
                     onComplete={handleComplete}
+                    hasUpdate={hasUnread(f)}
                     gridTemplateColumns={gridTemplateColumns}
                   />
                 ))}

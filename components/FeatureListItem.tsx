@@ -23,6 +23,9 @@ interface Props {
   completing?: boolean;
   onComplete?: (feature: Feature) => void;
   pinned?: boolean;
+  /** Junior surfaced new info (PRD edit / risk worsening) since the user
+   *  last opened this row. Renders a blue dot before the name. */
+  hasUpdate?: boolean;
   onToggleAgent?: (featureId: string, agentKey: string) => void;
   onFieldUpdate?: (featureId: string, updates: Partial<Feature>) => void;
   /** Skip the Status cell (used when the table is grouped by status). */
@@ -314,7 +317,7 @@ function FeatureNameTip({ feature }: { feature: Feature }) {
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, hideAction, gridTemplateColumns }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, hasUpdate, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, hideAction, gridTemplateColumns }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
   // Row clicks open the drawer (Phase C). Falls back to onEdit when no
@@ -408,7 +411,15 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
           Hover handlers go on the <FeatureNameTip> span itself so the
           tooltip only fires when the cursor is over the visible text,
           not the empty right-hand side of the column. */}
-      <div className="hidden sm:flex items-center pl-4 py-2.5 w-full min-w-0">
+      <div className="hidden sm:flex items-center pl-4 py-2.5 w-full min-w-0 gap-2">
+        {hasUpdate && (
+          <span
+            aria-label="Has new updates"
+            title="Has new updates from Junior"
+            className="shrink-0 inline-block w-1.5 h-1.5 rounded-full"
+            style={{ background: 'var(--ai)', boxShadow: '0 0 6px var(--ai-glow)' }}
+          />
+        )}
         <FeatureNameTip feature={feature} />
         {pinned && <span className="ml-2 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
       </div>

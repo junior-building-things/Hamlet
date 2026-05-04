@@ -49,8 +49,8 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user, featu
   ];
   const aiSetup: NavEntry[] = [
     { id: 'crons',    icon: <Clock className="w-3.5 h-3.5" />,             label: 'Cron Jobs' },
-    { id: 'prompts',  icon: <MessageSquareCode className="w-3.5 h-3.5" />, label: 'System Prompts', aiTagged: true },
-    { id: 'context',  icon: <Database className="w-3.5 h-3.5" />,          label: 'Junior Context', aiTagged: true },
+    { id: 'prompts',  icon: <MessageSquareCode className="w-3.5 h-3.5" />, label: 'System Prompts' },
+    { id: 'context',  icon: <Database className="w-3.5 h-3.5" />,          label: 'Junior Context' },
   ];
 
   const initials = (user?.name ?? 'U')
