@@ -80,7 +80,7 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning 
   let lead: string;
   let summary: string;
   if (mode === 'risk') {
-    lead = `${items.length} feature${items.length === 1 ? '' : 's'} at risk this week.`;
+    lead = `${items.length} feature${items.length === 1 ? '' : 's'} to watch this week.`;
     summary = items
       .map(f => {
         const note = (f.riskNotes ?? [])[0]?.trim();

@@ -134,7 +134,9 @@ export function FeatureDrawer({ feature, onClose }: Props) {
       : feature.riskLevel === 'yellow' ? 'Medium risk' : 'Risk';
     const tone: Callout['tone'] = feature.riskLevel === 'red' ? 'rose' : 'amber';
     callouts.push({ tag, tone, note: feature.riskNotes!.join(' · ') });
-  } else if (feature.riskLevel === 'green') {
+  } else if (feature.riskLevel === 'green' && !hasVersionSlip) {
+    // Skip the "no blockers" fallback when the feature is delayed —
+    // the Delayed callout below already contradicts that message.
     callouts.push({
       tag: 'Low risk',
       tone: 'blue',
