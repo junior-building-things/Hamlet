@@ -633,8 +633,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     // breathing room for longer free-form text.
     const cols = ['minmax(240px,360px)'];        // Feature
     if (!hideStatus)   cols.push('150px');       // Status pill
-    cols.push('80px');                           // Version
-    if (!hidePriority) cols.push('64px');        // Priority chip
+    cols.push('56px');                           // Version (mono "33.0" + dashed underline)
+    if (!hidePriority) cols.push('48px');        // Priority chip ("P0"–"P3")
     cols.push('140px');                          // Links (up to 7 stacked icons, -7px overlap)
     cols.push('90px');                           // Team avatars (2 shown + overflow/add)
     cols.push('100px');                          // Risk dot + label
