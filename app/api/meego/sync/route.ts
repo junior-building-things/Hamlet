@@ -166,6 +166,7 @@ export async function POST(req: NextRequest) {
       updateFeatureInCache(meegoId, {
         status: result.status,
         name: keep('name', result.name, existing?.name),
+        lastUpdated: result.lastUpdated || existing?.lastUpdated,
         owner: result.owner,
         prd: keep('prd', result.prd, existing?.prd),
         figmaUrl: keep('figmaUrl', result.figmaUrl, existing?.figmaUrl),
@@ -178,12 +179,29 @@ export async function POST(req: NextRequest) {
         abReportUrl: keep('abReportUrl', result.abReportUrl, existing?.abReportUrl),
         libraUrl: keep('libraUrl', result.libraUrl, existing?.libraUrl),
         chatId: result.chatId,
+        // Project Details fields — populated by syncFeatureStatus from
+        // the Meego brief's work_item_fields. Were previously returned
+        // in the sync response (so the client's local state showed
+        // them) but never persisted, so they vanished on page reload.
+        quarterlyCycle: result.quarterlyCycle,
+        businessLine: result.businessLine,
+        socialComponent: result.socialComponent,
+        // POC role owners.
         pmOwner: result.pmOwner,
+        tpmOwner: result.tpmOwner,
         techOwner: result.techOwner,
         iosOwner: result.iosOwner,
         androidOwner: result.androidOwner,
         serverOwner: result.serverOwner,
         qaOwner: result.qaOwner,
+        daOwner: result.daOwner,
+        uiuxOwner: result.uiuxOwner,
+        contentDesigner: result.contentDesigner,
+        // Package QR codes (fetched as part of the chat join flow).
+        packageQrUrl: result.packageQrUrl,
+        packageDownloadUrl: result.packageDownloadUrl,
+        iosPackageQrUrl: result.iosPackageQrUrl,
+        iosPackageDownloadUrl: result.iosPackageDownloadUrl,
         avatars: pocAvatars,
         pocEmails: result.pocEmails,
         meegoComments: result.meegoComments,
