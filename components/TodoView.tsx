@@ -187,10 +187,11 @@ export function TodoView({ features, setFeatures }: Props) {
   }, [todos]);
 
   const listGridCls = 'flex flex-col';
-  // Same fixed-width template ProjectView uses, so the columns line up
-  // 1:1 across both views.
+  // Mostly the same template ProjectView uses, but with a wider Action
+  // column (120px → fits the "Complete" hm-btn) since To Dos always
+  // renders that button. ProjectView hides Action entirely.
   const gridTemplateColumns =
-    'minmax(240px,1fr) 150px 80px 64px 184px 120px 100px minmax(120px,200px) 80px 40px';
+    'minmax(240px,1fr) 150px 80px 64px 184px 120px 100px minmax(120px,200px) 120px 40px';
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
