@@ -228,13 +228,22 @@ OLD VERSION:
 NEW VERSION:
 \${currentText}`;
 
-const HAMLET_VERSION_SLIP_REASON = `The TikTok feature "\${featureName}" just slipped its planned ship version: \${fromVersion} → \${toVersion}. Based on the recent group-chat messages below, infer in ONE short clause (under 12 words) why the slip happened. Reply with ONLY that clause — no leading "due to", no trailing period, no quotes. If the chat doesn't mention any specific reason, reply with the single word: unknown.
+const HAMLET_VERSION_SLIP_REASON = `The TikTok feature "\${featureName}" just slipped its planned ship version: \${fromVersion} → \${toVersion}.
+
+Two sources are provided below:
+  1. The feature's group-chat messages from the last 7 days.
+  2. The latest Meego ticket comments (often the most authoritative — devs/PMs log slip reasons here).
+
+Prefer the Meego comments when both mention the slip; chat is supplementary context. Infer in ONE short clause (under 12 words) why the slip happened. Reply with ONLY that clause — no leading "due to", no trailing period, no quotes. If neither source mentions any specific reason, reply with the single word: unknown.
 
 Examples of good replies:
 - several UAT issues
 - compliance review still open
 - waiting on backend dependency
 - design review delayed
+
+MEEGO COMMENTS (oldest first):
+\${comments}
 
 CHAT (oldest first):
 \${messages}`;
@@ -488,8 +497,8 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     service: 'hamlet',
     fileRef: 'lib/digests.ts',
     model: 'gemini-2.5-flash-lite',
-    description: 'When a planned version slips, infer the cause in one short clause from the recent chat',
-    variables: ['featureName', 'fromVersion', 'toVersion', 'messages'],
+    description: 'When a planned version slips, infer the cause in one short clause from the last 7d of chat + latest Meego ticket comments',
+    variables: ['featureName', 'fromVersion', 'toVersion', 'messages', 'comments'],
     default: HAMLET_VERSION_SLIP_REASON,
   },
   {

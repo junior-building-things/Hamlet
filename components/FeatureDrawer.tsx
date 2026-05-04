@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useSync } from '@/components/SyncContext';
-import { X, AlertTriangle, Activity, FileText } from 'lucide-react';
+import { X, AlertTriangle, Activity, FileText, MessageCircleQuestion } from 'lucide-react';
 import Image from 'next/image';
 
 /**
@@ -120,7 +120,9 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   const sevenDaysAgo     = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const recentPrdUpdate  = (feature.prdUpdates ?? []).find(p => p.date >= sevenDaysAgo);
   const recentRiskChange = (feature.riskHistory ?? []).find(r => r.date >= sevenDaysAgo && (r.to === 'red' || r.to === 'yellow'));
-  const isImportant      = hasRiskFlag || hasRiskNotes || hasVersionSlip || !!recentPrdUpdate || !!recentRiskChange;
+  const recentQuestions  = (feature.unansweredQuestions ?? []).filter(q => q.date >= sevenDaysAgo);
+  const hasOpenQuestions = recentQuestions.length > 0;
+  const isImportant      = hasRiskFlag || hasRiskNotes || hasVersionSlip || !!recentPrdUpdate || !!recentRiskChange || hasOpenQuestions;
 
   // Each callout = a tagged line in the insight body. The tag is rendered
   // in the matching tone (rose for High risk + Delayed, amber for Medium
@@ -161,6 +163,18 @@ export function FeatureDrawer({ feature, onClose }: Props) {
       note: recentPrdUpdate.summary,
     });
   }
+  if (hasOpenQuestions) {
+    // Newest first; quote up to ~120 chars so the callout reads cleanly.
+    const newest = recentQuestions.slice().sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    const quote = (newest.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const fromTag = newest.sender && newest.sender !== 'Unknown' ? ` from ${newest.sender}` : '';
+    const more = recentQuestions.length > 1 ? ` (+${recentQuestions.length - 1} more)` : '';
+    callouts.push({
+      tag: 'Open questions',
+      tone: 'amber',
+      note: `Latest${fromTag}: "${quote}"${quote.length === 120 ? '…' : ''}${more}.`,
+    });
+  }
   // Low-risk fallback — only show when nothing higher-priority fired
   // AND the feature actually reports green. Keeps the banner from
   // double-tagging "Low risk + PRD changes" when there are real updates.
@@ -179,6 +193,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
     | { kind: 'version_slip';   date: string; from: string; to: string }
     | { kind: 'risk_change';    date: string; from: string; to: string }
     | { kind: 'prd_update';     date: string; summary: string }
+    | { kind: 'question';       date: string; sender: string; text: string; source: 'chat' | 'prd_comment' }
     | { kind: 'sync';           iso: string };
 
   type DatedEntry = Exclude<ActivityEntry, { kind: 'sync' }>;
@@ -191,6 +206,9 @@ export function FeatureDrawer({ feature, onClose }: Props) {
     })),
     ...(feature.prdUpdates ?? []).map((p): DatedEntry => ({
       kind: 'prd_update', date: p.date, summary: p.summary,
+    })),
+    ...(feature.unansweredQuestions ?? []).map((q): DatedEntry => ({
+      kind: 'question', date: q.date, sender: q.sender, text: q.text, source: q.source,
     })),
   ];
   // Sort newest first by ISO date.
@@ -478,6 +496,26 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
         body={
           <>
             updated PRD — <span style={{ color: 'var(--text-muted)' }}>{entry.summary}</span>
+          </>
+        }
+        meta={entry.date}
+      />
+    );
+  }
+  if (entry.kind === 'question') {
+    const sourceLabel = entry.source === 'prd_comment' ? 'PRD comment' : 'chat';
+    const preview = (entry.text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+    return (
+      <ActivityRow
+        iconBg="oklch(0.78 0.16 75 / 0.14)"
+        iconFg="var(--amber)"
+        iconBorder="oklch(0.78 0.16 75 / 0.3)"
+        icon={<MessageCircleQuestion className="w-2.5 h-2.5" />}
+        actor={entry.sender || 'Someone'}
+        actorColor="var(--text)"
+        body={
+          <>
+            asked in {sourceLabel} — <span style={{ color: 'var(--text-muted)' }}>&ldquo;{preview}{preview.length === 140 ? '…' : ''}&rdquo;</span>
           </>
         }
         meta={entry.date}

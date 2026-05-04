@@ -1425,47 +1425,83 @@ export interface PriorChatRisk {
  */
 /**
  * Infer the cause of a planned-version slip from the feature's recent
- * group chat. Returns a short clause (no leading "due to", no period)
- * or null if Gemini can't tell. Used only for newly-detected slips —
- * the result is cached on the versionChanges entry so we don't re-run
- * Gemini on every digest pass. Quietly returns null when Gemini isn't
- * configured, the chat read fails, or the model says "unknown".
+ * group chat AND the latest Meego ticket comments. Slips are typically
+ * decided over a longer horizon than the daily chat-risk window, so we
+ * widen to 7 days here and also pull Meego comments — those are often
+ * the most authoritative source ("moved to next ver because…").
+ *
+ * Returns a short clause (no leading "due to", no period) or null if
+ * Gemini can't tell. Used only for newly-detected slips — the result
+ * is cached on the versionChanges entry so we don't re-run Gemini on
+ * every digest pass. Quietly returns null when Gemini isn't configured,
+ * both sources are empty, or the model replies "unknown".
  */
+const SLIP_REASON_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const SLIP_REASON_MAX_MESSAGES = 150;
+const SLIP_REASON_MAX_COMMENTS = 30;
+
 export async function inferVersionSlipReason(
   featureName: string,
   fromVersion: string,
   toVersion: string,
   chatId: string,
   rioToken: string,
+  meegoUrl?: string,
 ): Promise<string | null> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey || !chatId) return null;
+  if (!apiKey) return null;
 
-  let messages: ChatMessage[] = [];
-  try {
-    messages = await readChatMessages(chatId, Date.now() - CHAT_RISK_WINDOW_MS, rioToken);
-  } catch (e) {
-    console.warn(`[digests] slip-reason chat read failed for "${featureName}":`, e);
-    return null;
+  // (a) Last 7d of chat — best-effort. If chat is empty, the comments
+  // path below may still produce a reason.
+  let chatFormatted = '';
+  if (chatId) {
+    try {
+      const messages = await readChatMessages(chatId, Date.now() - SLIP_REASON_WINDOW_MS, rioToken);
+      chatFormatted = messages
+        .slice(0, SLIP_REASON_MAX_MESSAGES)
+        .reverse()
+        .map(m => {
+          let text = '';
+          try {
+            const parsed = JSON.parse(m.body?.content ?? '{}') as { text?: string };
+            text = parsed.text ?? '';
+          } catch {
+            text = m.body?.content ?? '';
+          }
+          return text.trim();
+        })
+        .filter(Boolean)
+        .join('\n');
+    } catch (e) {
+      console.warn(`[digests] slip-reason chat read failed for "${featureName}":`, e);
+    }
   }
-  if (messages.length === 0) return null;
 
-  const formatted = messages
-    .slice(0, CHAT_RISK_MAX_MESSAGES)
-    .reverse()
-    .map(m => {
-      let text = '';
+  // (b) Meego ticket comments — most reliable when the dev/PM logs the
+  // slip cause directly on the ticket. Capped to the latest N to keep
+  // the prompt small.
+  let commentsFormatted = '';
+  if (meegoUrl) {
+    const m = meegoUrl.match(/meego\.larkoffice\.com\/([^/]+)\/(?:[^/]+)\/detail\/(\d+)/);
+    if (m) {
       try {
-        const parsed = JSON.parse(m.body?.content ?? '{}') as { text?: string };
-        text = parsed.text ?? '';
-      } catch {
-        text = m.body?.content ?? '';
+        const comments = await fetchTicketComments(m[1], m[2]);
+        commentsFormatted = comments
+          .slice(-SLIP_REASON_MAX_COMMENTS)
+          .map(c => {
+            const date = c.createdAt ? `${c.createdAt} ` : '';
+            const who = c.author ? `${c.author}: ` : '';
+            const body = c.content.length > 400 ? `${c.content.slice(0, 400)}…` : c.content;
+            return `${date}${who}${body}`;
+          })
+          .join('\n');
+      } catch (e) {
+        console.warn(`[digests] slip-reason Meego comments fetch failed for "${featureName}":`, e);
       }
-      return text.trim();
-    })
-    .filter(Boolean)
-    .join('\n');
-  if (!formatted) return null;
+    }
+  }
+
+  if (!chatFormatted && !commentsFormatted) return null;
 
   const { getPrompt: getPromptFn, getPromptModel: getModelFn } = await import('./prompts');
   const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
@@ -1476,7 +1512,8 @@ export async function inferVersionSlipReason(
     featureName,
     fromVersion,
     toVersion,
-    messages: formatted,
+    messages: chatFormatted || '(no chat in the last 7 days)',
+    comments: commentsFormatted || '(no Meego comments)',
   });
 
   try {
@@ -4241,14 +4278,17 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         // infer a one-clause reason from the recent chat via Gemini and
         // attach it to the entry. We only run this for newly-detected slips
         // so subsequent runs don't keep re-inferring the same one.
-        if (versionChangesChanged && nextVersionChanges && nextVersionChanges.length > 0 && cached.chatId) {
+        // Run inference if we have ANY source available (chat OR meegoUrl).
+        // The helper itself checks both and quietly returns null when neither
+        // produces enough text for Gemini to work with.
+        if (versionChangesChanged && nextVersionChanges && nextVersionChanges.length > 0 && (cached.chatId || cached.meegoUrl)) {
           const prior = cached.versionChanges ?? [];
           const isKnown = (e: { date: string; from: string; to: string }) =>
             prior.some(p => p.date === e.date && p.from === e.from && p.to === e.to);
           const updated = await Promise.all(nextVersionChanges.map(async e => {
             if (isKnown(e)) return e; // already inferred (or pre-dates the field)
             try {
-              const reason = await inferVersionSlipReason(cached.name, e.from, e.to, cached.chatId!, botToken);
+              const reason = await inferVersionSlipReason(cached.name, e.from, e.to, cached.chatId ?? '', botToken, cached.meegoUrl);
               return reason ? { ...e, reason } : e;
             } catch (err) {
               console.warn(`[digests] slip-reason inference failed for "${cached.name}":`, err);
@@ -4577,6 +4617,43 @@ async function runUnansweredFromSnapshots(): Promise<DigestSectionResult> {
   if (findings.length === 0) {
     console.log(`[digests:unanswered] no findings (took ${((Date.now() - t0) / 1000).toFixed(1)}s) — skipping send`);
     return { sectionId: 'digest.unanswered', sent: false, count: 0, note: 'no findings' };
+  }
+
+  // Persist findings into the UI feature cache so the FeatureDrawer
+  // can surface them in the OPEN QUESTIONS callout + activity feed.
+  // Capped at the last 10 entries per feature, deduped by messageId so
+  // re-running the digest doesn't multiply the same question.
+  try {
+    const cache = await readFeatureCache();
+    if (cache) {
+      const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Singapore' });
+      const deltas = new Map<string, Partial<Feature>>();
+      for (const finding of findings) {
+        const fId = finding.feature.workItemId;
+        const cached = cache.features.find(cf => cf.id === fId || cf.meegoIssueId === fId);
+        if (!cached) continue;
+        const existing = cached.unansweredQuestions ?? [];
+        const seenIds = new Set(existing.map(e => e.messageId));
+        const additions = finding.questions
+          .filter(q => !seenIds.has(q.messageId))
+          .map(q => ({
+            date: today,
+            sender: q.senderName || 'Unknown',
+            text: q.text,
+            source: (q.source ?? 'chat') as 'chat' | 'prd_comment',
+            messageId: q.messageId,
+          }));
+        if (additions.length === 0) continue;
+        const next = [...existing, ...additions].slice(-10);
+        deltas.set(fId, { unansweredQuestions: next });
+      }
+      if (deltas.size > 0) {
+        await patchFeaturesInCache(deltas);
+        console.log(`[digests:unanswered] persisted to UI cache: ${deltas.size} features patched with new questions`);
+      }
+    }
+  } catch (e) {
+    console.warn('[digests:unanswered] feature-cache persist failed:', e);
   }
 
   // Send to PM group, same as the legacy path.

@@ -108,6 +108,22 @@ export interface Feature {
    *   { date: 'YYYY-MM-DD', summary: 'Added migration plan…' }
    */
   prdUpdates?: Array<{ date: string; summary: string }>;
+  /**
+   * Outstanding @-mention questions Junior surfaced in the Q&A digest.
+   * Capped to the last ~10. Source is either a chat message or a PRD
+   * doc comment thread. The drawer reads this for the OPEN QUESTIONS
+   * callout + activity feed.
+   *
+   *   { date: 'YYYY-MM-DD', sender: 'Kyle', text: '@Thomas can you…',
+   *     source: 'chat', messageId: 'om_xxx' }
+   */
+  unansweredQuestions?: Array<{
+    date: string;
+    sender: string;
+    text: string;
+    source: 'chat' | 'prd_comment';
+    messageId: string;
+  }>;
   // Free-form user notes (manually entered in the Notes column)
   notes?: string;
   // Fields manually edited in the UI — protected from sync overwrites
