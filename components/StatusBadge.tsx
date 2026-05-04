@@ -37,7 +37,7 @@ export const STATUS_TONE_STYLES: Record<StatusTone, { bg: string; fg: string; do
   blue:   { bg: 'oklch(0.78 0.13 240 / 0.14)',  fg: 'oklch(0.55 0.16 240)',  dot: 'oklch(0.55 0.16 240)' },
   yellow: { bg: 'oklch(0.86 0.14 95 / 0.16)',   fg: 'oklch(0.50 0.14 95)',   dot: 'oklch(0.50 0.14 95)'  },
   indigo: { bg: 'oklch(0.70 0.15 270 / 0.14)',  fg: 'oklch(0.50 0.16 270)',  dot: 'oklch(0.50 0.16 270)' },
-  lime:   { bg: '#EEF9F1',                       fg: '#43CA78',               dot: '#43CA78'              },
+  lime:   { bg: 'oklch(0.82 0.18 142 / 0.16)',  fg: 'oklch(0.55 0.18 142)',  dot: 'oklch(0.55 0.18 142)' },
   teal:   { bg: 'oklch(0.78 0.12 175 / 0.14)',  fg: 'oklch(0.50 0.13 175)',  dot: 'oklch(0.50 0.13 175)' },
   green:  { bg: 'oklch(0.78 0.14 155 / 0.12)',  fg: 'oklch(0.50 0.16 155)',  dot: 'oklch(0.50 0.16 155)' },
   gray:   { bg: 'var(--bg-elev-3)',              fg: 'var(--text-muted)',     dot: 'var(--text-muted)'    },
