@@ -2775,6 +2775,8 @@ export async function readChatMessages(
     const MAX_THREAD_FETCHES = 100;
     let fetched = 0;
     let recentRepliesFound = 0;
+    let debugFirstError = '';
+    let debugFirstNonZero = '';
     const sinceSec = Math.floor(sinceMs / 1000);
     for (const msg of allTopLevel) {
       if (fetched >= MAX_THREAD_FETCHES) break;
@@ -2784,8 +2786,11 @@ export async function readChatMessages(
           { headers: { Authorization: `Bearer ${token}` } },
         );
         const rData = await parseJson(rRes, 'thread_replies') as {
-          code: number; data?: { items?: ChatMessage[] };
+          code: number; msg?: string; data?: { items?: ChatMessage[] };
         };
+        if (rData.code !== 0 && !debugFirstNonZero) {
+          debugFirstNonZero = `code=${rData.code} msg="${rData.msg ?? ''}" id=${msg.message_id}`;
+        }
         if (rData.code === 0 && rData.data?.items) {
           // Only keep replies within the scan window
           const replies = rData.data.items.filter(
@@ -2797,8 +2802,12 @@ export async function readChatMessages(
           }
         }
         fetched++;
-      } catch { /* skip thread */ }
+      } catch (e) {
+        if (!debugFirstError) debugFirstError = e instanceof Error ? e.message : String(e);
+      }
     }
+    if (debugFirstError) console.warn(`[lark] thread_replies first error for chat=${chatId}: ${debugFirstError}`);
+    if (debugFirstNonZero) console.warn(`[lark] thread_replies first non-zero for chat=${chatId}: ${debugFirstNonZero}`);
     if (allTopLevel.length > 0) {
       console.log(`[lark] readChatMessages chat=${chatId}: top-level=${allTopLevel.length} (recent=${messages.length - recentRepliesFound}, older=${olderMessages.length}), thread-fetches=${fetched}/${MAX_THREAD_FETCHES}, recent-thread-replies=${recentRepliesFound}`);
     }
