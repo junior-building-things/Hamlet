@@ -128,21 +128,26 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   // Multiple callouts stack as separate lines.
   type Callout = { tag: string; tone: 'rose' | 'amber' | 'blue'; note: string };
   const callouts: Callout[] = [];
-  // Higher-priority callouts first (risk reasons, delays, PRD changes).
-  if (hasRiskNotes) {
+  // Delayed takes priority over the standalone risk callout: when a
+  // feature has slipped, the version slip is what the user needs to
+  // see first, and any riskNotes that exist usually explain WHY it
+  // slipped — so we fold them into the Delayed callout as the reason
+  // instead of double-tagging.
+  if (hasVersionSlip) {
+    const latest = feature.versionChanges!.slice(-1)[0];
+    const reason = hasRiskNotes ? ` due to ${feature.riskNotes!.join('; ')}` : '';
+    const trimmed = reason.replace(/[.!?]+\s*$/, '');
+    callouts.push({
+      tag: 'Delayed',
+      tone: 'rose',
+      note: `Version ${latest.from} → ${latest.to}${trimmed}.`,
+    });
+  } else if (hasRiskNotes) {
     const tag = feature.riskLevel === 'red'
       ? 'High risk'
       : feature.riskLevel === 'yellow' ? 'Medium risk' : 'Risk';
     const tone: Callout['tone'] = feature.riskLevel === 'red' ? 'rose' : 'amber';
     callouts.push({ tag, tone, note: feature.riskNotes!.join(' · ') });
-  }
-  if (hasVersionSlip) {
-    const latest = feature.versionChanges!.slice(-1)[0];
-    callouts.push({
-      tag: 'Delayed',
-      tone: 'rose',
-      note: `Planned version slipped ${latest.from} → ${latest.to}.`,
-    });
   }
   if (recentPrdUpdate) {
     callouts.push({

@@ -2641,6 +2641,7 @@ export interface ChatMessage {
   body?: { content?: string };
   parent_id?: string;       // set if this is a thread reply
   root_id?: string;         // root message of a thread
+  thread_id?: string;       // Lark thread root id; equals message_id when this msg starts a thread
   // Lark's v1 messages list API returns `id` as a STRING (e.g. "ou_xxx"
   // with id_type alongside). Some webhook payloads return the object
   // shape `{ open_id }` instead, so we accept both. Use mentionOpenId()
@@ -2775,26 +2776,35 @@ export async function readChatMessages(
     const MAX_THREAD_FETCHES = 100;
     let fetched = 0;
     let recentRepliesFound = 0;
-    let debugFirstError = '';
-    let debugFirstNonZero = '';
     const sinceSec = Math.floor(sinceMs / 1000);
     for (const msg of allTopLevel) {
       if (fetched >= MAX_THREAD_FETCHES) break;
+      // Lark v1 uses `?container_id_type=thread&container_id=<root_id>` to
+      // list replies under a thread. The legacy `/messages/{id}/replies`
+      // path returns 404 in the open.larksuite.com region.
+      // Use thread_id when present (the root id Lark stamps on threaded
+      // messages), else fall back to the message_id (acts as own root
+      // when this is a thread starter).
+      const threadRoot = msg.thread_id ?? msg.message_id;
       try {
+        const params = new URLSearchParams({
+          container_id_type: 'thread',
+          container_id: threadRoot,
+          page_size: '50',
+          sort_type: 'ByCreateTimeAsc',
+        });
         const rRes = await fetch(
-          `${LARK_BASE_URL}/open-apis/im/v1/messages/${msg.message_id}/replies?page_size=50`,
+          `${LARK_BASE_URL}/open-apis/im/v1/messages?${params}`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
         const rData = await parseJson(rRes, 'thread_replies') as {
           code: number; msg?: string; data?: { items?: ChatMessage[] };
         };
-        if (rData.code !== 0 && !debugFirstNonZero) {
-          debugFirstNonZero = `code=${rData.code} msg="${rData.msg ?? ''}" id=${msg.message_id}`;
-        }
         if (rData.code === 0 && rData.data?.items) {
-          // Only keep replies within the scan window
+          // Skip the thread root itself (returned first in the thread
+          // container); keep only replies within the scan window.
           const replies = rData.data.items.filter(
-            r => Number(r.create_time ?? 0) >= sinceSec,
+            r => r.message_id !== threadRoot && Number(r.create_time ?? 0) >= sinceSec,
           );
           if (replies.length > 0) {
             messages.push(...replies);
@@ -2802,12 +2812,8 @@ export async function readChatMessages(
           }
         }
         fetched++;
-      } catch (e) {
-        if (!debugFirstError) debugFirstError = e instanceof Error ? e.message : String(e);
-      }
+      } catch { /* skip thread */ }
     }
-    if (debugFirstError) console.warn(`[lark] thread_replies first error for chat=${chatId}: ${debugFirstError}`);
-    if (debugFirstNonZero) console.warn(`[lark] thread_replies first non-zero for chat=${chatId}: ${debugFirstNonZero}`);
     if (allTopLevel.length > 0) {
       console.log(`[lark] readChatMessages chat=${chatId}: top-level=${allTopLevel.length} (recent=${messages.length - recentRepliesFound}, older=${olderMessages.length}), thread-fetches=${fetched}/${MAX_THREAD_FETCHES}, recent-thread-replies=${recentRepliesFound}`);
     }
