@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCronById } from '@/lib/cron-registry';
 import { runSchedulerJob, getSchedulerJob } from '@/lib/cloud-scheduler';
-import { markCronStarted } from '@/lib/cron-runs';
+import { markCronStarted, markCronEnded } from '@/lib/cron-runs';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 600;
@@ -49,6 +49,9 @@ export async function POST(
 
     const result = await runSchedulerJob(def.cloudSchedulerJobId);
     if (!result.ok) {
+      // Clean up the upfront markCronStarted entry — the actual handler
+      // will never run, so its finally won't fire.
+      await markCronEnded(def.id);
       return NextResponse.json(
         { error: result.error ?? 'trigger failed', status: result.status },
         { status: result.status ?? 500 },

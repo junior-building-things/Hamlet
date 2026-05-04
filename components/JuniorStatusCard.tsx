@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Sidebar status card — "Junior is working" when a cron is in flight,
@@ -29,6 +29,11 @@ export function JuniorStatusCard() {
   // Tick every second so the elapsed-time label updates without
   // re-fetching from the server every second.
   const [tick, setTick] = useState(0);
+  // When a manual trigger fires, we want to fast-poll for ~10s so the
+  // card catches the in-flight entry even for very short cron runs.
+  // This ref holds the deadline (ms since epoch) until which we poll
+  // every 1s instead of 3/8s.
+  const fastPollUntilRef = useRef<number>(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,14 +51,31 @@ export function JuniorStatusCard() {
     function loop() {
       fetchOnce().finally(() => {
         if (cancelled) return;
-        // Faster poll while a job is running so the card disappears
-        // promptly when it ends; slower when idle to save bandwidth.
-        const delay = runs.length > 0 ? 3000 : 8000;
+        // Three modes:
+        //  - fast (1s)  for ~10s after a manual trigger, to catch quick
+        //               runs that finish before the normal poll interval
+        //  - working (3s) while a run is in flight
+        //  - idle (8s)    otherwise
+        const fast = Date.now() < fastPollUntilRef.current;
+        const delay = fast ? 1000 : runs.length > 0 ? 3000 : 8000;
         timer = setTimeout(loop, delay);
       });
     }
     loop();
-    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+
+    // CronJobsView dispatches this immediately when the user clicks
+    // Trigger once. Refetch right away + enter fast-poll mode.
+    function onTriggered() {
+      fastPollUntilRef.current = Date.now() + 10_000;
+      fetchOnce();
+    }
+    window.addEventListener('cron:triggered', onTriggered);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('cron:triggered', onTriggered);
+    };
     // Re-arm the loop when transition between idle/working happens
     // so the polling interval matches the new state.
   }, [runs.length]);

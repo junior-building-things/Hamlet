@@ -191,6 +191,12 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
     // working" status card now provides the visual feedback. We still
     // surface errors via toast.
     setBusy(true);
+    // Tell JuniorStatusCard a manual run just kicked off so it can
+    // refetch + fast-poll immediately. Dispatched BEFORE awaiting the
+    // trigger response — fast cron handlers (queue drains) can finish
+    // before the trigger fetch resolves, so we'd otherwise miss the
+    // working window entirely.
+    window.dispatchEvent(new CustomEvent('cron:triggered', { detail: { id: job.id } }));
     try {
       const res = await fetch(`/api/crons/${job.id}/trigger`, { method: 'POST' });
       const data = await res.json() as { ok?: boolean; status?: number; note?: string; error?: string };
