@@ -627,11 +627,11 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   // stays at the right. (TodoView keeps the Action column.)
   const hideAction = true;
   const gridTemplateColumns = (() => {
-    // Feature is capped at 360px so the Notes column can take the
+    // Feature is capped at 400px so the Notes column can take the
     // leftover space (1fr) — names truncate with the existing
     // hover-tooltip when they overflow, and the Notes cell gets
     // breathing room for longer free-form text.
-    const cols = ['minmax(240px,360px)'];        // Feature
+    const cols = ['minmax(240px,400px)'];        // Feature
     if (!hideStatus)   cols.push('150px');       // Status pill
     cols.push('56px');                           // Version (mono "33.0" + dashed underline)
     if (!hidePriority) cols.push('55px');        // Priority chip ("P0"–"P3")

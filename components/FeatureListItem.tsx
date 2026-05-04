@@ -280,7 +280,7 @@ function FeatureNameTip({ feature }: { feature: Feature }) {
     <>
       <span
         ref={ref}
-        className="text-[var(--text)] text-xs truncate min-w-0"
+        className="text-[var(--text)] text-[13px] truncate min-w-0"
         onMouseEnter={show}
         onMouseLeave={hide}
       >

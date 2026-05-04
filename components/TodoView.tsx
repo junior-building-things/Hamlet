@@ -193,9 +193,9 @@ export function TodoView({ features, setFeatures }: Props) {
   // Mostly the same template ProjectView uses, but with a wider Action
   // column (120px → fits the "Complete" hm-btn) since To Dos always
   // renders that button. ProjectView hides Action entirely.
-  // Feature capped at 360px so Notes (1fr) gets the leftover space.
+  // Feature capped at 400px so Notes (1fr) gets the leftover space.
   const gridTemplateColumns =
-    'minmax(240px,360px) 150px 56px 55px 130px 80px 80px minmax(200px,1fr) 120px 40px';
+    'minmax(240px,400px) 150px 56px 55px 130px 80px 80px minmax(200px,1fr) 120px 40px';
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
