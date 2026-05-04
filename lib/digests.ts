@@ -1914,8 +1914,8 @@ export async function collectUnansweredForFeature(
   // thread (e.g. "@Thomas yes please confirm") is itself a thread
   // reply but doesn't actually answer the original. Gemini judges the
   // reply contents instead.
-  // Per-chat dedup: surface at most one unanswered question per chat
-  // per digest (the most recent surviving candidate).
+  // Surface every unanswered question in the chat (no per-chat cap).
+  const flaggedQuestions: UnansweredQuestion[] = [];
   for (const msg of mentionMsgs) {
     const qLabel = `chat "${feature.name}" msg=${msg.message_id}`;
 
@@ -1945,11 +1945,13 @@ export async function collectUnansweredForFeature(
     const outstanding = await isOutstandingByGemini(questionText, laterTexts, qLabel);
     if (!outstanding) continue;
 
-    const flagged = await buildUnansweredQuestion(msg);
-    return { feature, questions: [flagged] };
+    flaggedQuestions.push(await buildUnansweredQuestion(msg));
   }
 
-  return null;
+  if (flaggedQuestions.length === 0) return null;
+  // Re-sort oldest-first so the digest shows them in conversation order.
+  flaggedQuestions.sort((a, b) => a.timestamp - b.timestamp);
+  return { feature, questions: flaggedQuestions };
 }
 
 async function buildUnansweredQuestion(msg: ChatMessage): Promise<UnansweredQuestion> {
