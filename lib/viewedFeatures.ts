@@ -11,6 +11,10 @@ import { Feature } from './types';
 
 const STORAGE_KEY = 'hamlet:viewedFeatures';
 const WINDOW_DAYS = 7;
+// The dot stays visible for at least this long after the update lands,
+// even if the user opens the drawer immediately. Past that floor, a
+// click-after-update dismisses it.
+const MIN_VISIBLE_MS = 24 * 60 * 60 * 1000;
 
 type ViewedMap = Record<string, string>; // featureId → ISO datetime
 
@@ -44,7 +48,6 @@ function latestUpdateIso(feature: Feature): string | null {
     if (r.date >= cutoff && (r.to === 'red' || r.to === 'yellow')) dates.push(r.date);
   }
   if (dates.length === 0) return null;
-  // Treat date-only strings as end-of-day so a same-day click clears the dot.
   return dates.sort().slice(-1)[0];
 }
 
@@ -68,11 +71,22 @@ export function useViewedFeatures() {
   const hasUnread = useCallback((feature: Feature): boolean => {
     const latest = latestUpdateIso(feature);
     if (!latest) return false;
+    // Anchor "update happened at" to start-of-day SGT (digests.ts records
+    // dates in SGT). Anything earlier than this can't be a "view since
+    // the update", so the click won't dismiss the dot.
+    const updateMs = Date.parse(`${latest}T00:00:00+08:00`);
+    if (!Number.isFinite(updateMs)) return true;
+
+    // Mandatory floor — keep the pill for at least 24h regardless of
+    // whether the user has clicked.
+    if (Date.now() - updateMs < MIN_VISIBLE_MS) return true;
+
+    // Past the floor: a click made after the update dismisses it.
     const viewed = map[feature.id];
     if (!viewed) return true;
-    // latest is YYYY-MM-DD; viewed is full ISO. Compare lexicographically
-    // by padding latest to end-of-day so a same-day view clears the dot.
-    return `${latest}T23:59:59.999Z` > viewed;
+    const viewedMs = Date.parse(viewed);
+    if (!Number.isFinite(viewedMs)) return true;
+    return viewedMs < updateMs;
   }, [map]);
 
   return { hasUnread, markViewed };
