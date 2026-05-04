@@ -128,20 +128,13 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   // Multiple callouts stack as separate lines.
   type Callout = { tag: string; tone: 'rose' | 'amber' | 'blue'; note: string };
   const callouts: Callout[] = [];
+  // Higher-priority callouts first (risk reasons, delays, PRD changes).
   if (hasRiskNotes) {
     const tag = feature.riskLevel === 'red'
       ? 'High risk'
       : feature.riskLevel === 'yellow' ? 'Medium risk' : 'Risk';
     const tone: Callout['tone'] = feature.riskLevel === 'red' ? 'rose' : 'amber';
     callouts.push({ tag, tone, note: feature.riskNotes!.join(' · ') });
-  } else if (feature.riskLevel === 'green' && !hasVersionSlip) {
-    // Skip the "no blockers" fallback when the feature is delayed —
-    // the Delayed callout below already contradicts that message.
-    callouts.push({
-      tag: 'Low risk',
-      tone: 'blue',
-      note: 'No active blockers detected.',
-    });
   }
   if (hasVersionSlip) {
     const latest = feature.versionChanges!.slice(-1)[0];
@@ -156,6 +149,16 @@ export function FeatureDrawer({ feature, onClose }: Props) {
       tag: 'PRD changes',
       tone: 'amber',
       note: recentPrdUpdate.summary,
+    });
+  }
+  // Low-risk fallback — only show when nothing higher-priority fired
+  // AND the feature actually reports green. Keeps the banner from
+  // double-tagging "Low risk + PRD changes" when there are real updates.
+  if (callouts.length === 0 && feature.riskLevel === 'green') {
+    callouts.push({
+      tag: 'Low risk',
+      tone: 'blue',
+      note: 'No active blockers detected.',
     });
   }
 
