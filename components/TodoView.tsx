@@ -33,7 +33,6 @@ function GroupHeader({ label, count, first }: { label: string; count: number; fi
         className="inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.06em] whitespace-nowrap"
         style={{ background: s.bg, color: s.fg }}
       >
-        <span className="w-1.5 h-1.5 rounded-full dot-breathe" style={{ background: s.dot }} />
         {label || '—'}
       </span>
       <span className="font-mono text-[10.5px] text-[var(--text-dim)]">{count}</span>

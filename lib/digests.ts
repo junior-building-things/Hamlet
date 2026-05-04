@@ -3534,7 +3534,21 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
       console.log('[digests] PRD changes queue skipped (paused)');
     }
   } else if (prdChanges.length > 0 && !shouldSendSection(state, opts, 'digest.prd_changes')) {
-    console.log('[digests] PRD changes digest skipped (paused or section-filtered)');
+    // We're in full mode but the section is filtered out (e.g. user
+    // triggered digest.risk, which re-runs the data scan but should
+    // only send the risk card). Don't drop the PRD changes on the
+    // floor — queue them so the next digest-prd-changes run sends.
+    if (shouldQueueSection(state, 'digest.prd_changes')) {
+      const now = new Date().toISOString();
+      state.pendingPrdChanges = [
+        ...(state.pendingPrdChanges ?? []),
+        ...prdChanges.map(p => ({ ...p, queuedAtIso: now })),
+      ];
+      await saveDigestState(state);
+      console.log(`[digests] PRD changes queued (section-filtered): ${prdChanges.length}`);
+    } else {
+      console.log('[digests] PRD changes digest skipped (paused or section-filtered, queue paused too)');
+    }
   } else if (prdChanges.length > 0) {
     const card = buildPrdChangesDigestCard(prdChanges);
     const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');

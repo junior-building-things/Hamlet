@@ -66,7 +66,7 @@ export function statusStyle(status: string): string {
   return map[tone];
 }
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, showDot = true }: { status: string; showDot?: boolean }) {
   const tone = STATUS_TONE[status] ?? 'gray';
   const s = STATUS_TONE_STYLES[tone];
   // Done features stop the breathing pulse — they're, well, done.
@@ -76,10 +76,12 @@ export function StatusBadge({ status }: { status: string }) {
       className="inline-flex items-center gap-1.5 h-[22px] px-2.5 rounded-[var(--r-sm)] font-mono text-[10px] font-medium uppercase tracking-[0.04em] whitespace-nowrap"
       style={{ background: s.bg, color: s.fg }}
     >
-      <span
-        className={`inline-block w-[5px] h-[5px] rounded-full ${isInProgress ? 'dot-breathe' : ''}`}
-        style={{ background: s.dot }}
-      />
+      {showDot && (
+        <span
+          className={`inline-block w-[5px] h-[5px] rounded-full ${isInProgress ? 'dot-breathe' : ''}`}
+          style={{ background: s.dot }}
+        />
+      )}
       {status}
     </span>
   );

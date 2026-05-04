@@ -209,7 +209,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
         {/* Head */}
         <div className="px-[22px] pt-[18px] pb-[14px] border-b border-[var(--hairline)] shrink-0">
           <div className="flex items-center gap-2.5 mb-2.5">
-            <StatusBadge status={feature.status} />
+            <StatusBadge status={feature.status} showDot={false} />
             <button
               onClick={onClose}
               className="ml-auto grid place-items-center w-8 h-8 rounded-[var(--r-sm)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-elev-2)] hover:border-[var(--hairline-strong)] transition-colors"
