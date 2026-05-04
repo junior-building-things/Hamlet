@@ -412,6 +412,15 @@ body {
   margin-left: auto;
 }
 
+/* Subtle "breathing" pulse — used for the group-header dot. */
+.dot-breathe {
+  animation: dot-breathe 2.4s ease-in-out infinite;
+}
+@keyframes dot-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.18); }
+}
+
 /* ============================================================
    Tooltip — used for table cell hover hints
    ============================================================ */

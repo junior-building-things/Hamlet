@@ -122,15 +122,34 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   const recentRiskChange = (feature.riskHistory ?? []).find(r => r.date >= sevenDaysAgo && (r.to === 'red' || r.to === 'yellow'));
   const isImportant      = hasRiskFlag || hasRiskNotes || hasVersionSlip || !!recentPrdUpdate || !!recentRiskChange;
 
-  const insightSummary = isImportant
-    ? [
-        ...(hasRiskNotes ? feature.riskNotes! : []),
-        ...(hasVersionSlip
-          ? feature.versionChanges!.slice(-1).map(c => `Planned version slip: ${c.from} → ${c.to}`)
-          : []),
-        ...(recentPrdUpdate ? [`Recent PRD update: ${recentPrdUpdate.summary}`] : []),
-      ].join(' · ') || 'Risk flagged — review the activity feed below.'
-    : 'Nothing to callout. Junior is monitoring this feature for risk, PRD edits, and unresolved questions.';
+  // Each callout = a tagged line in the insight body. The tag is rendered
+  // in the matching tone (rose for High risk, amber for Medium / PRD
+  // changes / Pending question, mint-blue for Delayed) followed by the
+  // Junior note. Multiple callouts stack as separate lines.
+  type Callout = { tag: string; tone: 'rose' | 'amber' | 'ai'; note: string };
+  const callouts: Callout[] = [];
+  if (hasRiskNotes) {
+    const tag = feature.riskLevel === 'red'
+      ? 'High risk'
+      : feature.riskLevel === 'yellow' ? 'Medium risk' : 'Risk';
+    const tone: Callout['tone'] = feature.riskLevel === 'red' ? 'rose' : 'amber';
+    callouts.push({ tag, tone, note: feature.riskNotes!.join(' · ') });
+  }
+  if (hasVersionSlip) {
+    const latest = feature.versionChanges!.slice(-1)[0];
+    callouts.push({
+      tag: 'Delayed',
+      tone: 'ai',
+      note: `Planned version slipped ${latest.from} → ${latest.to}.`,
+    });
+  }
+  if (recentPrdUpdate) {
+    callouts.push({
+      tag: 'PRD changes',
+      tone: 'amber',
+      note: recentPrdUpdate.summary,
+    });
+  }
 
   // ── Activity feed: merge version slips, risk transitions, and PRD
   // updates (all populated by the digest pipeline), then sort newest-first
@@ -219,7 +238,22 @@ export function FeatureDrawer({ feature, onClose }: Props) {
               Junior
             </span>
             <div className="flex-1 min-w-0">
-              <div className="text-[12.5px] leading-[1.5] text-[var(--text)]">{insightSummary}</div>
+              {isImportant && callouts.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                  {callouts.map((c, i) => (
+                    <div key={i} className="text-[12.5px] leading-[1.5] text-[var(--text)]">
+                      <CalloutTag tone={c.tone}>{c.tag}</CalloutTag>{' '}
+                      {c.note}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[12.5px] leading-[1.5] text-[var(--text)]">
+                  {isImportant
+                    ? 'Risk flagged — review the activity feed below.'
+                    : "Nothing to callout. I'm monitoring this feature for risk, PRD edits, and unresolved questions."}
+                </div>
+              )}
               <div className="font-mono text-[10px] text-[var(--text-muted)] mt-1">
                 {updatedAtIso ? `Updated ${formatRel(updatedAtIso)}` : 'Never updated'}
               </div>
@@ -310,6 +344,23 @@ function Val({ children }: { children: React.ReactNode }) {
   return <div className="font-semibold text-[var(--text)]">{children}</div>;
 }
 
+function CalloutTag({ tone, children }: { tone: 'rose' | 'amber' | 'ai'; children: React.ReactNode }) {
+  const styles: Record<typeof tone, { bg: string; fg: string }> = {
+    rose:  { bg: 'oklch(0.72 0.18 22 / 0.14)',           fg: 'var(--rose)'  },
+    amber: { bg: 'oklch(0.82 0.14 75 / 0.16)',           fg: 'var(--amber)' },
+    ai:    { bg: 'oklch(0.55 0.13 var(--ai-h) / 0.14)',  fg: 'var(--ai)'    },
+  };
+  const s = styles[tone];
+  return (
+    <span
+      className="inline-flex items-center font-mono text-[9.5px] uppercase tracking-[0.06em] px-1.5 py-[1px] rounded mr-1 align-middle"
+      style={{ background: s.bg, color: s.fg }}
+    >
+      {children}
+    </span>
+  );
+}
+
 function PocRow({ role, name, grad }: { role: string; name: string; grad: string }) {
   return (
     <>
@@ -368,7 +419,7 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
         iconFg="var(--ai)"
         iconBorder="oklch(0.78 0.16 var(--ai-h) / 0.3)"
         icon={<AlertTriangle className="w-2.5 h-2.5" />}
-        actor="Hamlet"
+        actor="Junior"
         actorColor="var(--ai)"
         body={`flagged version slip ${entry.from} → ${entry.to}`}
         meta={entry.date}
