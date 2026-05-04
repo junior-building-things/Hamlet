@@ -183,17 +183,17 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
     ? 'Delayed'
     : (effectiveLevel === 'red' ? 'High' : effectiveLevel === 'yellow' ? 'Medium' : 'Low');
 
-  // Design tokens: dot + colored text. Color matches `.risk-low / med / high`.
+  // Design tokens: dot + colored text. Low risk uses --ai (blue) so it
+  // matches the Junior banner's "Low risk" callout in the drawer; only
+  // medium/high/delayed call attention with warm tones.
   const dotColor =
     effectiveLevel === 'red' ? 'var(--rose)' :
     effectiveLevel === 'yellow' ? 'var(--amber)' :
-    'var(--green)';
+    'var(--ai)';
   const textColor = dotColor;
   const dotShadow = effectiveLevel === 'red'
     ? '0 0 6px oklch(0.62 0.20 22 / 0.5)'
-    : effectiveLevel === 'green'
-      ? '0 0 6px oklch(0.65 0.16 155 / 0.5)'
-      : 'none';
+    : 'none';
 
   return (
     <>
