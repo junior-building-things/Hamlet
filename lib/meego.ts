@@ -608,13 +608,22 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
         if (m.name && m.email) jsonPocEmails[m.name] = m.email;
       }
     }
-    // Extract fields from work_item_fields
+    // Extract fields from work_item_fields. For "option" fields like
+    // priority Meego returns `{ label: 'P0', name: 'P0', value: '1' }`
+    // — the numeric `value` does NOT necessarily match the label's
+    // index (different projects have different option orderings), so
+    // we MUST prefer `label`/`name` over `value` to read the human
+    // string. Mirrors the digest's getLabelField.
     const getField = (key: string): string => {
       const f = briefJson.work_item_fields?.find(fi => fi.key === key);
       if (!f || f.value === undefined || f.value === null) return '';
       if (typeof f.value === 'string') return f.value;
-      if (typeof f.value === 'object' && 'value' in (f.value as Record<string, unknown>)) {
-        return String((f.value as Record<string, unknown>).value ?? '');
+      if (typeof f.value === 'object') {
+        const obj = f.value as Record<string, unknown>;
+        if (typeof obj.label === 'string') return obj.label;
+        if (typeof obj.name === 'string') return obj.name;
+        if (typeof obj.value === 'string') return obj.value;
+        if (typeof obj.value === 'number') return String(obj.value);
       }
       return String(f.value);
     };
