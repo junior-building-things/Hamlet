@@ -47,6 +47,12 @@ function latestUpdateIso(feature: Feature): string | null {
   for (const r of feature.riskHistory ?? []) {
     if (r.date >= cutoff && (r.to === 'red' || r.to === 'yellow')) dates.push(r.date);
   }
+  // Outstanding @-mention questions Junior surfaced in the Q&A digest
+  // count as a Junior-flagged update — same drawer callout, same
+  // unread cue.
+  for (const q of feature.unansweredQuestions ?? []) {
+    if (q.date >= cutoff) dates.push(q.date);
+  }
   if (dates.length === 0) return null;
   return dates.sort().slice(-1)[0];
 }
