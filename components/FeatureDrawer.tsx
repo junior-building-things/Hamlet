@@ -128,7 +128,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   // in the matching tone (rose for High risk + Delayed, amber for Medium
   // / PRD changes, blue for Low risk) followed by the Junior note.
   // Multiple callouts stack as separate lines.
-  type Callout = { tag: string; tone: 'rose' | 'amber' | 'blue'; note: string };
+  type Callout = { tag: string; tone: 'rose' | 'amber' | 'blue'; note: React.ReactNode };
   const callouts: Callout[] = [];
   // Delayed takes priority over the standalone risk callout: when a
   // feature has slipped, the version slip is what the user needs to
@@ -164,15 +164,48 @@ export function FeatureDrawer({ feature, onClose }: Props) {
     });
   }
   if (hasOpenQuestions) {
-    // Newest first; quote up to ~120 chars so the callout reads cleanly.
-    const newest = recentQuestions.slice().sort((a, b) => (a.date < b.date ? 1 : -1))[0];
-    const quote = (newest.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
-    const fromTag = newest.sender && newest.sender !== 'Unknown' ? ` from ${newest.sender}` : '';
-    const more = recentQuestions.length > 1 ? ` (+${recentQuestions.length - 1} more)` : '';
+    const chatCount = recentQuestions.filter(q => q.source === 'chat').length;
+    const prdCount  = recentQuestions.filter(q => q.source === 'prd_comment').length;
+    const word = (n: number) => `${n} open question${n === 1 ? '' : 's'}`;
+    let summary = '';
+    if (chatCount > 0 && prdCount > 0) {
+      summary = `${word(chatCount)} in the lark group and ${word(prdCount)} in the PRD.`;
+    } else if (prdCount > 0) {
+      summary = `${word(prdCount)} in the PRD.`;
+    } else {
+      summary = `${word(chatCount)} in the lark group.`;
+    }
+    // View target: prefer the PRD when there are PRD comments (per spec),
+    // otherwise the Lark group chat. Fall back gracefully if a URL is
+    // missing — drop the link rather than render a broken one.
+    const viewUrl = prdCount > 0 && feature.prd
+      ? feature.prd
+      : feature.chatId
+        ? `https://applink.larkoffice.com/client/chat/open?openChatId=${feature.chatId}`
+        : '';
     callouts.push({
       tag: 'Open questions',
       tone: 'amber',
-      note: `Latest${fromTag}: "${quote}"${quote.length === 120 ? '…' : ''}${more}.`,
+      note: (
+        <>
+          {summary}
+          {viewUrl && (
+            <>
+              {' '}
+              <a
+                href={viewUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+                style={{ color: 'var(--ai)' }}
+                onClick={e => e.stopPropagation()}
+              >
+                (View)
+              </a>
+            </>
+          )}
+        </>
+      ),
     });
   }
   // Low-risk fallback — only show when nothing higher-priority fired
