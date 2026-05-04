@@ -92,20 +92,24 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning 
       .join(', ') + '.';
   } else {
     lead = `${items.length} feature${items.length === 1 ? '' : 's'} need${items.length === 1 ? 's' : ''} your attention.`;
-    // Group by current status, build a readable phrase.
+    // Group by current status, build one phrase per status.
     const byStatus = new Map<string, number>();
     for (const f of items) {
       const k = f.status || 'unknown';
       byStatus.set(k, (byStatus.get(k) ?? 0) + 1);
     }
-    const phrases = [...byStatus.entries()].map(([status, count], i, arr) => {
+    const phrases = [...byStatus.entries()].map(([status, count]) => {
       const verb = count === 1 ? 'requires' : 'are pending';
-      const subject = i === 0
-        ? `${count}`
-        : (arr.length > 2 || count > 1 ? `${count}` : `other ${count}`);
-      return `${subject} ${verb} ${status}`;
+      return `${count} ${verb} ${status}`;
     });
-    summary = phrases.join(' and ') + '.';
+    // Join: 1 phrase as-is, 2 phrases with " and ", 3+ with Oxford comma.
+    if (phrases.length === 1) {
+      summary = phrases[0] + '.';
+    } else if (phrases.length === 2) {
+      summary = `${phrases[0]} and ${phrases[1]}.`;
+    } else {
+      summary = `${phrases.slice(0, -1).join(', ')}, and ${phrases.at(-1)}.`;
+    }
   }
 
   // "Generated Xm ago" — pick the freshest of the cron run + last sync.
