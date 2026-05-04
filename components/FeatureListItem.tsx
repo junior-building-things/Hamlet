@@ -137,8 +137,10 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
   const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0 });
   const [mounted, setMounted] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
+  const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => () => { if (showTimer.current) clearTimeout(showTimer.current); }, []);
 
   // Done / launched features should never display a risk badge — the
   // backend clears riskLevel for them on the next digest run, but this
@@ -158,11 +160,17 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
 
   function handleEnter() {
     if (!showTooltip || !ref.current) return;
-    const r = ref.current.getBoundingClientRect();
-    setAnchor({ top: r.top, left: r.left, width: r.width });
-    setShowTip(true);
+    if (showTimer.current) clearTimeout(showTimer.current);
+    showTimer.current = setTimeout(() => {
+      const r = ref.current?.getBoundingClientRect();
+      if (r) setAnchor({ top: r.top, left: r.left, width: r.width });
+      setShowTip(true);
+    }, 350);
   }
-  function handleLeave() { setShowTip(false); }
+  function handleLeave() {
+    if (showTimer.current) { clearTimeout(showTimer.current); showTimer.current = null; }
+    setShowTip(false);
+  }
 
   if (!feature.riskLevel && !isDelayed) return null;
 
@@ -226,6 +234,77 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
               {reasons.map((r, i) => <li key={i} style={{ fontSize: 12, lineHeight: 1.45 }}>{r}</li>)}
             </ul>
           )}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+// ─── Feature-name span with delayed hover tooltip ──────────────────────────
+// Hover handlers go on the <span> directly so the trigger area matches
+// the visible text, not the whole grid track. The span shrinks-to-fit
+// when the name is short, and stretches with truncate when long — so
+// the cursor only fires the tip when over actual text.
+
+function FeatureNameTip({ feature }: { feature: Feature }) {
+  const [shown, setShown] = useState(false);
+  const [pos, setPos]     = useState({ x: 0, y: 0 });
+  const [mounted, setMounted] = useState(false);
+  const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ref       = useRef<HTMLSpanElement>(null);
+  const SHOW_DELAY = 350;
+
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => () => {
+    if (showTimer.current) clearTimeout(showTimer.current);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+  }, []);
+
+  function show() {
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+    if (showTimer.current) clearTimeout(showTimer.current);
+    showTimer.current = setTimeout(() => {
+      const r = ref.current?.getBoundingClientRect();
+      if (r) setPos({ x: r.left + r.width / 2, y: r.top });
+      setShown(true);
+    }, SHOW_DELAY);
+  }
+  function hide() {
+    if (showTimer.current) { clearTimeout(showTimer.current); showTimer.current = null; }
+    hideTimer.current = setTimeout(() => setShown(false), 100);
+  }
+
+  return (
+    <>
+      <span
+        ref={ref}
+        className="text-[var(--text)] text-xs truncate min-w-0"
+        onMouseEnter={show}
+        onMouseLeave={hide}
+      >
+        {feature.name}
+      </span>
+      {shown && mounted && createPortal(
+        <div
+          className="tip shown"
+          style={{
+            left: pos.x,
+            top: pos.y,
+            transform: 'translate(-50%, calc(-100% - 8px))',
+          }}
+          onMouseEnter={() => {
+            if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+            setShown(true);
+          }}
+          onMouseLeave={hide}
+        >
+          <div className="tip-label" style={{ marginBottom: 4 }}>Feature</div>
+          <div style={{ fontSize: 12.5, lineHeight: 1.4 }}>{feature.name}</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            FEATURE-{(feature.meegoIssueId ?? feature.id).slice(-7)}
+          </div>
         </div>,
         document.body,
       )}
@@ -325,22 +404,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
           inherit unless they explicitly stop propagation (Links, Notes,
           Action, Sync). */}
 
-      {/* Name (read-only — click anywhere on the row opens the drawer) */}
+      {/* Name (read-only — click anywhere on the row opens the drawer).
+          Hover handlers go on the <FeatureNameTip> span itself so the
+          tooltip only fires when the cursor is over the visible text,
+          not the empty right-hand side of the column. */}
       <div className="hidden sm:flex items-center pl-4 py-2.5 w-full min-w-0">
-        <Tip
-          wrapClassName="!flex flex-1 min-w-0"
-          content={
-            <>
-              <div className="tip-label" style={{ marginBottom: 4 }}>Feature</div>
-              <div style={{ fontSize: 12.5, lineHeight: 1.4 }}>{feature.name}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                FEATURE-{(feature.meegoIssueId ?? feature.id).slice(-7)}
-              </div>
-            </>
-          }
-        >
-          <span className="text-[var(--text)] text-xs truncate block w-full">{feature.name}</span>
-        </Tip>
+        <FeatureNameTip feature={feature} />
         {pinned && <span className="ml-2 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
       </div>
 

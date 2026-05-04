@@ -168,19 +168,23 @@ function useHoverTooltip() {
   const [mounted, setMounted] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const showTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => () => { if (showTimer.current) clearTimeout(showTimer.current); }, []);
 
   const onEnter = useCallback(() => {
     if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
-    if (ref.current) {
-      const r = ref.current.getBoundingClientRect();
-      setPos({ top: r.top, left: r.left + r.width / 2 });
-    }
-    setOpen(true);
+    if (showTimer.current) clearTimeout(showTimer.current);
+    showTimer.current = setTimeout(() => {
+      const r = ref.current?.getBoundingClientRect();
+      if (r) setPos({ top: r.top, left: r.left + r.width / 2 });
+      setOpen(true);
+    }, 350);
   }, []);
 
   const onLeave = useCallback(() => {
+    if (showTimer.current) { clearTimeout(showTimer.current); showTimer.current = null; }
     hideTimer.current = setTimeout(() => setOpen(false), 150);
   }, []);
 

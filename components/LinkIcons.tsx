@@ -228,21 +228,25 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
   const [mounted, setMounted] = useState(false);
   const ref = useRef<HTMLElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const showTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const theme = useTheme();
   const invertStyle = link.invertInDark && theme === 'dark' ? { filter: 'invert(1)' } : undefined;
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => () => { if (showTimer.current) clearTimeout(showTimer.current); }, []);
 
   const show = useCallback(() => {
     if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
-    if (ref.current) {
-      const r = ref.current.getBoundingClientRect();
-      setAnchor({ top: r.top, left: r.left, width: r.width });
-    }
-    setShowBubble(true);
+    if (showTimer.current) clearTimeout(showTimer.current);
+    showTimer.current = setTimeout(() => {
+      const r = ref.current?.getBoundingClientRect();
+      if (r) setAnchor({ top: r.top, left: r.left, width: r.width });
+      setShowBubble(true);
+    }, 350);
   }, []);
 
   const scheduleHide = useCallback(() => {
+    if (showTimer.current) { clearTimeout(showTimer.current); showTimer.current = null; }
     hideTimer.current = setTimeout(() => setShowBubble(false), 100);
   }, []);
 

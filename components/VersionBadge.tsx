@@ -46,8 +46,10 @@ export function VersionBadge({ version }: { version?: string; versionHistory?: s
   const [mounted, setMounted] = useState(false);
   const [mergeDate, setMergeDate] = useState<string | null>(null);
   const ref = useRef<HTMLSpanElement>(null);
+  const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => () => { if (showTimer.current) clearTimeout(showTimer.current); }, []);
 
   // Resolve merge date for THIS version once the calendar loads.
   useEffect(() => {
@@ -62,13 +64,17 @@ export function VersionBadge({ version }: { version?: string; versionHistory?: s
   }, [version]);
 
   const show = useCallback(() => {
-    if (ref.current) {
-      const r = ref.current.getBoundingClientRect();
-      setAnchor({ top: r.top, left: r.left, width: r.width });
-    }
-    setShowTooltip(true);
+    if (showTimer.current) clearTimeout(showTimer.current);
+    showTimer.current = setTimeout(() => {
+      const r = ref.current?.getBoundingClientRect();
+      if (r) setAnchor({ top: r.top, left: r.left, width: r.width });
+      setShowTooltip(true);
+    }, 350);
   }, []);
-  const hide = useCallback(() => setShowTooltip(false), []);
+  const hide = useCallback(() => {
+    if (showTimer.current) { clearTimeout(showTimer.current); showTimer.current = null; }
+    setShowTooltip(false);
+  }, []);
 
   if (!version) return null;
   // versionColor kept for back-compat with any non-list usage.
