@@ -304,7 +304,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
                   borderColor: heavyGlow
                     ? 'oklch(0.55 0.13 var(--ai-h) / 0.4)'
                     : 'oklch(0.55 0.13 var(--ai-h) / 0.25)',
-                  boxShadow: heavyGlow ? '0 0 0 3px var(--ai-soft), 0 0 24px var(--ai-glow)' : 'none',
+                  boxShadow: heavyGlow ? '0 0 0 2px var(--ai-soft), 0 0 10px var(--ai-glow)' : 'none',
                 }}
               >
                 <div className="flex-1 min-w-0">
