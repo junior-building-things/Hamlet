@@ -141,7 +141,14 @@ function Bubble({ link, anchor, onEnter, onLeave, onLinkUpdate }: {
     );
   }
 
-  const tipBody = (
+  // "Action" links (no URL but have an onClick — e.g. the Packages
+  // tile that opens the QR-code modal) get a simplified bubble: just
+  // the gray label, no "(no URL set)" placeholder + no edit button.
+  const isActionOnly = !link.url && !!link.onClick;
+
+  const tipBody = isActionOnly ? (
+    <div className="tip-label">{link.label}</div>
+  ) : (
     <>
       <div className="tip-label" style={{ marginBottom: 4 }}>{link.label}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -234,13 +241,16 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
     hideTimer.current = setTimeout(() => setShowBubble(false), 100);
   }, []);
 
+  // Inner glyph sizes — slightly smaller than the 22×22 tile so the
+  // brand mark sits comfortably in the center with a hairline of
+  // breathing room.
   const iconEl = link.lucideIcon ? (
-    <link.lucideIcon className="w-[12px] h-[12px] shrink-0" style={{ color: link.color }} />
+    <link.lucideIcon className="w-[10px] h-[10px] shrink-0" style={{ color: link.color }} />
   ) : link.dynamicIcon ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={link.icon} alt={link.label} className="w-[14px] h-[14px] shrink-0" style={invertStyle} />
+    <img src={link.icon} alt={link.label} className="w-[12px] h-[12px] shrink-0" style={invertStyle} />
   ) : (
-    <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 15)} height={Math.min(link.iconH, 15)} className="shrink-0" style={invertStyle} />
+    <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 12)} height={Math.min(link.iconH, 12)} className="shrink-0" style={invertStyle} />
   );
 
   // Design spec: 22×22 rounded-square tiles, 1.5px bg-elev-1 border with

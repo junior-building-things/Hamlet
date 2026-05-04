@@ -5,12 +5,12 @@
  * Each status maps to one of the design's accent colors via OKLCH so
  * the same hue family is used across light + dark themes.
  */
-type StatusTone =
+export type StatusTone =
   | 'violet' | 'pink' | 'rose' | 'orange' | 'amber'
   | 'cyan'   | 'blue' | 'yellow' | 'indigo' | 'lime'
   | 'teal'   | 'green' | 'gray';
 
-const STATUS_TONE: Record<string, StatusTone> = {
+export const STATUS_TONE: Record<string, StatusTone> = {
   'PRD/Design Prep':  'violet',
   'Line Review':      'pink',
   'Dependency Check': 'rose',
@@ -27,7 +27,7 @@ const STATUS_TONE: Record<string, StatusTone> = {
   'Done':             'green',
 };
 
-const TONE_STYLES: Record<StatusTone, { bg: string; fg: string; dot: string }> = {
+export const STATUS_TONE_STYLES: Record<StatusTone, { bg: string; fg: string; dot: string }> = {
   violet: { bg: 'oklch(0.74 0.14 295 / 0.12)',  fg: 'oklch(0.55 0.18 295)',  dot: 'oklch(0.55 0.18 295)' },
   pink:   { bg: 'oklch(0.78 0.16 350 / 0.12)',  fg: 'oklch(0.55 0.20 350)',  dot: 'oklch(0.55 0.20 350)' },
   rose:   { bg: 'oklch(0.72 0.18 22 / 0.12)',   fg: 'oklch(0.55 0.20 22)',   dot: 'oklch(0.55 0.20 22)'  },
@@ -68,13 +68,18 @@ export function statusStyle(status: string): string {
 
 export function StatusBadge({ status }: { status: string }) {
   const tone = STATUS_TONE[status] ?? 'gray';
-  const s = TONE_STYLES[tone];
+  const s = STATUS_TONE_STYLES[tone];
+  // Done features stop the breathing pulse — they're, well, done.
+  const isInProgress = status !== 'Done' && status !== '已完成';
   return (
     <span
       className="inline-flex items-center gap-1.5 h-[22px] px-2.5 rounded-[var(--r-sm)] font-mono text-[10px] font-medium uppercase tracking-[0.04em] whitespace-nowrap"
       style={{ background: s.bg, color: s.fg }}
     >
-      <span className="inline-block w-[5px] h-[5px] rounded-full" style={{ background: s.dot }} />
+      <span
+        className={`inline-block w-[5px] h-[5px] rounded-full ${isInProgress ? 'dot-breathe' : ''}`}
+        style={{ background: s.dot }}
+      />
       {status}
     </span>
   );

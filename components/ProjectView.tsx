@@ -7,7 +7,7 @@ import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
 import { FeatureDrawer } from '@/components/FeatureDrawer';
-import { statusStyle } from '@/components/StatusBadge';
+import { statusStyle, STATUS_TONE, STATUS_TONE_STYLES, type StatusTone } from '@/components/StatusBadge';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AV } from '@/lib/avatars';
@@ -46,63 +46,31 @@ function statusChipCls(key: string): string {
   return statusStyle(key);
 }
 
-// Soft-tinted group pill — matches the design's `.group-pill .s-*` rules.
-// Each tone uses a low-alpha background of the status hue + the same hue as
-// solid text/dot, so the pill reads as a subtle category chip rather than a
-// high-contrast solid.
-type GroupTone = 'violet' | 'pink' | 'amber' | 'cyan' | 'blue' | 'lime' | 'teal' | 'green' | 'rose' | 'gray';
-
-const GROUP_TONE_BY_STATUS: Record<string, GroupTone> = {
-  'PRD/Design Prep':   'amber',
-  'Line Review':       'pink',
-  'Dependency Check':  'rose',
-  'Compliance Review': 'rose',
-  'RD Allocation':     'violet',
-  'PRD Walkthrough':   'amber',
-  'Tech Design':       'cyan',
-  'Development':       'blue',
-  'QA Testing':        'amber',
-  'QA':                'amber',
-  'UAT':               'violet',
-  'AB Testing':        'green',
-  'Merged':            'teal',
-  'Done':              'green',
-};
-
-const GROUP_TONE_BY_PRIORITY: Record<string, GroupTone> = {
+// Group pill colors — for status groups, use the same STATUS_TONE map
+// the StatusBadge uses so the chip color in the group header matches
+// the badge in each row + the feature drawer. Priority groups use a
+// short separate map.
+const GROUP_TONE_BY_PRIORITY: Record<string, StatusTone> = {
   P0: 'rose', P1: 'amber', P2: 'blue', P3: 'gray',
 };
 
-const GROUP_TONE_STYLES: Record<GroupTone, { bg: string; fg: string }> = {
-  violet: { bg: 'oklch(0.74 0.14 295 / 0.14)', fg: 'oklch(0.55 0.18 295)' },
-  pink:   { bg: 'oklch(0.78 0.16 350 / 0.14)', fg: 'oklch(0.55 0.20 350)' },
-  amber:  { bg: 'oklch(0.82 0.14 75  / 0.14)', fg: 'oklch(0.55 0.16 75)'  },
-  cyan:   { bg: 'oklch(0.74 0.14 195 / 0.14)', fg: 'oklch(0.50 0.13 195)' },
-  blue:   { bg: 'oklch(0.78 0.13 240 / 0.14)', fg: 'oklch(0.55 0.16 240)' },
-  lime:   { bg: 'oklch(0.82 0.18 130 / 0.14)', fg: 'oklch(0.50 0.16 130)' },
-  teal:   { bg: 'oklch(0.78 0.12 175 / 0.14)', fg: 'oklch(0.50 0.13 175)' },
-  green:  { bg: 'oklch(0.78 0.14 155 / 0.12)', fg: 'oklch(0.50 0.16 155)' },
-  rose:   { bg: 'oklch(0.72 0.18 22  / 0.12)', fg: 'oklch(0.55 0.20 22)'  },
-  gray:   { bg: 'var(--bg-elev-3)',             fg: 'var(--text-muted)'   },
-};
-
-function groupTone(groupBy: GroupBy, key: string): GroupTone {
+function groupTone(groupBy: GroupBy, key: string): StatusTone {
   if (!key) return 'gray';
-  if (groupBy === 'status')   return GROUP_TONE_BY_STATUS[key]   ?? 'gray';
+  if (groupBy === 'status')   return STATUS_TONE[key]            ?? 'gray';
   if (groupBy === 'priority') return GROUP_TONE_BY_PRIORITY[key] ?? 'gray';
   return 'gray';
 }
 
 function GroupHeader({ label, count, first, groupBy }: { label: string; count: number; first: boolean; groupBy: GroupBy }) {
   const tone = groupTone(groupBy, label === '—' ? '' : label);
-  const s = GROUP_TONE_STYLES[tone];
+  const s = STATUS_TONE_STYLES[tone];
   return (
     <div className={`flex items-center gap-2.5 ${first ? 'mt-3' : 'mt-5'} mb-2`}>
       <span
         className="inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.06em] whitespace-nowrap"
         style={{ background: s.bg, color: s.fg }}
       >
-        <span className="w-1.5 h-1.5 rounded-full dot-breathe" style={{ background: s.fg }} />
+        <span className="w-1.5 h-1.5 rounded-full dot-breathe" style={{ background: s.dot }} />
         {label || '—'}
       </span>
       <span className="font-mono text-[10.5px] text-[var(--text-dim)]">{count}</span>
