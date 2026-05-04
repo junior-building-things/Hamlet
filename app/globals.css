@@ -772,7 +772,7 @@ body {
   );
 }
 @keyframes junior-snake {
-  0%    { left: -30%; }
-  40%   { left: 100%; }
+  0%    { left: -40%; }
+  43%   { left: 100%; }
   100%  { left: 100%; }
 }
