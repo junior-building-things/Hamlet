@@ -45,7 +45,10 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void, t
   if (feature.complianceUrl)
     links.push({ key: 'compliance', label: 'Compliance', icon: '/compliance.png', iconW: 14, iconH: 14, color: '#88DBDD', url: feature.complianceUrl });
   if (feature.figmaUrl)
-    links.push({ key: 'figma', label: 'Figma', icon: '/figma.svg', iconW: 10, iconH: 14, color: '#FF7362', url: feature.figmaUrl });
+    // Figma's vertical logo + bg-padded SVG renders visually larger
+    // than other tiles at the same 12px box. Scale it down so its
+    // glyph size matches Meego/PRD/etc.
+    links.push({ key: 'figma', label: 'Figma', icon: '/figma.svg', iconW: 7, iconH: 10, color: '#FF7362', url: feature.figmaUrl });
   if (feature.packageQrUrl || feature.iosPackageQrUrl) {
     const hasAndroid = !!feature.packageQrUrl;
     links.push({
@@ -60,7 +63,9 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void, t
     });
   }
   if (feature.libraUrl)
-    links.push({ key: 'libra', label: 'Libra', icon: '/libra.png', iconW: 14, iconH: 14, color: '#0073F0', url: feature.libraUrl });
+    // Libra's PNG glyph fills more of its bounding box than the
+    // other brand marks, so cap it tighter to match optical size.
+    links.push({ key: 'libra', label: 'Libra', icon: '/libra.png', iconW: 10, iconH: 10, color: '#0073F0', url: feature.libraUrl });
   if (feature.abReportUrl)
     links.push({ key: 'ab', label: 'AB Report', icon: '/abreport.png', iconW: 14, iconH: 14, color: '#108453', url: feature.abReportUrl });
   return links;
