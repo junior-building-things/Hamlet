@@ -1651,8 +1651,14 @@ async function patchVersionChangesInCache(
     );
     if ((versionChangesChanged || needsRetroactive) && nextVersionChanges && nextVersionChanges.length > 0 && (cached.chatId || cached.meegoUrl)) {
       const prior = cached.versionChanges ?? [];
-      const findCached = (e: { date: string; from: string; to: string }) =>
-        prior.find(p => p.date === e.date && p.from === e.from && p.to === e.to);
+      // Match on (from, to) only — the version transition uniquely
+      // identifies the slip. Paths (ii)/(iii) sometimes re-record an
+      // entry with a slightly different date (op-log lookup vs today
+      // fallback), so keying on date here would lose the cached reason
+      // and cause Gemini to re-infer with a fresh (possibly different)
+      // wording. Once a reason is set for a (from, to) pair, keep it.
+      const findCached = (e: { from: string; to: string }) =>
+        prior.find(p => p.from === e.from && p.to === e.to);
       const updated = await Promise.all(nextVersionChanges.map(async e => {
         const cachedEntry = findCached(e);
         if (cachedEntry?.reason) return { ...e, reason: cachedEntry.reason, reasonAttempted: true };
