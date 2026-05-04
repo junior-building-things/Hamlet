@@ -1423,6 +1423,79 @@ export interface PriorChatRisk {
  *                                      it has been resolved, escalated,
  *                                      replaced, or is still active.
  */
+/**
+ * Infer the cause of a planned-version slip from the feature's recent
+ * group chat. Returns a short clause (no leading "due to", no period)
+ * or null if Gemini can't tell. Used only for newly-detected slips —
+ * the result is cached on the versionChanges entry so we don't re-run
+ * Gemini on every digest pass. Quietly returns null when Gemini isn't
+ * configured, the chat read fails, or the model says "unknown".
+ */
+export async function inferVersionSlipReason(
+  featureName: string,
+  fromVersion: string,
+  toVersion: string,
+  chatId: string,
+  rioToken: string,
+): Promise<string | null> {
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey || !chatId) return null;
+
+  let messages: ChatMessage[] = [];
+  try {
+    messages = await readChatMessages(chatId, Date.now() - CHAT_RISK_WINDOW_MS, rioToken);
+  } catch (e) {
+    console.warn(`[digests] slip-reason chat read failed for "${featureName}":`, e);
+    return null;
+  }
+  if (messages.length === 0) return null;
+
+  const formatted = messages
+    .slice(0, CHAT_RISK_MAX_MESSAGES)
+    .reverse()
+    .map(m => {
+      let text = '';
+      try {
+        const parsed = JSON.parse(m.body?.content ?? '{}') as { text?: string };
+        text = parsed.text ?? '';
+      } catch {
+        text = m.body?.content ?? '';
+      }
+      return text.trim();
+    })
+    .filter(Boolean)
+    .join('\n');
+  if (!formatted) return null;
+
+  const { getPrompt: getPromptFn, getPromptModel: getModelFn } = await import('./prompts');
+  const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
+  const def = getDefFn('hamlet.version_slip_reason');
+  const tmpl = await getPromptFn('hamlet.version_slip_reason', def?.default ?? '');
+  const modelName = await getModelFn('hamlet.version_slip_reason', def?.model ?? 'gemini-2.5-flash-lite');
+  const prompt = renderFn(tmpl, {
+    featureName,
+    fromVersion,
+    toVersion,
+    messages: formatted,
+  });
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim().replace(/^["']|["']$/g, '').replace(/[.!?]+\s*$/, '');
+    if (!raw || raw.toLowerCase() === 'unknown') {
+      console.log(`[digests] slip-reason "${featureName}" ${fromVersion}→${toVersion}: (none inferred)`);
+      return null;
+    }
+    console.log(`[digests] slip-reason "${featureName}" ${fromVersion}→${toVersion}: ${raw}`);
+    return raw;
+  } catch (e) {
+    console.warn(`[digests] slip-reason Gemini failed for "${featureName}":`, e);
+    return null;
+  }
+}
+
 export async function evaluateChatRisk(
   chatId: string,
   featureName: string,
@@ -4154,6 +4227,27 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           }
 
           if (nextVersionChanges && nextVersionChanges.length > 0) versionDelayed++;
+        }
+
+        // (iv) For any NEW slip entry (not in the cached list before this run),
+        // infer a one-clause reason from the recent chat via Gemini and
+        // attach it to the entry. We only run this for newly-detected slips
+        // so subsequent runs don't keep re-inferring the same one.
+        if (versionChangesChanged && nextVersionChanges && nextVersionChanges.length > 0 && cached.chatId) {
+          const prior = cached.versionChanges ?? [];
+          const isKnown = (e: { date: string; from: string; to: string }) =>
+            prior.some(p => p.date === e.date && p.from === e.from && p.to === e.to);
+          const updated = await Promise.all(nextVersionChanges.map(async e => {
+            if (isKnown(e)) return e; // already inferred (or pre-dates the field)
+            try {
+              const reason = await inferVersionSlipReason(cached.name, e.from, e.to, cached.chatId!, botToken);
+              return reason ? { ...e, reason } : e;
+            } catch (err) {
+              console.warn(`[digests] slip-reason inference failed for "${cached.name}":`, err);
+              return e;
+            }
+          }));
+          nextVersionChanges = updated;
         }
 
         const delta: Partial<import('./types').Feature> = {};

@@ -228,6 +228,17 @@ OLD VERSION:
 NEW VERSION:
 \${currentText}`;
 
+const HAMLET_VERSION_SLIP_REASON = `The TikTok feature "\${featureName}" just slipped its planned ship version: \${fromVersion} → \${toVersion}. Based on the recent group-chat messages below, infer in ONE short clause (under 12 words) why the slip happened. Reply with ONLY that clause — no leading "due to", no trailing period, no quotes. If the chat doesn't mention any specific reason, reply with the single word: unknown.
+
+Examples of good replies:
+- several UAT issues
+- compliance review still open
+- waiting on backend dependency
+- design review delayed
+
+CHAT (oldest first):
+\${messages}`;
+
 const HAMLET_UNANSWERED_FOLLOWUP = `You are \${agentDescription} in a team chat. A team member sent this message tagging \${mentionNames} but no one has replied yet. Generate a brief, friendly follow-up message (1-2 sentences max) that re-tags the same people and encourages them to respond. Use emoji if appropriate. Don't repeat the original question, just nudge politely.
 
 Original message: \${content}
@@ -470,6 +481,16 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     description: 'Daily digest: 1-sentence summary of what changed in a PRD',
     variables: ['prevText', 'currentText'],
     default: HAMLET_PRD_CHANGE_SUMMARY,
+  },
+  {
+    id: 'hamlet.version_slip_reason',
+    name: 'Hamlet — Infer version-slip reason',
+    service: 'hamlet',
+    fileRef: 'lib/digests.ts',
+    model: 'gemini-2.5-flash-lite',
+    description: 'When a planned version slips, infer the cause in one short clause from the recent chat',
+    variables: ['featureName', 'fromVersion', 'toVersion', 'messages'],
+    default: HAMLET_VERSION_SLIP_REASON,
   },
   {
     id: 'hamlet.unanswered_followup',

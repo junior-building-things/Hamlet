@@ -82,8 +82,14 @@ export interface Feature {
    * Each entry: { date: 'YYYY-MM-DD', from: '44.9', to: '45.0' }.
    * If non-empty, the feature is rendered with a "🔴 Delayed" risk badge
    * and the list is shown on hover (formatted as "M/D: from → to").
+   *
+   * `reason` is a short clause Gemini infers from the feature's recent
+   * chat at the time the slip was detected (e.g. "several UAT issues").
+   * Optional — older entries written before this field existed have no
+   * reason. Inferred once per slip and cached for the drawer to surface
+   * without re-running Gemini on every load.
    */
-  versionChanges?: Array<{ date: string; from: string; to: string }>;
+  versionChanges?: Array<{ date: string; from: string; to: string; reason?: string }>;
   /**
    * Chronological log of risk-level transitions detected by the daily
    * digest. Each entry records the change Junior observed between two

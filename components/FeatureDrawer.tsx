@@ -135,12 +135,17 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   // instead of double-tagging.
   if (hasVersionSlip) {
     const latest = feature.versionChanges!.slice(-1)[0];
-    const reason = hasRiskNotes ? ` due to ${feature.riskNotes!.join('; ')}` : '';
-    const trimmed = reason.replace(/[.!?]+\s*$/, '');
+    // Prefer the slip-specific Gemini reason cached on the versionChange
+    // entry. Fall back to riskNotes when the slip predates that field
+    // or Gemini couldn't infer one.
+    const reasonText = latest.reason
+      || (hasRiskNotes ? feature.riskNotes!.join('; ') : '');
+    const trimmedReason = reasonText.replace(/[.!?]+\s*$/, '').trim();
+    const suffix = trimmedReason ? ` due to ${trimmedReason}` : '';
     callouts.push({
       tag: 'Delayed',
       tone: 'rose',
-      note: `Version ${latest.from} → ${latest.to}${trimmed}.`,
+      note: `Version ${latest.from} → ${latest.to}${suffix}.`,
     });
   } else if (hasRiskNotes) {
     const tag = feature.riskLevel === 'red'
