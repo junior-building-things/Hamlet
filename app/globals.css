@@ -160,7 +160,11 @@ body {
   pointer-events: none;
 }
 
-/* User-identity / brand mark at the top of the sidebar */
+/* User-identity / brand mark at the top of the sidebar.
+   Outer 28×28 rounded-square sweeps a blue→violet conic gradient,
+   with a 1px inner cutout (::after) filled with bg-elev-1 so the
+   gradient reads as a thin ring. The Lark avatar (when available)
+   sits inside that ring with a soft ai-glow halo. */
 .user-mark {
   width: 28px;
   height: 28px;
@@ -179,14 +183,23 @@ body {
   border-radius: 7px;
   background: var(--bg-elev-1);
 }
-.user-mark > span {
+.user-mark > span,
+.user-mark > img {
   position: relative;
   z-index: 1;
+}
+.user-mark > span {
   font-family: var(--font-mono);
   font-weight: 600;
   font-size: 11px;
   color: var(--text);
   letter-spacing: -0.04em;
+}
+.user-mark > img {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
 }
 
 /* Active nav item indicator (left mint bar) */

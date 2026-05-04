@@ -65,26 +65,22 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user, featu
       {/* User identity — use the Lark avatar URL when available, else
           fall back to the conic-gradient initials mark. */}
       <div className="flex items-center gap-2.5 px-1.5 pb-4 pt-1 relative">
-        {user?.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={user.avatarUrl}
-            alt={user.name ?? 'User'}
-            className="w-7 h-7 rounded-lg object-cover shrink-0 border border-[var(--hairline-strong)]"
-            onError={e => {
-              // If the avatar fails to load, swap to the initials mark.
-              const img = e.currentTarget as HTMLImageElement;
-              img.style.display = 'none';
-              const fallback = img.nextElementSibling as HTMLElement | null;
-              if (fallback) fallback.style.display = 'grid';
-            }}
-          />
-        ) : null}
-        <div
-          className="user-mark"
-          style={{ display: user?.avatarUrl ? 'none' : 'grid' }}
-        >
-          <span>{initials}</span>
+        <div className="user-mark">
+          {user?.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={user.avatarUrl}
+              alt={user.name ?? 'User'}
+              onError={e => {
+                // Swap to the initials sibling on load error.
+                const img = e.currentTarget as HTMLImageElement;
+                img.style.display = 'none';
+                const fallback = img.nextElementSibling as HTMLElement | null;
+                if (fallback) fallback.style.display = 'block';
+              }}
+            />
+          ) : null}
+          <span style={{ display: user?.avatarUrl ? 'none' : 'block' }}>{initials}</span>
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-[14px] font-semibold tracking-[-0.02em] text-[var(--text)] truncate">{user?.name ?? 'User'}</div>
