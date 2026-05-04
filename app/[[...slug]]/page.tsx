@@ -159,6 +159,8 @@ export default function Home() {
           onViewChange={handleViewChange}
           onCreateFeature={() => setShowAddModal(true)}
           user={user}
+          featureCount={features.filter(f => f.status !== 'Done' && f.status !== '已完成').length}
+          todoCount={features.filter(f => f.canCompleteNode === true && f.status !== 'Done' && f.status !== '已完成').length}
         />
 
         <div

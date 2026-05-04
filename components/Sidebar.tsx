@@ -12,6 +12,11 @@ interface Props {
   onViewChange: (view: SidebarView) => void;
   onCreateFeature: () => void;
   user?: { name: string; avatarUrl: string };
+  /** Total ongoing features (excludes Done). Shown next to the
+   *  "Ongoing Features" nav item. */
+  featureCount?: number;
+  /** Features awaiting the user's action — shown next to "To Dos". */
+  todoCount?: number;
 }
 
 interface NavEntry {
@@ -22,7 +27,7 @@ interface NavEntry {
   aiTagged?: boolean;
 }
 
-export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Props) {
+export function Sidebar({ activeView, onViewChange, onCreateFeature, user, featureCount, todoCount }: Props) {
   // ⌘N / Ctrl+N → fire onCreateFeature
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -36,8 +41,8 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Pro
   }, [onCreateFeature]);
 
   const workspace: NavEntry[] = [
-    { id: 'project', icon: <LayoutList className="w-3.5 h-3.5" />,    label: 'Ongoing Features' },
-    { id: 'todos',   icon: <CheckSquare className="w-3.5 h-3.5" />,   label: 'To Dos' },
+    { id: 'project', icon: <LayoutList className="w-3.5 h-3.5" />,    label: 'Ongoing Features', count: featureCount },
+    { id: 'todos',   icon: <CheckSquare className="w-3.5 h-3.5" />,   label: 'To Dos', count: todoCount },
     { id: 'chat',    icon: <MessageSquare className="w-3.5 h-3.5" />, label: 'Chat' },
     { id: 'roles',   icon: <Users className="w-3.5 h-3.5" />,         label: 'R&R' },
   ];

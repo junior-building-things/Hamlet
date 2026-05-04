@@ -7,6 +7,7 @@ import { FeatureListHeader } from '@/components/FeatureListHeader';
 import { FeatureListItem } from '@/components/FeatureListItem';
 import { FeatureModal } from '@/components/FeatureModal';
 import { FeatureDrawer } from '@/components/FeatureDrawer';
+import { JuniorBrief } from '@/components/JuniorBrief';
 import { statusStyle, STATUS_TONE, STATUS_TONE_STYLES, type StatusTone } from '@/components/StatusBadge';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -768,6 +769,11 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
       <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
         <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Ongoing Features</div>
         <div className="text-[12px] text-[var(--text-muted)] mt-0.5">An overview of your projects</div>
+      </div>
+
+      {/* Junior · Daily Brief — at-risk summary, dismissible. */}
+      <div className="shrink-0">
+        <JuniorBrief features={features} />
       </div>
 
       <div className="shrink-0">
