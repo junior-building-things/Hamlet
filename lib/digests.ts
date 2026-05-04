@@ -33,7 +33,7 @@ import {
 } from './lark';
 import { getAgentToken } from './agents';
 import { getCodeFreezeDate } from './merge-calendar';
-import { resolveDisplayStatus } from './meego';
+import { resolveDisplayStatus, fetchTicketComments } from './meego';
 import { readFeatureCache, writeFeatureCache, patchFeaturesInCache } from './feature-cache';
 
 /** Append a new version to the history if it differs from the last entry. */
