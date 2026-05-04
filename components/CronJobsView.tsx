@@ -43,12 +43,6 @@ function formatRelativeTime(iso?: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-function DestinationBadge({ dest }: { dest: CronDestination }) {
-  // Per the design: leading colored dot via ::before, no icon image.
-  return <span className={`meta-tag tone-${dest.kind}`}>{dest.label}</span>;
-}
-
-
 export function CronJobsView() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -185,9 +179,8 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
       <div className="flex items-center gap-2.5 flex-wrap">
         <span className="text-[13px] font-medium text-[var(--text)]">{job.name}</span>
         {job.paused && <span className="meta-tag tone-paused">Paused</span>}
-        {(job.destinations ?? []).map(d => (
-          <DestinationBadge key={d.kind} dest={d} />
-        ))}
+        {/* Destination badges removed per design — destinations are
+            implicit from the job's name + description. */}
         <div className="ml-auto flex items-center gap-1.5">
           <button onClick={togglePause} disabled={busy} className="hm-btn">
             {busy

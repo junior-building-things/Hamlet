@@ -29,6 +29,8 @@ interface Props {
   hideStatus?: boolean;
   /** Skip the Priority cell (used when the table is grouped by priority). */
   hidePriority?: boolean;
+  /** Skip the Action cell (Ongoing Features hides it; To Dos shows it). */
+  hideAction?: boolean;
   /** Same gridTemplateColumns the header renders with so each row
    *  shares identical column tracks. */
   gridTemplateColumns?: string;
@@ -233,7 +235,7 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, gridTemplateColumns }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, hideAction, gridTemplateColumns }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
   // Row clicks open the drawer (Phase C). Falls back to onEdit when no
@@ -403,20 +405,22 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
       </div>
 
       {/* Action */}
-      <div className="hidden sm:flex items-center pr-4 py-2.5 pl-4">
-        {feature.canCompleteNode && onComplete && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onComplete(feature); }}
-            disabled={completing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
-          >
-            {completing
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : <CheckCircle2 className="w-3 h-3" />}
-            Complete
-          </button>
-        )}
-      </div>
+      {!hideAction && (
+        <div className="hidden sm:flex items-center pr-4 py-2.5 pl-4">
+          {feature.canCompleteNode && onComplete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onComplete(feature); }}
+              disabled={completing}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+            >
+              {completing
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <CheckCircle2 className="w-3 h-3" />}
+              Complete
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Sync button */}
       <div className="hidden sm:flex items-center pr-4 py-2.5">

@@ -620,6 +620,9 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   // but with the parent's tracks set via inline style, the subgrid
   // children weren't always picking the parent's tracks up reliably,
   // and the header drifted out of alignment with the row cells.)
+  // Action column hidden in the main Ongoing Features view — Sync icon
+  // stays at the right. (TodoView keeps the Action column.)
+  const hideAction = true;
   const gridTemplateColumns = (() => {
     const cols = ['minmax(240px,1fr)'];          // Feature  (flex)
     if (!hideStatus)   cols.push('150px');       // Status pill
@@ -629,7 +632,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     cols.push('120px');                          // Team avatars (up to 5)
     cols.push('100px');                          // Risk dot + label
     cols.push('minmax(120px,200px)');            // Notes (truncates)
-    cols.push('80px');                           // Action button
+    if (!hideAction) cols.push('80px');          // Action button
     cols.push('40px');                           // Sync icon
     return cols.join(' ');
   })();
@@ -756,6 +759,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         onFieldUpdate={handleFieldUpdate}
         hideStatus={hideStatus}
         hidePriority={hidePriority}
+        hideAction={hideAction}
         gridTemplateColumns={gridTemplateColumns} />
     ));
   }
@@ -810,7 +814,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         ) : groups ? (
           // ── Grouped list view ──────────────────────────────────────────────
           <div className={listGridCls}>
-            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} gridTemplateColumns={gridTemplateColumns} />
+            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} hideAction={hideAction} gridTemplateColumns={gridTemplateColumns} />
             {/* Render pinned feature above all groups */}
             {pinnedId && (() => {
               const pinned = features.find(f => f.id === pinnedId);
@@ -826,7 +830,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         ) : (
           // ── Plain list view ────────────────────────────────────────────────
           <div className={listGridCls}>
-            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} gridTemplateColumns={gridTemplateColumns} />
+            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} hideAction={hideAction} gridTemplateColumns={gridTemplateColumns} />
             {renderListRows(sorted)}
           </div>
         )}

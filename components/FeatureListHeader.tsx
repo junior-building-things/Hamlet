@@ -3,12 +3,13 @@
 interface Props {
   hideStatus?: boolean;
   hidePriority?: boolean;
+  hideAction?: boolean;
   /** Same gridTemplateColumns the rows render with so headers and
    *  values share identical column tracks. */
   gridTemplateColumns: string;
 }
 
-export function FeatureListHeader({ hideStatus, hidePriority, gridTemplateColumns }: Props) {
+export function FeatureListHeader({ hideStatus, hidePriority, hideAction, gridTemplateColumns }: Props) {
   // Mirror the row's column order (Feature, Status?, Version, Priority?,
   // Links, Team, Risk, Notes, Action, Sync). Each label uses the same
   // `pl-4` left padding the row cells use so headers sit flush above
@@ -27,7 +28,7 @@ export function FeatureListHeader({ hideStatus, hidePriority, gridTemplateColumn
     'Team',
     'Risk',
     'Notes',
-    'Action',
+    ...(hideAction ? [] : ['Action']),
     '', // Sync (placeholder — keeps span count = column count)
   ];
 

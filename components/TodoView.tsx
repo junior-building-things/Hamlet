@@ -1,13 +1,13 @@
 'use client';
 import React, { useState, useCallback, useMemo } from 'react';
 import { Feature, Priority } from '@/lib/types';
+import { FilterBar } from './FilterBar';
 import { FeatureListHeader } from './FeatureListHeader';
 import { FeatureListItem } from './FeatureListItem';
 import { FeatureModal } from './FeatureModal';
 import { FeatureDrawer } from './FeatureDrawer';
-import { ThemeToggle } from './FilterBar';
-import { statusStyle } from './StatusBadge';
-import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { STATUS_TONE, STATUS_TONE_STYLES } from './StatusBadge';
+import { Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AV } from '@/lib/avatars';
 
@@ -17,17 +17,22 @@ const STATUS_GROUP_ORDER: Record<string, number> = {
   'Dependency Check': 8, 'PRD/Design Prep': 9, 'Done': 10,
 };
 
-function statusChipCls(key: string): string {
-  return statusStyle(key);
-}
-
+// Match ProjectView's GroupHeader visuals — same status-tone pill +
+// breathing dot + fading hairline.
 function GroupHeader({ label, count, first }: { label: string; count: number; first: boolean }) {
+  const tone = STATUS_TONE[label] ?? 'gray';
+  const s = STATUS_TONE_STYLES[tone];
   return (
-    <div className={`flex items-center gap-2.5 px-1 ${first ? 'mt-2' : 'mt-5'}`}>
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${statusChipCls(label)}`}>
+    <div className={`flex items-center gap-2.5 ${first ? 'mt-3' : 'mt-5'} mb-2`}>
+      <span
+        className="inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.06em] whitespace-nowrap"
+        style={{ background: s.bg, color: s.fg }}
+      >
+        <span className="w-1.5 h-1.5 rounded-full dot-breathe" style={{ background: s.dot }} />
         {label || '—'}
       </span>
-      <span className="text-xs text-gray-600">{count}</span>
+      <span className="font-mono text-[10.5px] text-[var(--text-dim)]">{count}</span>
+      <span className="flex-1 h-px ml-1" style={{ background: 'linear-gradient(90deg, var(--hairline) 0%, transparent 90%)' }} />
     </div>
   );
 }
@@ -46,14 +51,19 @@ export function TodoView({ features, setFeatures }: Props) {
   const [editingFeature, setEditing]      = useState<Feature | undefined>();
   const [modalMode,     setModalMode]     = useState<'edit' | null>(null);
   const [drawerFeature, setDrawerFeature] = useState<Feature | null>(null);
+  const [search,        setSearch]        = useState('');
 
   // Features where the user is the assignee on an active node (excluding completed ones)
-  const todos = features.filter(f =>
+  const allTodos = features.filter(f =>
     f.canCompleteNode === true &&
     !completed.has(f.id) &&
     f.status !== 'Done' &&
     f.status !== '结束'
   );
+  // Free-text search filter applied on top.
+  const todos = search.trim()
+    ? allTodos.filter(f => f.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : allTodos;
 
   // Features still syncing (canCompleteNode not yet determined)
   const syncing = features.filter(f => f.canCompleteNode === undefined && f.meegoUrl);
@@ -184,35 +194,32 @@ export function TodoView({ features, setFeatures }: Props) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
 
-      {/* Header (sticky) */}
-      <div className="shrink-0 px-6 pt-7 pb-2 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>
-            To Dos
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Projects pending your action</p>
+      {/* Page header — matches Ongoing Features */}
+      <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
+        <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">To Dos</div>
+        <div className="text-[12px] text-[var(--text-muted)] mt-0.5">
+          Features pending your action — auto-filtered, search to narrow.
         </div>
-        {/* Theme toggle + Sync All live in the page-level GlobalActions
-            (top-right of every tab) for cross-tab consistency. */}
-        <div aria-hidden className="invisible" />
       </div>
 
-      {/* Action bar (sticky) */}
-      <div className="shrink-0 flex items-center gap-2 px-6 mt-5 flex-wrap">
-        <button
-          onClick={completeAll}
-          disabled={todos.length === 0 || bulkRunning}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
-        >
-          {bulkRunning
-            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            : <CheckCircle2 className="w-3.5 h-3.5" />}
-          Complete All
-          {todos.length > 0 && <span className="text-blue-200 font-normal">{todos.length}</span>}
-        </button>
+      {/* Toolbar — search-only mode (no filter / group / sort) */}
+      <div className="shrink-0">
+        <FilterBar
+          search={search}
+          statusFilter={[]}    statuses={[]}
+          priorityFilter={[]}
+          onSearchChange={setSearch}
+          onStatusChange={() => {}}
+          onPriorityChange={() => {}}
+          onAddFeature={() => {}}  hideAddButton
+          groupBy={'none'}     onGroupByChange={() => {}}
+          sortBy={'none'}      onSortByChange={() => {}}
+          sortDir={'asc'}      onSortDirToggle={() => {}}
+          searchOnly
+        />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-16 mt-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-16 mt-4">
         {/* Still loading sync data */}
         {todos.length === 0 && syncing.length > 0 && (
           <div className="flex items-center gap-2 text-gray-500 py-12 justify-center">

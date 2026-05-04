@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, RotateCcw, Save, Check, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { MetaSelect, MetaTag, MetaTagTone } from '@/components/MetaCard';
+import { MetaSelect } from '@/components/MetaCard';
 
 type ThinkingBudget = 'dynamic' | 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
@@ -27,13 +27,6 @@ interface PromptItem {
   updatedAt: string | null;
   updatedBy: string | null;
 }
-
-const SERVICE_TONE: Record<string, MetaTagTone> = {
-  hamlet: 'hamlet',
-  junior: 'junior',
-  rio:    'rio',
-  mia:    'mia',
-};
 
 export function PromptsView() {
   const [prompts, setPrompts] = useState<PromptItem[]>([]);
@@ -159,7 +152,6 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
   }, [prompt.current, prompt.currentThinkingBudget, prompt.currentModel, expanded]);
 
   const isDirty = draft !== prompt.current || budgetDraft !== prompt.currentThinkingBudget || modelDraft !== prompt.currentModel;
-  const tone = SERVICE_TONE[prompt.service] ?? 'hamlet';
 
   async function handleSave() {
     setSaving(true);
@@ -208,7 +200,6 @@ function PromptCard({ prompt, expanded, onToggle, onSave }: {
         <span className="text-[13px] font-medium text-[var(--text)]">
           {prompt.service.charAt(0).toUpperCase() + prompt.service.slice(1)} — {prompt.name}
         </span>
-        <MetaTag tone={tone} label={prompt.service} />
         {prompt.isOverridden && (
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[9.5px] uppercase tracking-[0.08em]"
                 style={{ background: 'oklch(0.82 0.14 75 / 0.12)', color: 'var(--amber)' }}>

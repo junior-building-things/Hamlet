@@ -47,6 +47,9 @@ interface Props {
   onSortByChange: (v: SortBy) => void;
   sortDir: SortDir;
   onSortDirToggle: () => void;
+  /** When true, render only the search box — used by To Dos which
+   *  is auto-filtered for the user's actionable items. */
+  searchOnly?: boolean;
 }
 
 const priorities: Priority[] = ['P0', 'P1', 'P2', 'P3'];
@@ -59,6 +62,7 @@ export function FilterBar({
   search, statusFilter, statuses, priorityFilter,
   onSearchChange, onStatusChange, onPriorityChange, onAddFeature, hideAddButton,
   groupBy, onGroupByChange, sortBy, onSortByChange, sortDir, onSortDirToggle,
+  searchOnly,
 }: Props) {
   return (
     <div className="flex items-center gap-2 px-5 py-3 border-b border-[var(--hairline)] bg-[var(--bg-elev-1)] flex-wrap">
@@ -76,72 +80,76 @@ export function FilterBar({
         <span className="font-mono text-[9.5px] text-[var(--text-dim)] px-1 py-px rounded border border-[var(--hairline)]">⌘K</span>
       </div>
 
-      {/* Status filter */}
-      <MultiSelect
-        icon={<FilterIcon className="w-3 h-3" />}
-        options={statuses.map(s => ({ value: s, label: s }))}
-        value={statusFilter}
-        onChange={onStatusChange}
-        placeholder="Status"
-        className={selectCls}
-        triggerClassName={chipCls}
-      />
+      {!searchOnly && (
+        <>
+          {/* Status filter */}
+          <MultiSelect
+            icon={<FilterIcon className="w-3 h-3" />}
+            options={statuses.map(s => ({ value: s, label: s }))}
+            value={statusFilter}
+            onChange={onStatusChange}
+            placeholder="Status"
+            className={selectCls}
+            triggerClassName={chipCls}
+          />
 
-      {/* Priority filter */}
-      <MultiSelect
-        icon={<FilterIcon className="w-3 h-3" />}
-        options={priorities.map(p => ({ value: p, label: p }))}
-        value={priorityFilter}
-        onChange={onPriorityChange}
-        placeholder="Priority"
-        className={selectCls}
-        triggerClassName={chipCls}
-      />
+          {/* Priority filter */}
+          <MultiSelect
+            icon={<FilterIcon className="w-3 h-3" />}
+            options={priorities.map(p => ({ value: p, label: p }))}
+            value={priorityFilter}
+            onChange={onPriorityChange}
+            placeholder="Priority"
+            className={selectCls}
+            triggerClassName={chipCls}
+          />
 
-      {/* Group By */}
-      <CustomSelect
-        icon={<GroupIcon className="w-3 h-3" />}
-        options={[
-          { value: 'priority',        label: 'Priority' },
-          { value: 'status',          label: 'Current Status' },
-          { value: 'businessLine',    label: 'Business Line' },
-          { value: 'socialComponent', label: 'Social Component' },
-        ]}
-        value={groupBy === 'none' ? '' : groupBy}
-        onChange={v => onGroupByChange((v || 'none') as GroupBy)}
-        placeholder="Group"
-        allowDeselect
-        className={selectCls}
-        triggerClassName={chipCls}
-      />
+          {/* Group By */}
+          <CustomSelect
+            icon={<GroupIcon className="w-3 h-3" />}
+            options={[
+              { value: 'priority',        label: 'Priority' },
+              { value: 'status',          label: 'Current Status' },
+              { value: 'businessLine',    label: 'Business Line' },
+              { value: 'socialComponent', label: 'Social Component' },
+            ]}
+            value={groupBy === 'none' ? '' : groupBy}
+            onChange={v => onGroupByChange((v || 'none') as GroupBy)}
+            placeholder="Group"
+            allowDeselect
+            className={selectCls}
+            triggerClassName={chipCls}
+          />
 
-      {/* Sort By + direction */}
-      <div className="flex items-center gap-1">
-        <CustomSelect
-          icon={<SortIcon className="w-3 h-3" />}
-          options={[
-            { value: 'priority',    label: 'Priority' },
-            { value: 'status',      label: 'Current Status' },
-            { value: 'lastUpdated', label: 'Last Updated' },
-          ]}
-          value={sortBy === 'none' ? '' : sortBy}
-          onChange={v => onSortByChange((v || 'none') as SortBy)}
-          placeholder="Sort"
-          allowDeselect
-          className={selectCls}
-          triggerClassName={chipCls}
-        />
-        <button
-          onClick={onSortDirToggle}
-          disabled={sortBy === 'none'}
-          title={sortDir === 'asc' ? 'Ascending (click to reverse)' : 'Descending (click to reverse)'}
-          className="inline-flex items-center justify-center w-7 h-7 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--hairline-strong)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-        >
-          {sortDir === 'asc'
-            ? <ArrowUp   className="w-3 h-3" />
-            : <ArrowDown className="w-3 h-3" />}
-        </button>
-      </div>
+          {/* Sort By + direction */}
+          <div className="flex items-center gap-1">
+            <CustomSelect
+              icon={<SortIcon className="w-3 h-3" />}
+              options={[
+                { value: 'priority',    label: 'Priority' },
+                { value: 'status',      label: 'Current Status' },
+                { value: 'lastUpdated', label: 'Last Updated' },
+              ]}
+              value={sortBy === 'none' ? '' : sortBy}
+              onChange={v => onSortByChange((v || 'none') as SortBy)}
+              placeholder="Sort"
+              allowDeselect
+              className={selectCls}
+              triggerClassName={chipCls}
+            />
+            <button
+              onClick={onSortDirToggle}
+              disabled={sortBy === 'none'}
+              title={sortDir === 'asc' ? 'Ascending (click to reverse)' : 'Descending (click to reverse)'}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--hairline-strong)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+            >
+              {sortDir === 'asc'
+                ? <ArrowUp   className="w-3 h-3" />
+                : <ArrowDown className="w-3 h-3" />}
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Add Feature */}
       {!hideAddButton && (
