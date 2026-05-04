@@ -16,11 +16,16 @@
  */
 
 export type CronKind = 'cloud_scheduler' | 'digest_section';
+export type CronService = 'hamlet' | 'junior' | 'rio' | 'mia';
 
 export interface CronJobDef {
   id: string;
   name: string;
   description: string;
+  /** Which agent the job is *for* (drives the Cron Jobs tab filter).
+   *  Distinct from cloudSchedulerService, which only describes the
+   *  Cloud Run service hosting the cron. */
+  service: CronService;
   /** Cron expression in the job's timezone (display + edit). */
   schedule: string;
   /** Time-of-day in the job's timezone, e.g. "10am SGT". */
@@ -65,6 +70,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
   // ── Cloud Scheduler jobs ──────────────────────────────────────────────────
   {
     id: REFRESH_FEATURE_CACHE,
+    service: 'hamlet',
     name: 'Refresh feature cache',
     description:
       'Pulls Meego state for every PM-owned feature, detects status transitions + PRD changes, ' +
@@ -81,6 +87,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
   },
   {
     id: HAMLET_DAILY,
+    service: 'hamlet',
     name: 'Hamlet — Daily digest (legacy)',
     description:
       'Legacy bundled run kept for manual triggers. Sub-sections now have their own crons; ' +
@@ -96,6 +103,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
   },
   {
     id: 'poll-prd-ready',
+    service: 'junior',
     name: 'Junior — Daily PRD-ready compliance poll',
     description:
       'Polls Meego for features that just transitioned into Line Review and posts a compliance ' +
@@ -115,6 +123,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
   // Refresh-feature-cache (above) populates queues / snapshots; these consume.
   {
     id: 'digest.risk',
+    service: 'junior',
     name: 'Daily risk digest',
     description:
       'For each in-flight feature, runs a Gemini risk evaluation over the last 24h of chat + ' +
@@ -131,6 +140,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
   },
   {
     id: 'digest.prd_changes',
+    service: 'junior',
     name: 'PRD change-log digest',
     description:
       'Sends the queue of PRD changes detected by the refresh job (Gemini-summarised diffs ' +
@@ -150,6 +160,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
   },
   {
     id: 'digest.unanswered',
+    service: 'junior',
     name: 'Outstanding Q&A digest',
     description:
       'Scans chat @-mentions of the owner + open PRD comment threads for questions Thomas hasn\'t ' +
@@ -169,6 +180,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
   },
   {
     id: 'digest.ab_open',
+    service: 'junior',
     name: 'AB-open digest',
     description:
       'Sends the queue of features whose Meego status transitioned to 实验中 (AB Testing) ' +
@@ -188,6 +200,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
   },
   {
     id: 'digest.ab_concluded',
+    service: 'junior',
     name: 'AB-concluded digest',
     description:
       'For each feature chat where an "AB Brief" calendar invite has landed, drafts an AB-concluded ' +
@@ -207,6 +220,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
   },
   {
     id: 'digest.line_review',
+    service: 'junior',
     name: 'Line Review (PRD Ready) cards',
     description:
       'Sends the queue of features whose Meego status just transitioned to 待线内评审 ' +

@@ -1,16 +1,18 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Play, Pause, PlayCircle } from 'lucide-react';
+import { Loader2, Play, Pause, PlayCircle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { TIME_OPTIONS, FREQUENCY_OPTIONS } from '@/lib/cron-expr';
 import { MetaSelect } from '@/components/MetaCard';
 
 type CronKind = 'cloud_scheduler' | 'digest_section';
+type CronService = 'hamlet' | 'junior' | 'rio' | 'mia';
 type CronDestinationKind = 'team_thomas' | 'progress_update' | 'feature_group' | 'compliance' | 'hamlet';
 interface CronDestination { kind: CronDestinationKind; label: string }
 interface CronJob {
   id: string;
   name: string;
+  service: CronService;
   description: string;
   schedule: string;
   scheduleTime: string;
@@ -46,6 +48,8 @@ function formatRelativeTime(iso?: string): string {
 export function CronJobsView() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | CronService>('all');
+  const [search, setSearch] = useState('');
 
   const refresh = useCallback(async () => {
     try {
@@ -87,6 +91,15 @@ export function CronJobsView() {
     return a.name.localeCompare(b.name);
   });
 
+  const filtered = ordered.filter(j => {
+    if (filter !== 'all' && j.service !== filter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!j.name.toLowerCase().includes(q) && !j.id.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
@@ -96,16 +109,52 @@ export function CronJobsView() {
         </div>
       </div>
 
+      {/* Toolbar — search + service filter chips (mirrors System Prompts) */}
+      <div className="shrink-0 px-5 py-3 border-b border-[var(--hairline)] flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 bg-[var(--bg-elev-2)] border border-[var(--hairline)] rounded-[var(--r-sm)] px-3 h-[30px] w-[240px] shrink-0">
+          <Search className="w-3.5 h-3.5 text-[var(--text-dim)] shrink-0" />
+          <input
+            type="text"
+            placeholder="Search cron jobs…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="bg-transparent text-[12px] text-[var(--text)] placeholder-[var(--text-dim)] outline-none w-full"
+          />
+          <span className="font-mono text-[9.5px] text-[var(--text-dim)] px-1 py-px rounded border border-[var(--hairline)]">⌘K</span>
+        </div>
+        {(['all', 'hamlet', 'junior', 'rio', 'mia'] as const).map(s => {
+          const active = filter === s;
+          return (
+            <button
+              key={s}
+              onClick={() => setFilter(s)}
+              className={`inline-flex items-center h-7 px-2.5 rounded-[var(--r-sm)] border text-[11.5px] font-mono uppercase tracking-[0.04em] transition-colors ${
+                active
+                  ? 'bg-[var(--bg-elev-3)] border-[var(--hairline-strong)] text-[var(--text)]'
+                  : 'bg-[var(--bg-elev-2)] border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--hairline-strong)]'
+              }`}
+            >
+              {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          );
+        })}
+        <span className="ml-auto font-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--text-dim)]">
+          {filtered.length} job{filtered.length === 1 ? '' : 's'}
+        </span>
+      </div>
+
       <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 pb-16">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
           </div>
-        ) : ordered.length === 0 ? (
-          <div className="text-center text-sm text-gray-500 py-12">No cron jobs registered.</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center text-[12px] text-[var(--text-muted)] py-12">
+            {ordered.length === 0 ? 'No cron jobs registered.' : 'No jobs match.'}
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {ordered.map(j => (
+            {filtered.map(j => (
               <CronCard key={j.id} job={j} onChange={refresh} />
             ))}
           </div>

@@ -737,29 +737,38 @@ body {
   font-size: 10px;
   color: var(--text-dim);
 }
-/* Snake border: a thin gradient swept left→right along the TOP edge
-   when a cron is in flight. Implemented as a 2px-tall ::before strip
-   with a moving linear-gradient mask. */
-.junior-status.is-working::before {
+/* Snake border: a thin gradient strip that sweeps strictly left→right
+   along the TOP edge. Implemented as a fixed-width ::before strip
+   whose `left` is animated from off-left (-30%) to off-right (100%),
+   so the motion is one-directional with no jump-back. Same animation
+   in both idle ("active") and "working" states — only the strip's
+   color saturation differs. */
+.junior-status::before {
   content: '';
   position: absolute;
-  top: 0; left: 0;
-  height: 2px;
-  width: 100%;
+  top: 0;
+  left: -30%;
+  height: 1.5px;
+  width: 30%;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    transparent 30%,
-    var(--ai) 50%,
-    transparent 70%,
+    color-mix(in oklch, var(--ai) 55%, transparent) 50%,
     transparent 100%
   );
-  background-size: 250% 100%;
-  animation: junior-snake 1.6s linear infinite;
+  animation: junior-snake 4.5s linear infinite;
   pointer-events: none;
   z-index: 1;
 }
+.junior-status.is-working::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--ai) 50%,
+    transparent 100%
+  );
+}
 @keyframes junior-snake {
-  0%   { background-position: 100% 0; }
-  100% { background-position: -150% 0; }
+  0%   { left: -30%; }
+  100% { left: 100%; }
 }
