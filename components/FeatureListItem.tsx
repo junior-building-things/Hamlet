@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
+import { getDisplayNote } from '@/lib/featureNotes';
 import { StatusBadge } from './StatusBadge';
 import { PriorityBadge } from './PriorityBadge';
 import { VersionBadge } from './VersionBadge';
@@ -41,8 +42,12 @@ interface Props {
 
 // ─── Inline editable text field ─────────────────────────────────────────────
 
-function EditableText({ value, onSave, className, placeholder, allowEmpty, showTooltipIfTruncated }: {
+function EditableText({ value, displayValue, onSave, className, placeholder, allowEmpty, showTooltipIfTruncated }: {
+  /** What goes into the input on edit. */
   value: string;
+  /** What's rendered when NOT editing. Falls back to `value`. Lets the
+   *  Notes cell show an auto-prefill while editing starts from empty. */
+  displayValue?: string;
   onSave: (v: string) => void;
   className?: string;
   placeholder?: string;
@@ -75,15 +80,18 @@ function EditableText({ value, onSave, className, placeholder, allowEmpty, showT
     else setDraft(value);
   }
 
+  // What's actually shown when not editing.
+  const shown = displayValue ?? value;
+
   const handleMouseEnter = useCallback(() => {
     if (!showTooltipIfTruncated || !spanRef.current) return;
     const el = spanRef.current;
-    if (el.scrollWidth > el.clientWidth && value) {
+    if (el.scrollWidth > el.clientWidth && shown) {
       const r = el.getBoundingClientRect();
       setTipAnchor({ top: r.top, left: r.left, width: r.width });
       setShowTip(true);
     }
-  }, [showTooltipIfTruncated, value]);
+  }, [showTooltipIfTruncated, shown]);
 
   const handleMouseLeave = useCallback(() => setShowTip(false), []);
 
@@ -112,9 +120,9 @@ function EditableText({ value, onSave, className, placeholder, allowEmpty, showT
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        <span ref={spanRef} className={className}>{value || placeholder}</span>
+        <span ref={spanRef} className={className}>{shown || placeholder}</span>
       </div>
-      {showTip && mounted && value && createPortal(
+      {showTip && mounted && shown && createPortal(
         <div
           className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-3 text-xs text-[var(--foreground)] max-w-[400px] pointer-events-none"
           style={{
@@ -124,7 +132,7 @@ function EditableText({ value, onSave, className, placeholder, allowEmpty, showT
             zIndex: 9999,
           }}
         >
-          {value}
+          {shown}
           <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
         </div>,
         document.body,
@@ -459,30 +467,42 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
         <RiskBadge feature={feature} onClick={() => openRow(feature)} />
       </div>
 
-      {/* Notes (editable, manual user input) — stop propagation so the
-          click → enter-edit-mode doesn't bubble up to the row's
-          open-drawer handler. */}
-      <div
-        className="hidden sm:flex items-center py-2.5 pl-4 min-w-0"
-        onClick={e => e.stopPropagation()}
-      >
-        {onFieldUpdate ? (
-          <EditableText
-            value={feature.notes ?? ''}
-            onSave={v => onFieldUpdate(feature.id, { notes: v })}
-            className="text-xs text-[var(--muted)] truncate"
-            placeholder="—"
-            allowEmpty
-            showTooltipIfTruncated
-          />
-        ) : (
-          feature.notes && (
-            <span className="text-xs text-[var(--muted)] truncate" title={feature.notes}>
-              {feature.notes}
-            </span>
-          )
-        )}
-      </div>
+      {/* Notes — auto-fills from Junior signals (delayed reason, risk
+          notes, open-questions count) when no fresh manual edit is
+          pinned. A manual edit pins the user's text for 5 business
+          days; after that the auto-fill resumes. Click→edit; stop
+          propagation so it doesn't open the drawer. */}
+      {(() => {
+        const display = getDisplayNote(feature);
+        const editValue = display.source === 'manual' ? feature.notes ?? '' : '';
+        return (
+          <div
+            className="hidden sm:flex items-center py-2.5 pl-4 min-w-0"
+            onClick={e => e.stopPropagation()}
+          >
+            {onFieldUpdate ? (
+              <EditableText
+                value={editValue}
+                displayValue={display.text}
+                onSave={v => onFieldUpdate(feature.id, {
+                  notes: v,
+                  notesEditedAt: new Date().toISOString(),
+                })}
+                className="text-xs text-[var(--muted)] truncate"
+                placeholder="—"
+                allowEmpty
+                showTooltipIfTruncated
+              />
+            ) : (
+              display.text && (
+                <span className="text-xs text-[var(--muted)] truncate" title={display.text}>
+                  {display.text}
+                </span>
+              )
+            )}
+          </div>
+        );
+      })()}
 
       {/* Action */}
       {!hideAction && (

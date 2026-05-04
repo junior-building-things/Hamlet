@@ -138,8 +138,15 @@ export interface Feature {
     source: 'chat' | 'prd_comment';
     messageId: string;
   }>;
-  // Free-form user notes (manually entered in the Notes column)
+  // Free-form user notes (manually entered in the Notes column).
+  // When empty/stale, the cell auto-fills a Junior-derived summary
+  // (delay reason, risk notes, or open-questions count). A manual
+  // edit pins the user's text for ~5 business days; after that,
+  // the auto-fill takes over again if a higher-priority signal
+  // exists. `notesEditedAt` is the ISO timestamp of the last manual
+  // edit and drives that cooldown.
   notes?: string;
+  notesEditedAt?: string;
   // Fields manually edited in the UI — protected from sync overwrites
   manualEdits?: string[];
 }
