@@ -196,9 +196,12 @@ body {
   letter-spacing: -0.04em;
 }
 .user-mark > img {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+  /* 26×26 fills the 1px inset (::after) entirely so the avatar sits
+     flush against the gradient stroke — no white ring between img
+     and stroke. The ::after still backs the initials fallback. */
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   object-fit: cover;
 }
 
