@@ -4155,7 +4155,12 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             finding.delay = { detail: `${latest.from} → ${latest.to}` };
             finding.level = 'red';
           }
-          delta.riskLevel = undefined;
+          // AB Testing defaults to Low risk in the cache. The UI's
+          // Delayed badge keys off versionChanges directly, so a
+          // delayed AB feature still reads "Delayed" regardless of
+          // riskLevel — and a non-delayed one now reads "Low" instead
+          // of having no badge at all.
+          delta.riskLevel = 'green';
           delta.riskNotes = undefined;
           trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
@@ -4194,8 +4199,20 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           continue;
         }
 
-        // Tech Design / Development features not in riskFindings default to green.
-        if (statusName === '技术方案设计中' || statusName === '开发中') {
+        // Anything from PRD Walkthrough onwards (PRD Walkthrough → Tech
+        // Design → Development → QA Testing → Merged) defaults to Low
+        // risk when no explicit finding or delay was detected. Earlier
+        // statuses (PRD/Design Prep, Line Review, Compliance Review,
+        // Dependency Check, RD Allocation) preserve their previous
+        // risk data — they're not yet under active build.
+        const DEFAULT_GREEN_STATUSES = new Set([
+          '待需求详评',     // PRD Walkthrough
+          '技术方案设计中',  // Tech Design
+          '开发中',         // Development
+          '测试中',         // QA Testing
+          '已上车',         // Merged
+        ]);
+        if (DEFAULT_GREEN_STATUSES.has(statusName)) {
           delta.riskLevel = 'green';
           delta.riskNotes = undefined;
           trackRiskTransition(delta, cached);
@@ -4203,8 +4220,9 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           continue;
         }
 
-        // Other statuses (QA, Merged, etc.) not in riskFindings keep their
-        // previous risk data — only persist if versionChanges changed.
+        // Earlier statuses (PRD/Design Prep, Line Review, etc.) without
+        // a risk finding keep their previous risk data — only persist
+        // if versionChanges changed.
         if (Object.keys(delta).length > 0) deltas.set(fId, delta);
       }
       // Re-sort risk findings since some may have been bumped to red above.
