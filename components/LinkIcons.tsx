@@ -377,11 +377,12 @@ function AddLinkButton({ feature, onLinkUpdate }: {
       <button
         ref={ref}
         onClick={toggle}
-        className="inline-flex items-center justify-center w-[22px] h-[22px] rounded-[6px] bg-transparent text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer relative transition-transform duration-150 hover:-translate-y-[2px]"
+        className="inline-flex items-center justify-center w-[22px] h-[22px] rounded-[6px] bg-[var(--bg-elev-1)] text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer relative transition-transform duration-150 hover:-translate-y-[2px]"
         style={{
           zIndex: 0,
           marginLeft: -7,
-          border: '1.5px dashed var(--hairline-strong)',
+          border: '1.5px solid var(--bg-elev-1)',
+          boxShadow: '0 0 0 0.5px var(--hairline)',
         }}
         title="Add link"
       >

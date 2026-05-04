@@ -195,7 +195,7 @@ export function TodoView({ features, setFeatures }: Props) {
   // renders that button. ProjectView hides Action entirely.
   // Feature capped at 360px so Notes (1fr) gets the leftover space.
   const gridTemplateColumns =
-    'minmax(240px,360px) 150px 80px 64px 184px 120px 100px minmax(200px,1fr) 120px 40px';
+    'minmax(240px,360px) 150px 80px 64px 140px 90px 100px minmax(200px,1fr) 120px 40px';
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
