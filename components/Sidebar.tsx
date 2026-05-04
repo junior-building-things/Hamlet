@@ -103,13 +103,14 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user, featu
       <NavSection label="Workspace" items={workspace} activeView={activeView} onViewChange={onViewChange} />
       <NavSection label="AI Setup"  items={aiSetup}    activeView={activeView} onViewChange={onViewChange} />
 
-      <div className="flex-1" />
-
-      {/* Junior status — animated snake border while a cron is in flight,
-          idle "Monitoring..." otherwise. */}
-      <div className="mb-3">
+      {/* Junior status — sits directly below the AI Setup nav.
+          Animated snake border while a cron is in flight, idle
+          "Monitoring..." otherwise. */}
+      <div className="mt-4">
         <JuniorStatusCard />
       </div>
+
+      <div className="flex-1" />
 
       {/* Footer: version pill + logout */}
       <div className="pt-3 border-t border-[var(--hairline)] flex items-center justify-between px-1">
