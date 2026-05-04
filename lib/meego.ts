@@ -548,7 +548,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     // Business Line, field_2e7909 = Social模块. The MCP only returns
     // explicitly-requested keys in `work_item_fields`, so all three need
     // to be in this list for the JSON path to find them.
-    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_675419', 'field_a4c558', 'field_2e7909', 'created_at', 'field_0cec98', 'field_6909f6', 'effect_analyze_link_t'],
+    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_675419', 'field_a4c558', 'field_2e7909', 'created_at', 'updated_at', 'field_0cec98', 'field_6909f6', 'effect_analyze_link_t'],
   });
 
   // Try parsing the brief as JSON first (current MCP format), then fall back
@@ -566,6 +566,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let jsonQuarterlyCycle = '';
   let jsonBusinessLine = '';
   let jsonSocialComponent = '';
+  let jsonLastUpdated = '';
   // JSON-extracted role owners (used when MCP returns JSON instead of markdown)
   let jsonPmOwner = '';
   let jsonTpmOwner = '';
@@ -667,6 +668,20 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     }
     jsonBusinessLine = getField('field_a4c558');
     jsonSocialComponent = getField('field_2e7909');
+
+    // updated_at can come back as a millisecond-string ("1714800000000")
+    // or already a YYYY-MM-DD-style date. Mirror the logic in
+    // parseUpdateTime + the MQL list path (line ~268).
+    const updatedRaw = getField('updated_at');
+    if (updatedRaw) {
+      const ts = Number(updatedRaw);
+      if (!isNaN(ts) && ts > 1_000_000_000_000) {
+        jsonLastUpdated = new Date(ts).toISOString().split('T')[0];
+      } else {
+        const m = updatedRaw.match(/(\d{4}-\d{2}-\d{2})/);
+        if (m) jsonLastUpdated = m[1];
+      }
+    }
   } catch {
     // Legacy markdown parsing
     const lines = raw.split('\n');
@@ -763,12 +778,19 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let meegoAvatars: Record<string, string> = {};
   try {
     const nodeRaw = await callMeegoMcp('get_node_detail', { url: meegoUrl });
-    let nodeData: { list?: Array<{ form_items?: Array<{ value?: string }> }> };
+    // form_items[].value used to be a JSON-stringified blob — we ran
+    // regex over it. The MCP can now return it as a parsed object or
+    // array, in which case `.includes('avatar')` would throw on a
+    // non-string. Stringify defensively so the regex path works for
+    // both shapes (and the JSON-string case is unchanged).
+    let nodeData: { list?: Array<{ form_items?: Array<{ value?: unknown }> }> };
     try { nodeData = JSON.parse(nodeRaw); } catch { nodeData = {}; }
     const emailToAvatar = new Map<string, string>();
     for (const node of nodeData.list ?? []) {
       for (const fi of node.form_items ?? []) {
-        const v = fi.value ?? '';
+        const raw = fi.value;
+        if (raw === undefined || raw === null) continue;
+        const v = typeof raw === 'string' ? raw : JSON.stringify(raw);
         if (!v.includes('avatar')) continue;
         const re1 = /"email"\s*:\s*"([^"]+@[^"]+)"[^}]*"avatar"\s*:\s*"([^"]+)"/g;
         let m;
@@ -1001,7 +1023,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   return {
     status:      resolveDisplayStatus(overallStatusName),
     name:        workItemName,
-    lastUpdated: parseUpdateTime(raw),
+    lastUpdated: jsonLastUpdated || parseUpdateTime(raw),
     owner,
     meegoNodeKey: best?.key ?? '',
     prd,
