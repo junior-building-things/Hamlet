@@ -312,9 +312,9 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
           <button
             onClick={() => onComplete(feature)}
             disabled={completing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors self-start"
+            className="hm-btn hm-btn-ai self-start"
           >
-            {completing ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+            {completing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
             Complete: {feature.status}
           </button>
         )}
@@ -411,11 +411,11 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
             <button
               onClick={(e) => { e.stopPropagation(); onComplete(feature); }}
               disabled={completing}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+              className="hm-btn hm-btn-ai"
             >
               {completing
-                ? <Loader2 className="w-3 h-3 animate-spin" />
-                : <CheckCircle2 className="w-3 h-3" />}
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <CheckCircle2 className="w-3.5 h-3.5" />}
               Complete
             </button>
           )}

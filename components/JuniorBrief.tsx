@@ -1,73 +1,112 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { Feature } from '@/lib/types';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, CheckCircle2, Loader2 } from 'lucide-react';
 import { useSync } from '@/components/SyncContext';
 
 /**
- * Top-of-tab "Junior · Daily Brief" banner.
+ * Top-of-tab "Junior" banner.
  *
- * Composes a one-glance summary from the feature cache: counts the
- * features at risk this week (red/yellow risk OR an open version
- * slip), then for each one writes a one-sentence summary like
- * `"AI Self in Mix Studio — AB Brief invite slipped 2 days"` joined
- * by commas.
+ * Two modes:
+ *   - mode='risk': counts at-risk features (red/yellow risk OR a
+ *     version slip), summarises each in one sentence comma-joined.
+ *   - mode='todos': counts features needing user action
+ *     (canCompleteNode), groups by status, summarises as
+ *     "1 requires PRD walkthrough and other 5 are pending PRD/Design Prep".
+ *     Shows a "Complete all" button next to Dismiss.
  *
- * The summary is built client-side from `feature.riskNotes` /
- * `versionChanges` (both already populated by the digest pipeline).
- * If you want a richer Gemini-written summary, the digest can persist
- * one to GCS and this component can prefer that — left as a follow-up.
- *
- * Dismissible: the user can hide the banner; the dismissal is per-day
- * (Asia/Singapore), so the banner reappears the next day.
+ * Dismissible per-day (Asia/Singapore) — banner reappears the next
+ * day. Each mode uses a separate localStorage key.
  */
 
+type Mode = 'risk' | 'todos';
+
 interface Props {
+  mode: Mode;
   features: Feature[];
+  /** Required when mode='todos'. Triggers handleComplete for every
+   *  todo in turn. */
+  onCompleteAll?: () => Promise<void> | void;
+  /** Disabled state for the "Complete all" action (e.g. while a
+   *  bulk run is in flight). */
+  completeAllRunning?: boolean;
 }
 
-const STORAGE_KEY = 'hamlet_junior_brief_dismissed_date';
+const STORAGE_KEYS: Record<Mode, string> = {
+  risk:  'hamlet_junior_brief_risk_dismissed_date',
+  todos: 'hamlet_junior_brief_todos_dismissed_date',
+};
 
-/** YYYY-MM-DD in Asia/Singapore. */
 function todayKey(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
 }
 
-export function JuniorBrief({ features }: Props) {
+export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning }: Props) {
   const { refreshCronLastRunAt, lastSyncedAt } = useSync();
 
-  const atRisk = useMemo(() => {
-    return features
-      .filter(f => f.status !== 'Done' && f.status !== '已完成')
-      .filter(f => f.riskLevel === 'red'
-        || f.riskLevel === 'yellow'
-        || (f.versionChanges && f.versionChanges.length > 0));
-  }, [features]);
+  // Pick the right feature subset for the mode.
+  const items = useMemo(() => {
+    if (mode === 'risk') {
+      return features
+        .filter(f => f.status !== 'Done' && f.status !== '已完成')
+        .filter(f => f.riskLevel === 'red'
+          || f.riskLevel === 'yellow'
+          || (f.versionChanges && f.versionChanges.length > 0));
+    }
+    // todos
+    return features.filter(f =>
+      f.canCompleteNode === true
+      && f.status !== 'Done'
+      && f.status !== '已完成'
+    );
+  }, [mode, features]);
 
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    setDismissed(localStorage.getItem(STORAGE_KEY) === todayKey());
-  }, []);
+    setDismissed(localStorage.getItem(STORAGE_KEYS[mode]) === todayKey());
+  }, [mode]);
 
   function dismiss() {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, todayKey());
+      localStorage.setItem(STORAGE_KEYS[mode], todayKey());
     }
     setDismissed(true);
   }
 
-  if (atRisk.length === 0 || dismissed) return null;
+  if (items.length === 0 || dismissed) return null;
 
-  // One sentence per feature: "<name> <first risk note OR slip detail>"
-  const lines = atRisk.map(f => {
-    const note = (f.riskNotes ?? [])[0]?.trim();
-    if (note) return `${f.name} ${note.toLowerCase()}`;
-    const slip = (f.versionChanges ?? []).slice(-1)[0];
-    if (slip) return `${f.name} planned version slipped ${slip.from} → ${slip.to}`;
-    return `${f.name} flagged at risk`;
-  });
-  const summary = lines.join(', ') + '.';
+  // Lead text + body summary.
+  let lead: string;
+  let summary: string;
+  if (mode === 'risk') {
+    lead = `${items.length} feature${items.length === 1 ? '' : 's'} at risk this week.`;
+    summary = items
+      .map(f => {
+        const note = (f.riskNotes ?? [])[0]?.trim();
+        if (note) return `${f.name} ${note.toLowerCase()}`;
+        const slip = (f.versionChanges ?? []).slice(-1)[0];
+        if (slip) return `${f.name} planned version slipped ${slip.from} → ${slip.to}`;
+        return `${f.name} flagged at risk`;
+      })
+      .join(', ') + '.';
+  } else {
+    lead = `${items.length} feature${items.length === 1 ? '' : 's'} need${items.length === 1 ? 's' : ''} your attention.`;
+    // Group by current status, build a readable phrase.
+    const byStatus = new Map<string, number>();
+    for (const f of items) {
+      const k = f.status || 'unknown';
+      byStatus.set(k, (byStatus.get(k) ?? 0) + 1);
+    }
+    const phrases = [...byStatus.entries()].map(([status, count], i, arr) => {
+      const verb = count === 1 ? 'requires' : 'are pending';
+      const subject = i === 0
+        ? `${count}`
+        : (arr.length > 2 || count > 1 ? `${count}` : `other ${count}`);
+      return `${subject} ${verb} ${status}`;
+    });
+    summary = phrases.join(' and ') + '.';
+  }
 
   // "Generated Xm ago" — pick the freshest of the cron run + last sync.
   const generatedIso = [refreshCronLastRunAt, lastSyncedAt]
@@ -92,9 +131,7 @@ export function JuniorBrief({ features }: Props) {
       </span>
       <div className="flex-1 min-w-0">
         <div className="text-[12.5px] leading-[1.5] text-[var(--text)]">
-          <span className="font-medium" style={{ color: 'var(--ai)' }}>
-            {atRisk.length} feature{atRisk.length === 1 ? '' : 's'} at risk this week.
-          </span>{' '}
+          <span className="font-medium" style={{ color: 'var(--ai)' }}>{lead}</span>{' '}
           {summary}
         </div>
         {generatedIso && (
@@ -103,10 +140,20 @@ export function JuniorBrief({ features }: Props) {
           </div>
         )}
       </div>
-      <div className="shrink-0">
-        <button onClick={dismiss} className="hm-btn">
-          Dismiss
-        </button>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button onClick={dismiss} className="hm-btn">Dismiss</button>
+        {mode === 'todos' && onCompleteAll && (
+          <button
+            onClick={() => { void onCompleteAll(); }}
+            disabled={completeAllRunning}
+            className="hm-btn hm-btn-ai"
+          >
+            {completeAllRunning
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <CheckCircle2 className="w-3.5 h-3.5" />}
+            Complete all
+          </button>
+        )}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { FeatureListHeader } from './FeatureListHeader';
 import { FeatureListItem } from './FeatureListItem';
 import { FeatureModal } from './FeatureModal';
 import { FeatureDrawer } from './FeatureDrawer';
+import { JuniorBrief } from './JuniorBrief';
 import { STATUS_TONE, STATUS_TONE_STYLES } from './StatusBadge';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -200,6 +201,16 @@ export function TodoView({ features, setFeatures }: Props) {
         <div className="text-[12px] text-[var(--text-muted)] mt-0.5">
           Features pending your action — auto-filtered, search to narrow.
         </div>
+      </div>
+
+      {/* Junior — actionable-todos summary, dismissible per-day. */}
+      <div className="shrink-0">
+        <JuniorBrief
+          mode="todos"
+          features={features}
+          onCompleteAll={completeAll}
+          completeAllRunning={bulkRunning}
+        />
       </div>
 
       {/* Toolbar — search-only mode (no filter / group / sort) */}

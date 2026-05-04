@@ -775,9 +775,9 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         <div className="text-[12px] text-[var(--text-muted)] mt-0.5">An overview of your projects</div>
       </div>
 
-      {/* Junior · Daily Brief — at-risk summary, dismissible. */}
+      {/* Junior — at-risk summary, dismissible. */}
       <div className="shrink-0">
-        <JuniorBrief features={features} />
+        <JuniorBrief mode="risk" features={features} />
       </div>
 
       <div className="shrink-0">
