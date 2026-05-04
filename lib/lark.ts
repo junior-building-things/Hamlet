@@ -756,8 +756,17 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
     // A thread reply with a newer Libra URL takes priority.
     for (const msg of libraParents) {
       try {
+        // Use container_id_type=thread to list replies — the legacy
+        // /messages/{id}/replies path 404s in open.larksuite.com.
+        const threadRoot = msg.thread_id ?? msg.message_id;
+        const params = new URLSearchParams({
+          container_id_type: 'thread',
+          container_id: threadRoot,
+          page_size: '50',
+          sort_type: 'ByCreateTimeAsc',
+        });
         const replyRes = await fetch(
-          `${LARK_BASE_URL}/open-apis/im/v1/messages/${msg.message_id}/replies?page_size=50`,
+          `${LARK_BASE_URL}/open-apis/im/v1/messages?${params}`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
         const replyData = await replyRes.json() as {
@@ -765,7 +774,10 @@ export async function searchLibraInChat(chatId: string): Promise<string> {
           data?: { items?: MsgItem[] };
         };
         if (replyData.code === 0) {
-          const replies = (replyData.data?.items ?? []).reverse();
+          // Skip the thread root itself; reverse to keep newest-first.
+          const replies = (replyData.data?.items ?? [])
+            .filter(r => r.message_id !== threadRoot)
+            .reverse();
           for (const reply of replies) {
             const rc = reply.body?.content ?? '';
             const rf = typeof rc === 'string' ? rc : JSON.stringify(rc);
