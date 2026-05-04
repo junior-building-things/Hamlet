@@ -97,7 +97,7 @@ function GroupHeader({ label, count, first, groupBy }: { label: string; count: n
   const tone = groupTone(groupBy, label === '—' ? '' : label);
   const s = GROUP_TONE_STYLES[tone];
   return (
-    <div className={`sm:col-span-full flex items-center gap-2.5 ${first ? 'mt-3' : 'mt-5'} mb-2`}>
+    <div className={`flex items-center gap-2.5 ${first ? 'mt-3' : 'mt-5'} mb-2`}>
       <span
         className="inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.06em] whitespace-nowrap"
         style={{ background: s.bg, color: s.fg }}
@@ -646,25 +646,28 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
   // noise. Adjust the grid template + skip the cell in the header / row.
   const hideStatus   = groupBy === 'status';
   const hidePriority = groupBy === 'priority';
+  // Fixed widths per column so the SAME template can be applied to both
+  // the header and each row. (We were using `subgrid` for this before,
+  // but with the parent's tracks set via inline style, the subgrid
+  // children weren't always picking the parent's tracks up reliably,
+  // and the header drifted out of alignment with the row cells.)
   const gridTemplateColumns = (() => {
-    // Feature gets the leftover space (`1fr`) with a 280px floor so the
-    // table doesn't collapse when names are short. Matches the design's
-    // `minmax(280px, 1fr)`. Notes is capped at 200px so the Feature
-    // column gets first dibs on growth.
-    const cols = ['minmax(280px,1fr)'];           // Feature
-    if (!hideStatus)   cols.push('max-content'); // Status
-    cols.push('max-content');                    // Version
-    if (!hidePriority) cols.push('max-content'); // Priority
-    cols.push('max-content');                    // Links
-    cols.push('max-content');                    // Team
-    cols.push('max-content');                    // Risk
-    cols.push('minmax(0,200px)');                // Notes
-    cols.push('max-content');                    // Action
-    cols.push('max-content');                    // Sync
+    const cols = ['minmax(240px,1fr)'];          // Feature  (flex)
+    if (!hideStatus)   cols.push('150px');       // Status pill
+    cols.push('80px');                           // Version
+    if (!hidePriority) cols.push('64px');        // Priority chip
+    cols.push('184px');                          // Links (up to 7 stacked icons)
+    cols.push('120px');                          // Team avatars (up to 5)
+    cols.push('100px');                          // Risk dot + label
+    cols.push('minmax(120px,200px)');            // Notes (truncates)
+    cols.push('80px');                           // Action button
+    cols.push('40px');                           // Sync icon
     return cols.join(' ');
   })();
-  const listGridCls = 'flex flex-col sm:grid sm:gap-x-3 sm:gap-y-0';
-  const listGridStyle = { gridTemplateColumns } as const;
+  // Parent is a vertical stack — each row + header is its own grid with
+  // the same gridTemplateColumns, so columns line up by virtue of the
+  // identical template.
+  const listGridCls = 'flex flex-col';
 
   async function handleComplete(feature: Feature) {
     if (!feature.meegoProjectKey || !feature.meegoIssueId || !feature.meegoNodeKey) {
@@ -783,7 +786,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         pinned={f.id === pinnedId} onToggleAgent={handleToggleAgent}
         onFieldUpdate={handleFieldUpdate}
         hideStatus={hideStatus}
-        hidePriority={hidePriority} />
+        hidePriority={hidePriority}
+        gridTemplateColumns={gridTemplateColumns} />
     ));
   }
 
@@ -831,8 +835,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           </div>
         ) : groups ? (
           // ── Grouped list view ──────────────────────────────────────────────
-          <div className={listGridCls} style={listGridStyle}>
-            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} />
+          <div className={listGridCls}>
+            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} gridTemplateColumns={gridTemplateColumns} />
             {/* Render pinned feature above all groups */}
             {pinnedId && (() => {
               const pinned = features.find(f => f.id === pinnedId);
@@ -847,8 +851,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
           </div>
         ) : (
           // ── Plain list view ────────────────────────────────────────────────
-          <div className={listGridCls} style={listGridStyle}>
-            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} />
+          <div className={listGridCls}>
+            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} gridTemplateColumns={gridTemplateColumns} />
             {renderListRows(sorted)}
           </div>
         )}

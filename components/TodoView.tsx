@@ -23,7 +23,7 @@ function statusChipCls(key: string): string {
 
 function GroupHeader({ label, count, first }: { label: string; count: number; first: boolean }) {
   return (
-    <div className={`sm:col-span-full flex items-center gap-2.5 px-1 ${first ? 'mt-2' : 'mt-5'}`}>
+    <div className={`flex items-center gap-2.5 px-1 ${first ? 'mt-2' : 'mt-5'}`}>
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${statusChipCls(label)}`}>
         {label || '—'}
       </span>
@@ -175,7 +175,11 @@ export function TodoView({ features, setFeatures }: Props) {
     return keys.map(key => ({ key, label: key || '—', items: buckets.get(key)! }));
   }, [todos]);
 
-  const listGridCls = 'flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,500px)_max-content_max-content_max-content_max-content_max-content_max-content_minmax(0,200px)_max-content_max-content] sm:gap-x-1.5 sm:gap-y-1';
+  const listGridCls = 'flex flex-col';
+  // Same fixed-width template ProjectView uses, so the columns line up
+  // 1:1 across both views.
+  const gridTemplateColumns =
+    'minmax(240px,1fr) 150px 80px 64px 184px 120px 100px minmax(120px,200px) 80px 40px';
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -237,7 +241,7 @@ export function TodoView({ features, setFeatures }: Props) {
         {/* Todo list — grouped by status */}
         {todos.length > 0 && (
           <div className={listGridCls}>
-            <FeatureListHeader />
+            <FeatureListHeader gridTemplateColumns={gridTemplateColumns} />
             {groups.map((group, gi) => (
               <React.Fragment key={group.key}>
                 <GroupHeader label={group.label} count={group.items.length} first={gi === 0} />
@@ -251,6 +255,7 @@ export function TodoView({ features, setFeatures }: Props) {
                     onSync={syncOne}
                     completing={completingId === f.id}
                     onComplete={handleComplete}
+                    gridTemplateColumns={gridTemplateColumns}
                   />
                 ))}
               </React.Fragment>

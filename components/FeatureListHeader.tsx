@@ -3,17 +3,16 @@
 interface Props {
   hideStatus?: boolean;
   hidePriority?: boolean;
+  /** Same gridTemplateColumns the rows render with so headers and
+   *  values share identical column tracks. */
+  gridTemplateColumns: string;
 }
 
-export function FeatureListHeader({ hideStatus, hidePriority }: Props) {
+export function FeatureListHeader({ hideStatus, hidePriority, gridTemplateColumns }: Props) {
   // Mirror the row's column order (Feature, Status?, Version, Priority?,
   // Links, Team, Risk, Notes, Action, Sync). Each label uses the same
   // `pl-4` left padding the row cells use so headers sit flush above
   // their column values.
-  //
-  // The parent ProjectView grid uses inline `gridTemplateColumns` (the
-  // dynamic template can't be expressed as a Tailwind class), so for
-  // subgrid alignment we set `gridTemplateColumns: subgrid` here too.
   const labels: Array<string | null> = [
     'Feature',
     hideStatus   ? null : 'Status',
@@ -29,8 +28,8 @@ export function FeatureListHeader({ hideStatus, hidePriority }: Props) {
 
   return (
     <div
-      className="hidden sm:grid sm:col-span-full py-2.5 sticky top-0 bg-[var(--bg-elev-1)] border-b border-[var(--hairline)] z-10"
-      style={{ gridTemplateColumns: 'subgrid' }}
+      className="hidden sm:grid py-2.5 sticky top-0 bg-[var(--bg-elev-1)] border-b border-[var(--hairline)] z-10"
+      style={{ gridTemplateColumns, columnGap: '0.75rem' }}
     >
       {labels.map((label, i) => (
         <span

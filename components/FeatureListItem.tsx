@@ -29,6 +29,9 @@ interface Props {
   hideStatus?: boolean;
   /** Skip the Priority cell (used when the table is grouped by priority). */
   hidePriority?: boolean;
+  /** Same gridTemplateColumns the header renders with so each row
+   *  shares identical column tracks. */
+  gridTemplateColumns?: string;
 }
 
 // ─── Inline editable text field ─────────────────────────────────────────────
@@ -230,7 +233,7 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate, hideStatus, hidePriority }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, gridTemplateColumns }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
   // Row clicks open the drawer (Phase C). Falls back to onEdit when no
@@ -251,9 +254,9 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
     <div
       onClick={() => openRow(feature)}
       className={`bg-transparent border-b border-[var(--hairline)] hover:bg-[var(--bg-elev-2)] transition-colors cursor-pointer
-                    sm:col-span-full sm:grid sm:items-center
+                    sm:grid sm:items-center
                     ${pinned ? 'bg-[var(--ai-soft)] shadow-[inset_2px_0_0_var(--ai)]' : ''}`}
-      style={{ gridTemplateColumns: 'subgrid' }}
+      style={{ gridTemplateColumns, columnGap: '0.75rem' }}
     >
 
       {/* Mobile layout */}
