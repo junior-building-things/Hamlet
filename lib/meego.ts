@@ -544,7 +544,11 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
-    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'created_at', 'field_0cec98', 'field_6909f6', 'effect_analyze_link_t'],
+    // field_675419 = Commit Status (Quarterly Cycle), field_a4c558 = DM
+    // Business Line, field_2e7909 = Social模块. The MCP only returns
+    // explicitly-requested keys in `work_item_fields`, so all three need
+    // to be in this list for the JSON path to find them.
+    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_675419', 'field_a4c558', 'field_2e7909', 'created_at', 'field_0cec98', 'field_6909f6', 'effect_analyze_link_t'],
   });
 
   // Try parsing the brief as JSON first (current MCP format), then fall back
@@ -556,6 +560,12 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let complianceUrl = '';
   let priorityRaw = '';
   let libraUrl = '';
+  // JSON-extracted values for fields that previously only had markdown
+  // parsing. When the MCP returns JSON these get populated; the legacy
+  // markdown fallback below uses parseWorkItemField as a backup.
+  let jsonQuarterlyCycle = '';
+  let jsonBusinessLine = '';
+  let jsonSocialComponent = '';
   // JSON-extracted role owners (used when MCP returns JSON instead of markdown)
   let jsonPmOwner = '';
   let jsonTpmOwner = '';
@@ -633,6 +643,30 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
     // Try to get Libra URL from effect_analyze_link_t
     const effectLink = getField('effect_analyze_link_t');
     if (effectLink) libraUrl = effectLink;
+
+    // Quarterly Cycle (Commit Status) is multi-select: the MCP returns
+    // an array of option objects. Take the last entry's display string.
+    const commitField = briefJson.work_item_fields?.find(fi => fi.key === 'field_675419');
+    if (commitField && commitField.value !== undefined && commitField.value !== null) {
+      const v = commitField.value;
+      const pickDisplay = (item: unknown): string => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') {
+          const obj = item as Record<string, unknown>;
+          if (typeof obj.label === 'string') return obj.label;
+          if (typeof obj.name === 'string') return obj.name;
+          if (typeof obj.value === 'string') return obj.value;
+        }
+        return '';
+      };
+      if (Array.isArray(v) && v.length > 0) {
+        jsonQuarterlyCycle = pickDisplay(v[v.length - 1]);
+      } else {
+        jsonQuarterlyCycle = pickDisplay(v);
+      }
+    }
+    jsonBusinessLine = getField('field_a4c558');
+    jsonSocialComponent = getField('field_2e7909');
   } catch {
     // Legacy markdown parsing
     const lines = raw.split('\n');
@@ -694,14 +728,19 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   const bestWithOwners = activeNodes.find(n => n.key === best?.key);
   const canCompleteNode = bestWithOwners?.owners.includes(MY_EMAIL) ?? false;
 
-  const commitStatusRaw = parseWorkItemField(raw, 'Commit Status');
-  let quarterlyCycle = commitStatusRaw;
-  try {
-    const parsed = JSON.parse(commitStatusRaw);
-    if (Array.isArray(parsed) && parsed.length > 0) quarterlyCycle = parsed[parsed.length - 1];
-  } catch { /* keep raw value */ }
-  const businessLine   = parseWorkItemField(raw, 'DM Business Line');
-  const socialComponent = parseWorkItemField(raw, 'Social模块');
+  // Prefer the JSON-extracted values populated above; fall back to
+  // markdown parsing for the legacy MCP response shape.
+  let quarterlyCycle = jsonQuarterlyCycle;
+  if (!quarterlyCycle) {
+    const commitStatusRaw = parseWorkItemField(raw, 'Commit Status');
+    quarterlyCycle = commitStatusRaw;
+    try {
+      const parsed = JSON.parse(commitStatusRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) quarterlyCycle = parsed[parsed.length - 1];
+    } catch { /* keep raw value */ }
+  }
+  const businessLine    = jsonBusinessLine    || parseWorkItemField(raw, 'DM Business Line');
+  const socialComponent = jsonSocialComponent || parseWorkItemField(raw, 'Social模块');
 
   // Use JSON-extracted role owners if available, fall back to markdown parsing.
   const pmOwner        = jsonPmOwner || parseRoleMember(raw, 'PM');
