@@ -123,10 +123,10 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   const isImportant      = hasRiskFlag || hasRiskNotes || hasVersionSlip || !!recentPrdUpdate || !!recentRiskChange;
 
   // Each callout = a tagged line in the insight body. The tag is rendered
-  // in the matching tone (rose for High risk, amber for Medium / PRD
-  // changes / Pending question, mint-blue for Delayed) followed by the
-  // Junior note. Multiple callouts stack as separate lines.
-  type Callout = { tag: string; tone: 'rose' | 'amber' | 'ai'; note: string };
+  // in the matching tone (rose for High risk + Delayed, amber for Medium
+  // / PRD changes, blue for Low risk) followed by the Junior note.
+  // Multiple callouts stack as separate lines.
+  type Callout = { tag: string; tone: 'rose' | 'amber' | 'blue'; note: string };
   const callouts: Callout[] = [];
   if (hasRiskNotes) {
     const tag = feature.riskLevel === 'red'
@@ -134,12 +134,18 @@ export function FeatureDrawer({ feature, onClose }: Props) {
       : feature.riskLevel === 'yellow' ? 'Medium risk' : 'Risk';
     const tone: Callout['tone'] = feature.riskLevel === 'red' ? 'rose' : 'amber';
     callouts.push({ tag, tone, note: feature.riskNotes!.join(' · ') });
+  } else if (feature.riskLevel === 'green') {
+    callouts.push({
+      tag: 'Low risk',
+      tone: 'blue',
+      note: 'No active blockers detected.',
+    });
   }
   if (hasVersionSlip) {
     const latest = feature.versionChanges!.slice(-1)[0];
     callouts.push({
       tag: 'Delayed',
-      tone: 'ai',
+      tone: 'rose',
       note: `Planned version slipped ${latest.from} → ${latest.to}.`,
     });
   }
@@ -218,47 +224,44 @@ export function FeatureDrawer({ feature, onClose }: Props) {
         {/* Body (scrolls) */}
         <div className="px-[22px] py-[18px] overflow-y-auto flex-1 flex flex-col gap-[18px]">
 
-          {/* Junior insight — both states use the design's blue gradient
-              + blue stroke. Important also adds a soft glow ring. */}
-          <div
-            className="px-4 py-3.5 rounded-[var(--r-lg)] border flex gap-3.5 items-start transition-shadow"
-            style={{
-              background: 'linear-gradient(135deg, var(--ai-soft), oklch(0.74 0.14 295 / 0.06))',
-              borderColor: isImportant
-                ? 'oklch(0.55 0.13 var(--ai-h) / 0.4)'
-                : 'oklch(0.55 0.13 var(--ai-h) / 0.25)',
-              boxShadow: isImportant ? '0 0 0 3px var(--ai-soft), 0 0 24px var(--ai-glow)' : 'none',
-            }}
-          >
-            <span
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[var(--bg)] font-mono text-[9.5px] uppercase tracking-[0.1em] shrink-0 border"
-              style={{ color: 'var(--ai)', borderColor: 'oklch(0.55 0.13 var(--ai-h) / 0.3)' }}
-            >
-              {isImportant ? <AlertTriangle className="w-2.5 h-2.5" /> : <Activity className="w-2.5 h-2.5" />}
-              Junior
-            </span>
-            <div className="flex-1 min-w-0">
-              {isImportant && callouts.length > 0 ? (
-                <div className="flex flex-col gap-1.5">
-                  {callouts.map((c, i) => (
-                    <div key={i} className="text-[12.5px] leading-[1.5] text-[var(--text)]">
-                      <CalloutTag tone={c.tone}>{c.tag}</CalloutTag>{' '}
-                      {c.note}
+          {/* Junior insight — blue gradient + blue stroke for all states.
+              Heavy glow only when there's a non-Low-risk callout (i.e.
+              something actually needs attention). */}
+          {(() => {
+            const heavyGlow = callouts.some(c => c.tone !== 'blue');
+            return (
+              <div
+                className="px-4 py-3.5 rounded-[var(--r-lg)] border flex gap-3.5 items-start transition-shadow"
+                style={{
+                  background: 'linear-gradient(135deg, var(--ai-soft), oklch(0.74 0.14 295 / 0.06))',
+                  borderColor: heavyGlow
+                    ? 'oklch(0.55 0.13 var(--ai-h) / 0.4)'
+                    : 'oklch(0.55 0.13 var(--ai-h) / 0.25)',
+                  boxShadow: heavyGlow ? '0 0 0 3px var(--ai-soft), 0 0 24px var(--ai-glow)' : 'none',
+                }}
+              >
+                <div className="flex-1 min-w-0">
+                  {callouts.length > 0 ? (
+                    <div className="flex flex-col gap-1.5">
+                      {callouts.map((c, i) => (
+                        <div key={i} className="text-[12.5px] leading-[1.5] text-[var(--text)]">
+                          <CalloutTag tone={c.tone}>{c.tag}</CalloutTag>{' '}
+                          {c.note}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="text-[12.5px] leading-[1.5] text-[var(--text)]">
+                      Nothing to callout. I&apos;m monitoring this feature for risk, PRD edits, and unresolved questions.
+                    </div>
+                  )}
+                  <div className="font-mono text-[10px] text-[var(--text-muted)] mt-1">
+                    From Junior · {updatedAtIso ? `Updated ${formatRel(updatedAtIso)}` : 'Never updated'}
+                  </div>
                 </div>
-              ) : (
-                <div className="text-[12.5px] leading-[1.5] text-[var(--text)]">
-                  {isImportant
-                    ? 'Risk flagged — review the activity feed below.'
-                    : "Nothing to callout. I'm monitoring this feature for risk, PRD edits, and unresolved questions."}
-                </div>
-              )}
-              <div className="font-mono text-[10px] text-[var(--text-muted)] mt-1">
-                {updatedAtIso ? `Updated ${formatRel(updatedAtIso)}` : 'Never updated'}
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Project Details */}
           <Section title="Project Details">
@@ -344,11 +347,11 @@ function Val({ children }: { children: React.ReactNode }) {
   return <div className="font-semibold text-[var(--text)]">{children}</div>;
 }
 
-function CalloutTag({ tone, children }: { tone: 'rose' | 'amber' | 'ai'; children: React.ReactNode }) {
+function CalloutTag({ tone, children }: { tone: 'rose' | 'amber' | 'blue'; children: React.ReactNode }) {
   const styles: Record<typeof tone, { bg: string; fg: string }> = {
     rose:  { bg: 'oklch(0.72 0.18 22 / 0.14)',           fg: 'var(--rose)'  },
     amber: { bg: 'oklch(0.82 0.14 75 / 0.16)',           fg: 'var(--amber)' },
-    ai:    { bg: 'oklch(0.55 0.13 var(--ai-h) / 0.14)',  fg: 'var(--ai)'    },
+    blue:  { bg: 'oklch(0.55 0.13 var(--ai-h) / 0.14)',  fg: 'var(--ai)'    },
   };
   const s = styles[tone];
   return (
