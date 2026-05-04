@@ -383,7 +383,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
           click → enter-edit-mode doesn't bubble up to the row's
           open-drawer handler. */}
       <div
-        className="hidden sm:flex items-center py-2.5 pl-4 max-w-[200px]"
+        className="hidden sm:flex items-center py-2.5 pl-4 min-w-0"
         onClick={e => e.stopPropagation()}
       >
         {onFieldUpdate ? (
