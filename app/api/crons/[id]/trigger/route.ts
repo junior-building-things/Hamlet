@@ -50,6 +50,9 @@ export async function POST(
         headers: {
           ...(auth ? { Authorization: auth } : {}),
           'Content-Type': 'application/json',
+          // Tag manual triggers so the wrapped handler attributes the
+          // run as 'manual' in DigestStateFile.cronRuns.
+          'X-Cron-Source': 'manual',
         },
         body: method === 'POST' ? '{}' : undefined,
       });

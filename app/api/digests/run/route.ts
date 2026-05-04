@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runDailyDigests } from '@/lib/digests';
+import { withCronRun } from '@/lib/cron-runs';
 
 const AGENT_RUN_SECRET = process.env.AGENT_RUN_SECRET;
 
@@ -23,7 +24,10 @@ export async function POST(req: NextRequest) {
     // matching card. Used by the Cron Jobs UI's per-section "Trigger
     // once" button.
     const sectionFilter = req.nextUrl.searchParams.get('section') ?? undefined;
-    const result = await runDailyDigests({ sectionFilter });
+    const source = req.headers.get('x-cron-source') === 'manual' ? 'manual' : 'scheduled';
+    const result = await withCronRun('hamlet-daily-digest', source, () =>
+      runDailyDigests({ sectionFilter }),
+    );
     return NextResponse.json({
       ok: true,
       featuresChecked: result.featuresChecked,

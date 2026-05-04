@@ -695,3 +695,71 @@ body {
   padding: 0;
   margin: 0;
 }
+
+/* ============================================================
+   Junior status card (sidebar footer)
+   - .junior-status: card chrome (subtle blue-tinted bg + hairline)
+   - .junior-status.is-working: snake/sweep gradient on the top edge
+   ============================================================ */
+.junior-status {
+  position: relative;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--ai) 6%, var(--card));
+  padding: 10px 12px 10px;
+  overflow: hidden;
+}
+.junior-status .js-title {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ai);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.junior-status .js-dot {
+  width: 6px; height: 6px;
+  border-radius: 999px;
+  background: var(--ai);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--ai) 60%, transparent);
+}
+.junior-status .js-body {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text);
+}
+.junior-status .js-meta {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+/* Snake border: a thin gradient swept left→right along the TOP edge
+   when a cron is in flight. Implemented as a 2px-tall ::before strip
+   with a moving linear-gradient mask. */
+.junior-status.is-working::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 30%,
+    var(--ai) 50%,
+    transparent 70%,
+    transparent 100%
+  );
+  background-size: 250% 100%;
+  animation: junior-snake 1.6s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+@keyframes junior-snake {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -150% 0; }
+}

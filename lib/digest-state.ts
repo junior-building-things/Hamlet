@@ -248,6 +248,21 @@ export interface DigestStateFile {
   }>;
 
   /**
+   * Active cron runs — written when an entry-point handler starts and
+   * cleared when it ends. Frontend polls this to render the
+   * "Junior is working" sidebar status. Stale entries (>15 min) are
+   * filtered out on read so a crashed handler doesn't pin the UI.
+   */
+  cronRuns?: Record<string, {
+    /** Cron job's display name from CRON_REGISTRY (cached for the UI). */
+    label: string;
+    /** ISO timestamp of when the run started. */
+    startedAt: string;
+    /** 'manual' if triggered from the UI, 'scheduled' when fired by Cloud Scheduler. */
+    source: 'manual' | 'scheduled';
+  }>;
+
+  /**
    * IDs of cron jobs / digest sub-sections currently paused. When a
    * digest sub-section's id is in this list, lib/digests.ts skips its
    * card. For cloud_scheduler-kind crons the pause is enforced at the
@@ -401,6 +416,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const cronPaused = Array.isArray(obj.cronPaused)
     ? (obj.cronPaused as unknown[]).map(String)
     : undefined;
+  const cronRuns = (obj.cronRuns && typeof obj.cronRuns === 'object')
+    ? (obj.cronRuns as DigestStateFile['cronRuns'])
+    : undefined;
   const pendingLineReviewCards = Array.isArray(obj.pendingLineReviewCards)
     ? (obj.pendingLineReviewCards as DigestStateFile['pendingLineReviewCards'])
     : undefined;
@@ -429,6 +447,7 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     juniorCommentThreads,
     postFeatureMap,
     cronPaused,
+    cronRuns,
     pendingLineReviewCards,
     pendingAbOpenCards,
     pendingPrdChanges,

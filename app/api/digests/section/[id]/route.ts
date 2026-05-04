@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runDigestSection } from '@/lib/digests';
+import { withCronRun } from '@/lib/cron-runs';
 
 const AGENT_RUN_SECRET = process.env.AGENT_RUN_SECRET;
 
@@ -22,7 +23,8 @@ export async function POST(
   }
   const { id } = await params;
   try {
-    const result = await runDigestSection(id);
+    const source = req.headers.get('x-cron-source') === 'manual' ? 'manual' : 'scheduled';
+    const result = await withCronRun(id, source, () => runDigestSection(id));
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error(`[digests/section/${id}] error:`, err);

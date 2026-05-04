@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runDailyDigests } from '@/lib/digests';
+import { withCronRun } from '@/lib/cron-runs';
 
 const AGENT_RUN_SECRET = process.env.AGENT_RUN_SECRET;
 
@@ -18,7 +19,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runDailyDigests({ mode: 'refresh' });
+    // Track in-flight state for the sidebar's "Junior is working" status.
+    // Manually-triggered runs come in via /api/crons/[id]/trigger which
+    // sets the X-Cron-Source header so we can attribute correctly.
+    const source = req.headers.get('x-cron-source') === 'manual' ? 'manual' : 'scheduled';
+    const result = await withCronRun('refresh-feature-cache', source, () =>
+      runDailyDigests({ mode: 'refresh' }),
+    );
     return NextResponse.json({
       ok: true,
       mode: 'refresh',
