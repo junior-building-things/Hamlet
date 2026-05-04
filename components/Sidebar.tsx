@@ -57,9 +57,28 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user }: Pro
 
   return (
     <aside className="sidebar-panel w-[232px] shrink-0 flex flex-col px-3 pt-3.5 pb-3 relative z-10 h-full">
-      {/* User identity */}
+      {/* User identity — use the Lark avatar URL when available, else
+          fall back to the conic-gradient initials mark. */}
       <div className="flex items-center gap-2.5 px-1.5 pb-4 pt-1 relative">
-        <div className="user-mark">
+        {user?.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={user.avatarUrl}
+            alt={user.name ?? 'User'}
+            className="w-7 h-7 rounded-lg object-cover shrink-0 border border-[var(--hairline-strong)]"
+            onError={e => {
+              // If the avatar fails to load, swap to the initials mark.
+              const img = e.currentTarget as HTMLImageElement;
+              img.style.display = 'none';
+              const fallback = img.nextElementSibling as HTMLElement | null;
+              if (fallback) fallback.style.display = 'grid';
+            }}
+          />
+        ) : null}
+        <div
+          className="user-mark"
+          style={{ display: user?.avatarUrl ? 'none' : 'grid' }}
+        >
           <span>{initials}</span>
         </div>
         <div className="min-w-0 flex-1">
