@@ -64,8 +64,10 @@ function EditableText({ value, displayValue, onSave, className, placeholder, all
   const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const spanRef = useRef<HTMLSpanElement>(null);
+  const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => () => { if (showTimer.current) clearTimeout(showTimer.current); }, []);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -86,17 +88,24 @@ function EditableText({ value, displayValue, onSave, className, placeholder, all
   // What's actually shown when not editing.
   const shown = displayValue ?? value;
 
+  // 350ms hover delay — matches Tip/Bubble/PocTooltip elsewhere.
   const handleMouseEnter = useCallback(() => {
-    if (!showTooltipIfTruncated || !spanRef.current) return;
-    const el = spanRef.current;
-    if (el.scrollWidth > el.clientWidth && shown) {
-      const r = el.getBoundingClientRect();
-      setTipAnchor({ top: r.top, left: r.left, width: r.width });
-      setShowTip(true);
-    }
+    if (!showTooltipIfTruncated) return;
+    if (showTimer.current) clearTimeout(showTimer.current);
+    showTimer.current = setTimeout(() => {
+      const el = spanRef.current;
+      if (el && el.scrollWidth > el.clientWidth && shown) {
+        const r = el.getBoundingClientRect();
+        setTipAnchor({ top: r.top, left: r.left, width: r.width });
+        setShowTip(true);
+      }
+    }, 350);
   }, [showTooltipIfTruncated, shown]);
 
-  const handleMouseLeave = useCallback(() => setShowTip(false), []);
+  const handleMouseLeave = useCallback(() => {
+    if (showTimer.current) { clearTimeout(showTimer.current); showTimer.current = null; }
+    setShowTip(false);
+  }, []);
 
   if (editing) {
     return (
