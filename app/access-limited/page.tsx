@@ -4,7 +4,7 @@ export default function AccessLimitedPage() {
     // pattern instead of letting it bleed through.
     <div className="min-h-screen flex items-center justify-center p-4 relative z-10">
       <div className="w-full max-w-xl">
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-10 shadow-2xl">
+        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-10 shadow-2xl text-center">
           {/* — RESTRICTED — eyebrow */}
           <div
             className="text-[12px] tracking-[0.18em] uppercase text-[var(--ai)] mb-5"
