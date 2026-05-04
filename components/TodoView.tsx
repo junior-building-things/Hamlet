@@ -24,7 +24,10 @@ function GroupHeader({ label, count, first }: { label: string; count: number; fi
   const tone = STATUS_TONE[label] ?? 'gray';
   const s = STATUS_TONE_STYLES[tone];
   return (
-    <div className={`flex items-center gap-2.5 ${first ? 'mt-3' : 'mt-5'} mb-2`}>
+    <div
+      className={`flex items-center gap-2.5 py-2 sticky bg-[var(--bg-elev-1)] z-[5] ${first ? 'mt-1' : 'mt-3'}`}
+      style={{ top: 34 }}
+    >
       <span
         className="inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.06em] whitespace-nowrap"
         style={{ background: s.bg, color: s.fg }}
