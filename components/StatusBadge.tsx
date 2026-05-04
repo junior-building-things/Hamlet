@@ -16,7 +16,7 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   'Dependency Check': 'rose',
   'Compliance Review':'rose',
   'RD Allocation':    'orange',
-  'PRD Walkthrough':  'amber',
+  'PRD Walkthrough':  'pink',
   'Tech Design':      'cyan',
   'Development':      'blue',
   'QA Testing':       'yellow',

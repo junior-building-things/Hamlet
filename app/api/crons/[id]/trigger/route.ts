@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCronById } from '@/lib/cron-registry';
 import { runSchedulerJob, getSchedulerJob } from '@/lib/cloud-scheduler';
+import { markCronStarted } from '@/lib/cron-runs';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 600;
@@ -33,6 +34,13 @@ export async function POST(
   }
 
   try {
+    // Mark the run as in-flight BEFORE we ask GCP to dispatch. This
+    // guarantees the JuniorStatusCard sees a "working" entry even when
+    // the actual cron handler runs+completes faster than the card's
+    // poll interval (the wrapped handler will overwrite this entry
+    // with its own startedAt, then clear it on finish).
+    await markCronStarted(def.id, 'manual');
+
     // Snapshot the current lastAttemptTime so we can wait for GCP to
     // record the new attempt before returning — otherwise the client's
     // refresh after onChange() may still see the old value.
