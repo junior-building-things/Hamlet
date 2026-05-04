@@ -2741,8 +2741,9 @@ export async function readChatMessages(
     const extendedSinceMs = sinceMs - 30 * 24 * 60 * 60 * 1000;
     let extPageToken = '';
     const olderMessages: ChatMessage[] = [];
-    // Fetch up to 2 pages of older messages
-    for (let page = 0; page < 2; page++) {
+    // Fetch up to 5 pages of older messages (~250 top-level entries
+    // at pageSize=50, enough for ~30 days of moderately busy chat).
+    for (let page = 0; page < 5; page++) {
       const extParams = new URLSearchParams({
         container_id_type: 'chat',
         container_id: chatId,
@@ -2766,10 +2767,14 @@ export async function readChatMessages(
       } catch { break; }
     }
 
-    // Combine all top-level messages (recent + older) for thread reply fetching
+    // Combine all top-level messages (recent + older) for thread reply fetching.
+    // Bumped from 20 to 100 — with only 20 fetches on a busy chat, an old
+    // thread parent (e.g. from last week) wouldn't be reached, and a new
+    // reply on it (within the 24h window) would be silently dropped.
     const allTopLevel = [...messages, ...olderMessages].filter(m => !m.parent_id && !m.root_id);
-    const MAX_THREAD_FETCHES = 20;
+    const MAX_THREAD_FETCHES = 100;
     let fetched = 0;
+    let recentRepliesFound = 0;
     const sinceSec = Math.floor(sinceMs / 1000);
     for (const msg of allTopLevel) {
       if (fetched >= MAX_THREAD_FETCHES) break;
@@ -2786,10 +2791,16 @@ export async function readChatMessages(
           const replies = rData.data.items.filter(
             r => Number(r.create_time ?? 0) >= sinceSec,
           );
-          if (replies.length > 0) messages.push(...replies);
+          if (replies.length > 0) {
+            messages.push(...replies);
+            recentRepliesFound += replies.length;
+          }
         }
         fetched++;
       } catch { /* skip thread */ }
+    }
+    if (allTopLevel.length > 0) {
+      console.log(`[lark] readChatMessages chat=${chatId}: top-level=${allTopLevel.length} (recent=${messages.length - recentRepliesFound}, older=${olderMessages.length}), thread-fetches=${fetched}/${MAX_THREAD_FETCHES}, recent-thread-replies=${recentRepliesFound}`);
     }
   }
 
