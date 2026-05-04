@@ -1961,8 +1961,16 @@ export async function collectUnansweredForFeature(
   // Exclude messages sent by the bot itself (Junior auto-posts that
   // happen to tag Thomas — those arent real questions) and by Thomas
   // himself (he's the answerer, not the asker).
+  // Defensive create_time filter: Lark's /im/v1/messages list filters
+  // by message UPDATE time, not CREATE time — so an older message
+  // whose thread saw recent activity can sneak past the start_time
+  // parameter. Enforce the window here on the actual question's
+  // create_time so the digest only ever surfaces questions asked in
+  // the last 24h.
   const botOpenId = process.env.LARK_BOT_OPEN_ID ?? '';
   const mentionMsgs = messages.filter(m => {
+    const createMs = Number(m.create_time ?? 0) * 1000;
+    if (createMs && createMs < sinceMs) return false;
     if (!(m.mentions ?? []).some(mention => mentionOpenId(mention) === ownerOpenId)) return false;
     const sender = senderOpenIdOf(m);
     if (sender && (sender === ownerOpenId || sender === botOpenId)) return false;
