@@ -174,8 +174,12 @@ export default function Home() {
           {/* ProjectView stays mounted always (hidden when inactive)
               so its sync state survives tab navigation. Other tabs
               are mount/unmount as before since they have no live
-              background work. */}
-          <div className={activeView === 'project' ? '' : 'hidden'}>
+              background work.
+              The wrapper has h-full so ProjectView's own h-full
+              resolves against an actually-constrained parent (not
+              an auto-height div) — otherwise it grows with content
+              and the page-level scroll takes over. */}
+          <div className={`h-full ${activeView === 'project' ? '' : 'hidden'}`}>
             <ProjectView features={features} setFeatures={setFeatures} pinnedId={pinnedId} onClearPin={() => setPinnedId(null)} />
           </div>
           {activeView === 'chat' && (
