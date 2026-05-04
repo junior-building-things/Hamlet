@@ -25,7 +25,6 @@ import {
   ChatMessage,
   mentionOpenId,
   senderOpenIdOf,
-  countMessageReplies,
   CardButton,
   CardSection,
   CardHeaderTemplate,
@@ -1900,15 +1899,21 @@ export async function collectUnansweredForFeature(
 
   // Decision rules (per-question), in order:
   //   (a) Owner reacted with any emoji on the question → answered.
-  //   (1) Any thread reply on the question → answered (regardless of
-  //       reply content). A reply in the thread is a strong signal.
-  //   (2) Otherwise, ask Gemini one question with the whole subsequent
-  //       chat conversation (possibly empty). Gemini returns one of:
+  //   (b) Otherwise, ask Gemini ONE question with the whole subsequent
+  //       conversation in this chat (top-level + thread replies, since
+  //       readChatMessages was called with includeThreadReplies: true).
+  //       Gemini returns one of:
   //         - not_a_question: tagged message isn't actually asking
   //           anything (FYIs, statements). Skip.
   //         - addressed: question was answered by the later messages.
   //           Skip.
   //         - outstanding: still needs the owner's response. Flag.
+  //
+  // We deliberately do NOT short-circuit on "any thread reply exists"
+  // anymore — a follow-up @-mention from a third party in the same
+  // thread (e.g. "@Thomas yes please confirm") is itself a thread
+  // reply but doesn't actually answer the original. Gemini judges the
+  // reply contents instead.
   // Per-chat dedup: surface at most one unanswered question per chat
   // per digest (the most recent surviving candidate).
   for (const msg of mentionMsgs) {
@@ -1925,26 +1930,16 @@ export async function collectUnansweredForFeature(
       continue;
     }
 
-    // (1) Any thread reply → answered.
-    // First check the in-memory messages array (fast). If that misses,
-    // hit Lark's /replies endpoint directly — it catches nested replies
-    // (replies-to-replies) that the bulk fetch sometimes drops.
-    const threadReplies = findLaterThreadMessages(msg, messages);
-    if (threadReplies.length > 0) {
-      console.log(`[digests] ${qLabel} → answered (${threadReplies.length} in-memory thread replies)`);
-      continue;
-    }
-    const directReplyCount = await countMessageReplies(msg.message_id, token);
-    if (directReplyCount > 0) {
-      console.log(`[digests] ${qLabel} → answered (${directReplyCount} direct replies via /replies)`);
-      continue;
-    }
-
-    // (2) Gemini check with whole subsequent chat (may be empty).
+    // (b) Gemini check with the whole subsequent chat (may be empty).
+    // laterChat includes both top-level messages and in-thread replies
+    // sent after this question, because readChatMessages was called
+    // with includeThreadReplies: true.
     const qTime = Number(msg.create_time ?? 0);
     const laterChat = messages
       .filter(m => m.message_id !== msg.message_id && Number(m.create_time ?? 0) > qTime)
       .sort((a, b) => Number(a.create_time ?? 0) - Number(b.create_time ?? 0));
+    const threadReplyCount = findLaterThreadMessages(msg, messages).length;
+    console.log(`[digests] ${qLabel} → Gemini check (${laterChat.length} later msgs, ${threadReplyCount} thread replies)`);
     const questionText = chatMessageText(msg);
     const laterTexts = laterChat.map(chatMessageText).filter(t => t.length > 0);
     const outstanding = await isOutstandingByGemini(questionText, laterTexts, qLabel);
