@@ -60,6 +60,35 @@ export async function getSchedulerJob(jobId: string): Promise<SchedulerJobInfo |
 
 export interface PatchResult { ok: boolean; status?: number; error?: string }
 
+/**
+ * Force-fire a Cloud Scheduler job *now*. GCP dispatches the job's
+ * configured target (just like the scheduled run would) and updates
+ * the resource's `lastAttemptTime` — which is what the Cron Jobs UI's
+ * "Last run" reads. The call returns as soon as GCP queues the
+ * dispatch; the actual handler runs asynchronously.
+ *
+ * Service account needs `cloudscheduler.jobs.run`.
+ */
+export async function runSchedulerJob(jobId: string): Promise<PatchResult> {
+  try {
+    const token = await getGcpToken();
+    const url = `https://cloudscheduler.googleapis.com/v1/projects/${PROJECT}/locations/${LOCATION}/jobs/${jobId}:run`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.warn(`[cloud-scheduler] run ${jobId} failed: ${res.status} ${body.slice(0, 200)}`);
+      return { ok: false, status: res.status, error: body.slice(0, 200) };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'run threw' };
+  }
+}
+
 export async function patchSchedulerJobSchedule(jobId: string, schedule: string): Promise<PatchResult> {
   try {
     const token = await getGcpToken();

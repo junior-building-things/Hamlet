@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCronById } from '@/lib/cron-registry';
+import { runSchedulerJob, getSchedulerJob } from '@/lib/cloud-scheduler';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 600;
 
-const AGENT_RUN_SECRET = process.env.AGENT_RUN_SECRET;
-
 /**
- * POST — manually trigger a cron job once. For Cloud Scheduler jobs we
- * hit the corresponding URL directly; for digest sub-sections we hit
- * /api/digests/run (which currently runs the FULL pipeline — section
- * filtering would let us narrow this but is a follow-up).
+ * POST — manually trigger a cron job once.
+ *
+ * For `cloud_scheduler` kind we ask GCP to dispatch the job via the
+ * `:run` API. GCP then hits the same URL it would on a scheduled fire
+ * AND records the attempt in `lastAttemptTime`, which is what the
+ * Cron Jobs tab's "Last run" reads. We previously fetched the target
+ * URL directly from this handler — that worked but bypassed Cloud
+ * Scheduler's bookkeeping, so "Last run" never moved on manual
+ * triggers.
+ *
+ * GCP returns as soon as it queues the dispatch; the actual handler
+ * runs asynchronously. The client will see "Last run: now" on its
+ * next refresh once GCP records the attempt (typically <1s).
  */
 export async function POST(
   _req: NextRequest,
@@ -20,47 +28,35 @@ export async function POST(
   const def = getCronById(id);
   if (!def) return NextResponse.json({ error: 'unknown cron' }, { status: 404 });
 
+  if (def.kind !== 'cloud_scheduler' || !def.cloudSchedulerJobId) {
+    return NextResponse.json({ error: 'unsupported kind' }, { status: 400 });
+  }
+
   try {
-    if (def.kind === 'cloud_scheduler') {
-      // Hit the same URL Cloud Scheduler hits.
-      const HAMLET_BASE = 'https://hamlet-416594255546.asia-southeast1.run.app';
-      let url = '';
-      let method: 'GET' | 'POST' = 'POST';
-      let auth = '';
-      const jobId = def.cloudSchedulerJobId;
-      if (jobId === 'hamlet-daily-digest') {
-        url = `${HAMLET_BASE}/api/digests/run`;
-        auth = AGENT_RUN_SECRET ? `Bearer ${AGENT_RUN_SECRET}` : '';
-      } else if (jobId === 'refresh-feature-cache') {
-        url = `${HAMLET_BASE}/api/digests/refresh`;
-        auth = AGENT_RUN_SECRET ? `Bearer ${AGENT_RUN_SECRET}` : '';
-      } else if (jobId && jobId.startsWith('digest-')) {
-        // Per-section cron: hit /api/digests/section/<def.id>
-        url = `${HAMLET_BASE}/api/digests/section/${encodeURIComponent(def.id)}`;
-        auth = AGENT_RUN_SECRET ? `Bearer ${AGENT_RUN_SECRET}` : '';
-      } else if (jobId === 'poll-prd-ready') {
-        url = 'https://junior-416594255546.asia-southeast1.run.app/api/poll-prd-ready';
-        method = 'GET';
-        // Junior uses its own secret env (not AGENT_RUN_SECRET).
-      } else {
-        return NextResponse.json({ error: `unsupported cron job: ${jobId}` }, { status: 400 });
-      }
-      const res = await fetch(url, {
-        method,
-        headers: {
-          ...(auth ? { Authorization: auth } : {}),
-          'Content-Type': 'application/json',
-          // Tag manual triggers so the wrapped handler attributes the
-          // run as 'manual' in DigestStateFile.cronRuns.
-          'X-Cron-Source': 'manual',
-        },
-        body: method === 'POST' ? '{}' : undefined,
-      });
-      const body = await res.text().catch(() => '');
-      return NextResponse.json({ ok: res.ok, status: res.status, body: body.slice(0, 400) });
+    // Snapshot the current lastAttemptTime so we can wait for GCP to
+    // record the new attempt before returning — otherwise the client's
+    // refresh after onChange() may still see the old value.
+    const before = await getSchedulerJob(def.cloudSchedulerJobId);
+    const beforeAttempt = before?.lastAttemptTime ?? '';
+
+    const result = await runSchedulerJob(def.cloudSchedulerJobId);
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error ?? 'trigger failed', status: result.status },
+        { status: result.status ?? 500 },
+      );
     }
 
-    return NextResponse.json({ error: 'unsupported kind' }, { status: 400 });
+    // Best-effort: poll up to 3× (1s spacing) for GCP to advance
+    // lastAttemptTime. If it doesn't, we still return ok — the next
+    // refresh will eventually pick it up.
+    for (let i = 0; i < 3; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const after = await getSchedulerJob(def.cloudSchedulerJobId);
+      if (after?.lastAttemptTime && after.lastAttemptTime !== beforeAttempt) break;
+    }
+
+    return NextResponse.json({ ok: true });
   } catch (e) {
     console.warn('[crons] trigger failed:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'trigger failed' }, { status: 500 });
