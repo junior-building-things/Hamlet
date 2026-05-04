@@ -2720,7 +2720,10 @@ export async function readChatMessages(
       data?: { items?: ChatMessage[]; has_more?: boolean; page_token?: string };
     };
     if (data.code !== 0) {
-      if (data.code !== 230002) console.warn('[lark] read messages failed:', data.code, data.msg);
+      // Always log so we can diagnose "chat scanned but no messages"
+      // cases. 230002 was previously suppressed (no perm / expected
+      // for some chats) but losing visibility hurts more than it helps.
+      console.warn(`[lark] read_messages chat=${chatId} failed: code=${data.code} msg=${data.msg ?? ''}`);
       break;
     }
     messages.push(...(data.data?.items ?? []));

@@ -1878,7 +1878,11 @@ export async function collectUnansweredForFeature(
     console.warn(`[digests] failed to read messages for ${feature.name}:`, e);
     return null;
   }
-  if (messages.length === 0) return null;
+  if (messages.length === 0) {
+    console.log(`[digests] Q&A "${feature.name}" (chat=${chatId}): 0 messages in 24h window`);
+    return null;
+  }
+  console.log(`[digests] Q&A "${feature.name}" (chat=${chatId}): ${messages.length} messages fetched`);
 
   // Candidates: any message in the window that @-mentions the owner.
   // Exclude messages sent by the bot itself (Junior auto-posts that
