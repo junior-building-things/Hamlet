@@ -1533,6 +1533,158 @@ export async function inferVersionSlipReason(
   }
 }
 
+/**
+ * Run the version-slip detection (op-log scan + snapshot mismatch +
+ * server-launch slip) and slip-reason inference for every cached
+ * feature, then patch the resulting `versionChanges` arrays into the
+ * GCS feature cache. The risk-level computation (riskLevel/riskNotes/
+ * riskHistory) is intentionally NOT done here — that depends on the
+ * Gemini chat-risk findings which only run during the full-mode
+ * pipeline. This extract lets the cheap, no-Gemini-risk-dependent
+ * cache writeback also happen on every refresh-feature-cache run.
+ *
+ * Idempotent: subsequent calls (including the full-mode Step 6b that
+ * also runs version detection) reach the same result for unchanged
+ * data.
+ */
+async function patchVersionChangesInCache(
+  features: MeegoFeature[],
+  botToken: string,
+): Promise<void> {
+  let featureCache: Awaited<ReturnType<typeof readFeatureCache>>;
+  try {
+    featureCache = await readFeatureCache();
+  } catch (e) {
+    console.warn('[digests] patchVersionChangesInCache: cache read failed:', e);
+    return;
+  }
+  if (!featureCache) return;
+  const featureByWorkItemId = new Map(features.map(f => [f.workItemId, f]));
+  const deltas = new Map<string, Partial<import('./types').Feature>>();
+  let scanned = 0;
+  let changed = 0;
+  for (const cached of featureCache.features) {
+    const fId = cached.meegoIssueId ?? cached.id;
+    if (cached.status === 'Done' || cached.status === '已完成') continue;
+    const meegoFeature = featureByWorkItemId.get(fId);
+    const meegoUrl = meegoFeature?.meegoUrl ?? cached.meegoUrl;
+    if (!meegoUrl) continue;
+    scanned++;
+    let nextVersionChanges = cached.versionChanges;
+    let versionChangesChanged = false;
+    // (i) Op-log scan.
+    try {
+      const existing = cached.versionChanges ?? [];
+      const sinceMs = existing.length > 0
+        ? Date.parse(existing[existing.length - 1].date + 'T00:00:00+08:00') || 0
+        : 0;
+      const fresh = await getAllVersionChanges(meegoUrl, sinceMs);
+      if (fresh.length > 0) {
+        const seen = new Set(existing.map(c => `${c.date}|${c.from}|${c.to}`));
+        const merged = [...existing];
+        for (const c of fresh) {
+          const k = `${c.date}|${c.from}|${c.to}`;
+          if (!seen.has(k)) { merged.push(c); seen.add(k); }
+        }
+        merged.sort((a, b) => a.date.localeCompare(b.date));
+        nextVersionChanges = merged;
+        versionChangesChanged = true;
+      }
+    } catch (e) {
+      console.warn(`[digests] patchVC: op-log scan failed for ${cached.name}:`, e);
+    }
+    // (ii) Snapshot mismatch.
+    try {
+      const mismatch = await detectVersionMismatch(meegoUrl);
+      if (mismatch) {
+        const list = nextVersionChanges ?? [];
+        const matchesPair = (c: { from: string; to: string }) =>
+          c.from === mismatch.planned && c.to === mismatch.actual;
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+        const matchingEntries = list.filter(matchesPair);
+        const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
+        if (!alreadyCached) {
+          const launchedFieldKey = mismatch.platform === 'ios'
+            ? 'ios_actual_online_version'
+            : 'android_actual_online_version';
+          let date: string | null = null;
+          try { date = await findLatestFieldEditDate(meegoUrl, launchedFieldKey); } catch {}
+          if (!date) date = today;
+          const cleaned = list.filter(c => !matchesPair(c));
+          nextVersionChanges = [...cleaned, { date, from: mismatch.planned, to: mismatch.actual }]
+            .sort((a, b) => a.date.localeCompare(b.date));
+          versionChangesChanged = true;
+        }
+      }
+    } catch (e) {
+      console.warn(`[digests] patchVC: mismatch check failed for ${cached.name}:`, e);
+    }
+    // (iii) Server-launch slip.
+    try {
+      const serverDelay = await detectServerLaunchDelay(meegoUrl);
+      if (serverDelay) {
+        const list = nextVersionChanges ?? [];
+        const matchesPair = (c: { from: string; to: string }) =>
+          c.from === serverDelay.planned && c.to === serverDelay.scheduled;
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+        const matchingEntries = list.filter(matchesPair);
+        const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
+        if (!alreadyCached) {
+          let date: string | null = null;
+          try { date = await findLatestFieldEditDate(meegoUrl, 'field_cde888'); } catch {}
+          if (!date) date = today;
+          const cleaned = list.filter(c => !matchesPair(c));
+          nextVersionChanges = [...cleaned, { date, from: serverDelay.planned, to: serverDelay.scheduled }]
+            .sort((a, b) => a.date.localeCompare(b.date));
+          versionChangesChanged = true;
+        }
+      }
+    } catch (e) {
+      console.warn(`[digests] patchVC: server-launch check failed for ${cached.name}:`, e);
+    }
+    // (iv) Slip-reason inference. Same logic as Step 6b's path (iv):
+    // carry forward cached reason; never re-infer; one retroactive
+    // pass for entries lacking both reason and reasonAttempted.
+    if (!nextVersionChanges) nextVersionChanges = cached.versionChanges;
+    const needsRetroactive = (nextVersionChanges ?? []).some(
+      e => !e.reason && !e.reasonAttempted,
+    );
+    if ((versionChangesChanged || needsRetroactive) && nextVersionChanges && nextVersionChanges.length > 0 && (cached.chatId || cached.meegoUrl)) {
+      const prior = cached.versionChanges ?? [];
+      const findCached = (e: { date: string; from: string; to: string }) =>
+        prior.find(p => p.date === e.date && p.from === e.from && p.to === e.to);
+      const updated = await Promise.all(nextVersionChanges.map(async e => {
+        const cachedEntry = findCached(e);
+        if (cachedEntry?.reason) return { ...e, reason: cachedEntry.reason, reasonAttempted: true };
+        if (cachedEntry?.reasonAttempted) return { ...e, reasonAttempted: true };
+        try {
+          const reason = await inferVersionSlipReason(cached.name, e.from, e.to, cached.chatId ?? '', botToken, cached.meegoUrl);
+          return reason ? { ...e, reason, reasonAttempted: true } : { ...e, reasonAttempted: true };
+        } catch (err) {
+          console.warn(`[digests] patchVC: slip-reason failed for "${cached.name}":`, err);
+          return e;
+        }
+      }));
+      const inferenceChanged = updated.some((u, i) => {
+        const before = nextVersionChanges![i];
+        return u.reason !== before.reason || u.reasonAttempted !== before.reasonAttempted;
+      });
+      if (inferenceChanged) versionChangesChanged = true;
+      nextVersionChanges = updated;
+    }
+    if (versionChangesChanged) {
+      deltas.set(fId, { versionChanges: nextVersionChanges });
+      changed++;
+    }
+  }
+  if (deltas.size > 0) {
+    try { await patchFeaturesInCache(deltas); } catch (e) {
+      console.warn('[digests] patchVersionChangesInCache: patchFeaturesInCache failed:', e);
+    }
+  }
+  console.log(`[digests] patchVersionChangesInCache: ${scanned} scanned, ${changed} updated`);
+}
+
 export async function evaluateChatRisk(
   chatId: string,
   featureName: string,
@@ -3784,6 +3936,17 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
       console.log(`[digests] feature-snapshots.json written: ${features.length} features, ${inDev.length} inDev, ${juniorChats.length} juniorChats`);
     } catch (e) {
       console.warn('[digests] saveFeatureSnapshots failed:', e);
+    }
+    // Cache writeback for version-slip detection + slip-reason inference.
+    // Doesn't depend on Step 4's chat-risk findings, so it's safe to run
+    // in refresh mode. The full-mode Step 6b later re-runs version
+    // detection idempotently and adds the riskLevel/riskNotes layer.
+    if (botToken) {
+      try {
+        await patchVersionChangesInCache(features, botToken);
+      } catch (e) {
+        console.warn('[digests] patchVersionChangesInCache (refresh) failed:', e);
+      }
     }
     if (notifiedSetChanged) {
       state.abOpenNotified = [...abOpenNotified];
