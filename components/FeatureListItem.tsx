@@ -251,8 +251,9 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
     <div
       onClick={() => openRow(feature)}
       className={`bg-transparent border-b border-[var(--hairline)] hover:bg-[var(--bg-elev-2)] transition-colors cursor-pointer
-                    sm:col-span-full sm:grid sm:[grid-template-columns:subgrid] sm:items-center
+                    sm:col-span-full sm:grid sm:items-center
                     ${pinned ? 'bg-[var(--ai-soft)] shadow-[inset_2px_0_0_var(--ai)]' : ''}`}
+      style={{ gridTemplateColumns: 'subgrid' }}
     >
 
       {/* Mobile layout */}
