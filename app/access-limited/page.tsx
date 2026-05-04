@@ -8,7 +8,7 @@ export default function AccessLimitedPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/hamlet.png" alt="Hamlet" className="w-16 h-16 object-contain" />
           <h1
-            className="text-4xl uppercase text-[var(--foreground)]"
+            className="text-4xl font-light uppercase text-[var(--foreground)]"
             style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}
           >
             Hamlet
