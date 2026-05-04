@@ -634,10 +634,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     const cols = ['minmax(240px,360px)'];        // Feature
     if (!hideStatus)   cols.push('150px');       // Status pill
     cols.push('56px');                           // Version (mono "33.0" + dashed underline)
-    if (!hidePriority) cols.push('48px');        // Priority chip ("P0"–"P3")
+    if (!hidePriority) cols.push('55px');        // Priority chip ("P0"–"P3")
     cols.push('140px');                          // Links (up to 7 stacked icons, -7px overlap)
     cols.push('90px');                           // Team avatars (2 shown + overflow/add)
-    cols.push('100px');                          // Risk dot + label
+    cols.push('80px');                           // Risk dot + label ("Delayed" longest)
     cols.push('minmax(200px,1fr)');              // Notes — gets the leftover
     if (!hideAction) cols.push('80px');          // Action button
     cols.push('40px');                           // Sync icon
