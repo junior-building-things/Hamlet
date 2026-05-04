@@ -1696,6 +1696,7 @@ export async function evaluateChatRisk(
   featureName: string,
   rioToken: string,
   prior?: PriorChatRisk,
+  meegoUrl?: string,
 ): Promise<ChatRiskFinding> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
@@ -1703,30 +1704,21 @@ export async function evaluateChatRisk(
     return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
   }
 
-  // Pull messages — newest first per readChatMessages contract.
+  // Pull messages over the wider 7d window — risks usually surface in
+  // discussion that pre-dates the digest run, similar to how slips get
+  // discussed before the field actually moves.
   let messages: ChatMessage[] = [];
   try {
-    messages = await readChatMessages(chatId, Date.now() - CHAT_RISK_WINDOW_MS, rioToken);
+    messages = await readChatMessages(chatId, Date.now() - SLIP_REASON_WINDOW_MS, rioToken);
   } catch (e) {
     console.warn(`[digests] chat read failed for ${featureName}:`, e);
     // Read failed: don't lose a prior risk just because we couldn't read.
     return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
   }
 
-  // No new chatter — carry the prior risk forward unchanged. Skip Gemini.
-  if (messages.length === 0) {
-    if (prior) {
-      console.log(
-        `[digests] Gemini chat risk for "${featureName}" (0 msgs/24h, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
-      );
-      return { level: prior.level, summary: prior.summary };
-    }
-    return { level: 'none', summary: '' };
-  }
-
   // Format chronologically (oldest first), strip out Lark text JSON wrapper.
-  const formatted = messages
-    .slice(0, CHAT_RISK_MAX_MESSAGES)
+  const chatFormatted = messages
+    .slice(0, SLIP_REASON_MAX_MESSAGES)
     .reverse()
     .map(m => {
       let text = '';
@@ -1740,8 +1732,38 @@ export async function evaluateChatRisk(
     })
     .filter(Boolean)
     .join('\n');
-  if (!formatted) {
-    return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
+
+  // Pull recent Meego ticket comments — devs/PMs often log the cause
+  // there directly. Mirrors inferVersionSlipReason's source mix.
+  let commentsFormatted = '';
+  if (meegoUrl) {
+    const m = meegoUrl.match(/meego\.larkoffice\.com\/([^/]+)\/(?:[^/]+)\/detail\/(\d+)/);
+    if (m) {
+      try {
+        const comments = await fetchTicketComments(m[1], m[2]);
+        commentsFormatted = comments
+          .slice(-SLIP_REASON_MAX_COMMENTS)
+          .map(c => {
+            const date = c.createdAt ? `${c.createdAt} ` : '';
+            const who = c.author ? `${c.author}: ` : '';
+            const body = c.content.length > 400 ? `${c.content.slice(0, 400)}…` : c.content;
+            return `${date}${who}${body}`;
+          })
+          .join('\n');
+      } catch (e) {
+        console.warn(`[digests] chat-risk Meego comments fetch failed for "${featureName}":`, e);
+      }
+    }
+  }
+
+  if (!chatFormatted && !commentsFormatted) {
+    if (prior) {
+      console.log(
+        `[digests] Gemini chat risk for "${featureName}" (no chat or comments, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
+      );
+      return { level: prior.level, summary: prior.summary };
+    }
+    return { level: 'none', summary: '' };
   }
 
   // Build the prompt from the registry — separate templates for "with prior"
@@ -1757,10 +1779,12 @@ export async function evaluateChatRisk(
     priorLevel: prior.level,
     priorSummary: prior.summary,
     priorDate: prior.raisedAtIso.slice(0, 10),
-    messages: formatted,
+    messages: chatFormatted || '(no chat in the last 7 days)',
+    comments: commentsFormatted || '(no Meego comments)',
   } : {
     featureName,
-    messages: formatted,
+    messages: chatFormatted || '(no chat in the last 7 days)',
+    comments: commentsFormatted || '(no Meego comments)',
   });
 
   try {
@@ -1776,11 +1800,9 @@ export async function evaluateChatRisk(
       parsed.level === 'yellow' ? 'yellow' :
       'none';
     const summary = (parsed.summary ?? '').trim();
-    // Log the parsed result on one line so Cloud Run doesn't split the
-    // multiline raw response into separate entries.
     const priorTag = prior ? `, prior=${prior.level}` : '';
     console.log(
-      `[digests] Gemini chat risk for "${featureName}" (${messages.length} msgs/24h${priorTag}): ${JSON.stringify({ level, summary })}`,
+      `[digests] Gemini risk for "${featureName}" (${messages.length} msgs/7d, ${commentsFormatted ? 'with' : 'no'} Meego comments${priorTag}): ${JSON.stringify({ level, summary })}`,
     );
     if (level === 'none') return { level, summary: '' };
     return { level, summary };
@@ -3984,6 +4006,13 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   for (const feature of inDev) {
     try {
       const finding = await evaluateFeatureRisk(feature);
+      // Deadline-pressure reasons (e.g. "QA not started, planned merge date
+      // within 5 days") are kept ONLY for level computation. The displayed
+      // reason should describe the actual cause from chat / Meego comments,
+      // so wipe the array now and re-populate from the Gemini summary
+      // below if one is available.
+      const deadlineLevel = finding.level;
+      finding.reasons = [];
       const prior = state.features[feature.workItemId];
 
       // ── (a) Qualitative chat risk ──────────────────────────────────────
@@ -3996,6 +4025,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           priorChat
             ? { level: priorChat.level, summary: priorChat.summary, raisedAtIso: priorChat.raisedAtIso }
             : undefined,
+          feature.meegoUrl,
         );
 
         // Persist or clear chat risk on the entry.
@@ -4017,9 +4047,17 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           delete state.features[feature.workItemId];
         }
 
-        if (chatRisk.level !== 'none') {
-          finding.reasons.push(chatRisk.summary || 'risk called out in chat');
-          finding.level = maxLevel([finding.level, chatRisk.level]);
+        // chatRisk.level can be 'none' which isn't a RiskLevel — coerce
+        // to 'green' for the level computation since they're equivalent
+        // in this context (both mean "no qualitative risk detected").
+        const chatLevelForCompare: RiskLevel = chatRisk.level === 'none' ? 'green' : chatRisk.level;
+        finding.level = maxLevel([deadlineLevel, chatLevelForCompare]);
+        // Use the Gemini summary as the displayed reason. If the level
+        // came from the deadline rule alone (no chat/Meego signal),
+        // reasons stays empty — the badge shows the level without a
+        // misleading "QA not started…" tag.
+        if (chatRisk.summary && finding.level !== 'green') {
+          finding.reasons = [chatRisk.summary];
         }
       }
 

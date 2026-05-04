@@ -173,9 +173,9 @@ Reply naturally and helpfully. Keep your response concise (1-3 sentences). If yo
 
 Reply with ONLY your response text (no quotes, no explanation).`;
 
-const HAMLET_CHAT_RISK_EVAL = `You are reviewing the last 24 hours of messages from a TikTok PM team chat for the feature "\${featureName}".
+const HAMLET_CHAT_RISK_EVAL = `You are reviewing the last 7 days of group-chat messages and recent Meego ticket comments for the feature "\${featureName}".
 
-Decide whether any of the messages below indicate a risk to the feature's progress, timeline, or successful launch.
+Decide whether either source indicates a risk to the feature's progress, timeline, or successful launch.
 
 A "risk" is something a team member has called out that may delay, block, or compromise the feature. Examples that count as risk:
 - Tech owner says they need more time or won't hit the deadline
@@ -189,34 +189,48 @@ Do NOT flag as a risk:
 - Risks that have already been resolved in the same conversation
 - Off-topic or social conversation
 
-Messages (oldest first):
+The summary should describe the actual cause of the risk in the team's own words (e.g. "project paused pending ic team resource availability after may holiday"). It should NOT mention deadline-pressure mechanics like "QA not started, planned merge date within 5 days" — those are tracked separately and are not a useful reason on their own.
+
+Prefer Meego comments over chat when both mention the same issue (comments are usually the most authoritative source).
+
+MEEGO COMMENTS (oldest first):
+\${comments}
+
+CHAT (oldest first):
 \${messages}
 
 Respond with ONLY a single JSON object on one line, no markdown fences:
-{"level":"none"|"yellow"|"red","summary":"<short clause, max 12 words, lowercase, no trailing period; empty string when level is none>"}
+{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, lowercase, no trailing period; empty string when level is none>"}
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
-const HAMLET_CHAT_RISK_EVAL_PRIOR = `You are reviewing the last 24 hours of messages from a TikTok PM team chat for the feature "\${featureName}".
+const HAMLET_CHAT_RISK_EVAL_PRIOR = `You are reviewing the last 7 days of group-chat messages and recent Meego ticket comments for the feature "\${featureName}".
 
 A previously detected risk is currently being tracked for this feature:
   Level:   \${priorLevel}
   Summary: "\${priorSummary}"
   Raised:  \${priorDate}
 
-Your job is to decide what the CURRENT risk situation is, given both the prior risk and the new messages below:
-- If the new messages clearly resolve the prior risk and no new risk has surfaced → "none"
+Your job is to decide what the CURRENT risk situation is, given both the prior risk and the new sources below:
+- If the new sources clearly resolve the prior risk and no new risk has surfaced → "none"
 - If the prior risk is still relevant (or hasn't been touched) → carry it forward (re-state the same level + a short summary)
-- If the new messages confirm or worsen the prior risk → escalate (bump level and update the summary)
+- If the new sources confirm or worsen the prior risk → escalate (bump level and update the summary)
 - If a new unrelated risk has been raised → replace the prior summary with the new one (use whichever level fits)
 
 Be conservative about clearing a risk: only return "none" if there is clear evidence the issue is resolved. Silence does NOT mean resolution.
 
-Messages (oldest first):
+The summary should describe the actual cause of the risk in the team's own words. It should NOT mention deadline-pressure mechanics like "QA not started, planned merge date within 5 days" — those are tracked separately and are not a useful reason on their own.
+
+Prefer Meego comments over chat when both mention the same issue.
+
+MEEGO COMMENTS (oldest first):
+\${comments}
+
+CHAT (oldest first):
 \${messages}
 
 Respond with ONLY a single JSON object on one line, no markdown fences:
-{"level":"none"|"yellow"|"red","summary":"<short clause, max 12 words, lowercase, no trailing period; empty string when level is none>"}
+{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, lowercase, no trailing period; empty string when level is none>"}
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
@@ -467,8 +481,8 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     service: 'hamlet',
     fileRef: 'lib/digests.ts',
     model: 'gemini-2.5-flash-lite',
-    description: 'Daily digest: detect new risks from feature group chat messages (no prior risk)',
-    variables: ['featureName', 'messages'],
+    description: 'Daily digest: detect new risks from 7d chat + Meego ticket comments (no prior risk)',
+    variables: ['featureName', 'messages', 'comments'],
     default: HAMLET_CHAT_RISK_EVAL,
   },
   {
@@ -477,8 +491,8 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     service: 'hamlet',
     fileRef: 'lib/digests.ts',
     model: 'gemini-2.5-flash-lite',
-    description: 'Daily digest: re-evaluate when a prior risk is being carried forward',
-    variables: ['featureName', 'priorLevel', 'priorSummary', 'priorDate', 'messages'],
+    description: 'Daily digest: re-evaluate when a prior risk is being carried forward (7d chat + Meego comments)',
+    variables: ['featureName', 'priorLevel', 'priorSummary', 'priorDate', 'messages', 'comments'],
     default: HAMLET_CHAT_RISK_EVAL_PRIOR,
   },
   {
