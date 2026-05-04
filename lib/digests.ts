@@ -4371,13 +4371,17 @@ async function runUnansweredFromSnapshots(): Promise<DigestSectionResult> {
     return { sectionId: 'digest.unanswered', sent: result.unansweredSent, count: 1, note: 'fallback: snapshots stale' };
   }
 
-  const inDevById = new Map<string, MeegoFeature>();
-  for (const id of snapshots.inDevIds) {
-    const f = snapshots.features[id];
-    if (f) inDevById.set(id, f);
+  // Don't restrict to inDevIds — that's filtered by RISK_DIGEST_STATUSES
+  // (Tech Design / Development / QA Testing) which excludes AB Testing,
+  // Merged, and earlier statuses. The legacy Q&A scan iterated all
+  // features minus those whose overallStatusKey === 'end'; do the same.
+  const scannableById = new Map<string, MeegoFeature>();
+  for (const [id, f] of Object.entries(snapshots.features)) {
+    if (f.overallStatusKey === 'end') continue;
+    scannableById.set(id, f);
   }
   const juniorChats = snapshots.juniorChats ?? [];
-  console.log(`[digests:unanswered] using snapshots refreshed ${refreshAgeH.toFixed(1)}h ago — ${inDevById.size} inDev features, ${juniorChats.length} junior chats`);
+  console.log(`[digests:unanswered] using snapshots refreshed ${refreshAgeH.toFixed(1)}h ago — ${scannableById.size} scannable features (non-ended), ${juniorChats.length} junior chats`);
 
   // Resolve owner open_id (required for the @-mention filter).
   const botToken = await getLarkBotToken();
@@ -4407,7 +4411,7 @@ async function runUnansweredFromSnapshots(): Promise<DigestSectionResult> {
   // from snapshots, run collectUnansweredForFeature.
   let chatScanned = 0;
   for (const chat of juniorChats) {
-    const feature = inDevById.get(chat.meegoId);
+    const feature = scannableById.get(chat.meegoId);
     if (!feature) continue;
     if (feature.overallStatusKey === 'end') continue;
     chatScanned++;
@@ -4434,7 +4438,7 @@ async function runUnansweredFromSnapshots(): Promise<DigestSectionResult> {
       let prdWithUnanswered = 0;
       for (const cached of cache.features) {
         const fId = cached.meegoIssueId ?? cached.id;
-        const meegoFeature = inDevById.get(fId);
+        const meegoFeature = scannableById.get(fId);
         if (!meegoFeature) continue;
         if (meegoFeature.overallStatusKey === 'end') continue;
         if (!cached.prd) continue;
