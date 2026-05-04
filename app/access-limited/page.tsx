@@ -15,7 +15,8 @@ export default function AccessLimitedPage() {
 
           {/* Headline with inline mono pill on the brand name */}
           <h1 className="text-[34px] leading-[1.15] font-bold tracking-[-0.01em] text-[var(--text)]">
-            You don&apos;t have access to{' '}
+            You don&apos;t have access<br />
+            to{' '}
             <span
               className="inline-flex items-baseline px-2.5 py-0.5 rounded-[6px] align-baseline"
               style={{
@@ -32,9 +33,9 @@ export default function AccessLimitedPage() {
 
           {/* Body */}
           <p className="mt-5 text-[14px] leading-[1.55] text-[var(--text-muted)]">
-            Hamlet is an internal AI co-pilot for the product team — it watches features,
-            drafts updates, and keeps PMs unblocked. Access is invite-only while we&apos;re
-            in early preview.
+            Hamlet is an internal AI co-pilot for the product team — it<br />
+            watches features, drafts updates, and keeps PMs unblocked.<br />
+            Access is invite-only while we&apos;re in early preview.
           </p>
         </div>
       </div>
