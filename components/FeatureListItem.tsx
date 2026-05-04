@@ -353,7 +353,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
       </div>
 
       {!hidePriority && (
-        <div className="hidden sm:flex py-2.5">
+        <div className="hidden sm:flex py-2.5 pl-4">
           <PriorityBadge priority={feature.priority} />
         </div>
       )}
