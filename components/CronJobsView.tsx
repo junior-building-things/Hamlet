@@ -137,13 +137,14 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
   }
 
   async function triggerOnce() {
-    if (!confirm(`Trigger "${job.name}" once?`)) return;
+    // No confirm dialog, no success toast — the sidebar's "Junior is
+    // working" status card now provides the visual feedback. We still
+    // surface errors via toast.
     setBusy(true);
     try {
       const res = await fetch(`/api/crons/${job.id}/trigger`, { method: 'POST' });
       const data = await res.json() as { ok?: boolean; status?: number; note?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Trigger failed');
-      toast.success(data.note ? `Triggered (${data.note})` : `Triggered ${job.name}`);
       onChange();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Trigger failed');
