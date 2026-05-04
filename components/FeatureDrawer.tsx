@@ -431,6 +431,7 @@ type ActivityEntryT =
   | { kind: 'version_slip'; date: string; from: string; to: string }
   | { kind: 'risk_change';  date: string; from: string; to: string }
   | { kind: 'prd_update';   date: string; summary: string }
+  | { kind: 'question';     date: string; sender: string; text: string; source: 'chat' | 'prd_comment' }
   | { kind: 'sync';         iso: string };
 
 const RISK_COLOR: Record<string, { bg: string; fg: string; border: string }> = {
