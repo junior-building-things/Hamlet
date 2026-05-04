@@ -212,7 +212,7 @@ export function TodoView({ features, setFeatures }: Props) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-16 mt-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-16 mt-4">
         {/* Still loading sync data */}
         {todos.length === 0 && syncing.length > 0 && (
           <div className="flex items-center gap-2 text-gray-500 py-12 justify-center">

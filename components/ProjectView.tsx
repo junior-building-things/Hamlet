@@ -815,7 +815,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-16 mt-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-16 mt-4">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-gray-500">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
