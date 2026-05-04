@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { Feature } from '@/lib/types';
-import { Sparkles, WandSparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useSync } from '@/components/SyncContext';
 
 /**
@@ -18,16 +18,20 @@ import { useSync } from '@/components/SyncContext';
  * If you want a richer Gemini-written summary, the digest can persist
  * one to GCS and this component can prefer that — left as a follow-up.
  *
- * Dismissible: the user can hide the banner; the dismissed-feature-set
- * is keyed by the at-risk ids so the banner reappears when the set
- * changes.
+ * Dismissible: the user can hide the banner; the dismissal is per-day
+ * (Asia/Singapore), so the banner reappears the next day.
  */
 
 interface Props {
   features: Feature[];
 }
 
-const STORAGE_KEY = 'hamlet_junior_brief_dismissed';
+const STORAGE_KEY = 'hamlet_junior_brief_dismissed_date';
+
+/** YYYY-MM-DD in Asia/Singapore. */
+function todayKey(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+}
 
 export function JuniorBrief({ features }: Props) {
   const { refreshCronLastRunAt, lastSyncedAt } = useSync();
@@ -40,23 +44,15 @@ export function JuniorBrief({ features }: Props) {
         || (f.versionChanges && f.versionChanges.length > 0));
   }, [features]);
 
-  // Build a stable key for the dismiss memory — banner reappears when
-  // the at-risk set changes (different ids OR different first riskNote).
-  const dismissKey = useMemo(() => {
-    return atRisk
-      .map(f => `${f.id}:${f.riskLevel ?? ''}:${(f.riskNotes ?? [])[0] ?? ''}:${(f.versionChanges ?? []).at(-1)?.to ?? ''}`)
-      .join('|');
-  }, [atRisk]);
-
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    setDismissed(localStorage.getItem(STORAGE_KEY) === dismissKey);
-  }, [dismissKey]);
+    setDismissed(localStorage.getItem(STORAGE_KEY) === todayKey());
+  }, []);
 
   function dismiss() {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, dismissKey);
+      localStorage.setItem(STORAGE_KEY, todayKey());
     }
     setDismissed(true);
   }
@@ -92,7 +88,7 @@ export function JuniorBrief({ features }: Props) {
         style={{ color: 'var(--ai)', borderColor: 'oklch(0.55 0.13 var(--ai-h) / 0.3)' }}
       >
         <Sparkles className="w-2.5 h-2.5" />
-        Junior · Daily Brief
+        Junior
       </span>
       <div className="flex-1 min-w-0">
         <div className="text-[12.5px] leading-[1.5] text-[var(--text)]">
@@ -101,22 +97,15 @@ export function JuniorBrief({ features }: Props) {
           </span>{' '}
           {summary}
         </div>
-        <div className="font-mono text-[10px] text-[var(--text-muted)] mt-1">
-          {generatedIso ? `Generated ${formatRel(generatedIso)} · ` : ''}
-          {atRisk.length} source{atRisk.length === 1 ? '' : 's'} · feature-snapshots.json
-        </div>
+        {generatedIso && (
+          <div className="font-mono text-[10px] text-[var(--text-muted)] mt-1">
+            Generated {formatRel(generatedIso)}
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="shrink-0">
         <button onClick={dismiss} className="hm-btn">
           Dismiss
-        </button>
-        <button
-          onClick={() => {/* no-op for now — drafting flow is a follow-up */}}
-          className="hm-btn hm-btn-ai"
-          title="Drafting workflow not wired up yet"
-        >
-          <WandSparkles className="w-3.5 h-3.5" />
-          Draft updates
         </button>
       </div>
     </div>
