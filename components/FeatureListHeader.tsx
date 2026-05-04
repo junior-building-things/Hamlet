@@ -13,17 +13,22 @@ export function FeatureListHeader({ hideStatus, hidePriority, gridTemplateColumn
   // Links, Team, Risk, Notes, Action, Sync). Each label uses the same
   // `pl-4` left padding the row cells use so headers sit flush above
   // their column values.
-  const labels: Array<string | null> = [
+  // Conditionally drop hidden columns — the parent template + row cells
+  // shrink to match, so the header MUST also drop them or its span count
+  // exceeds the track count and labels drift to the wrong columns. The
+  // Sync column has no label but still needs a span so the empty 10th
+  // track is occupied (otherwise the previous span would fill it).
+  const labels: string[] = [
     'Feature',
-    hideStatus   ? null : 'Status',
+    ...(hideStatus   ? [] : ['Status']),
     'Version',
-    hidePriority ? null : 'Priority',
+    ...(hidePriority ? [] : ['Priority']),
     'Links',
     'Team',
     'Risk',
     'Notes',
     'Action',
-    null, // Sync — no header label
+    '', // Sync (placeholder — keeps span count = column count)
   ];
 
   return (
@@ -36,7 +41,7 @@ export function FeatureListHeader({ hideStatus, hidePriority, gridTemplateColumn
           key={i}
           className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-dim)] pl-4"
         >
-          {label ?? ''}
+          {label}
         </span>
       ))}
     </div>
