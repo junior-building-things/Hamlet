@@ -179,8 +179,8 @@ body {
 .user-mark::after {
   content: "";
   position: absolute;
-  inset: 1px;
-  border-radius: 7px;
+  inset: 2px;
+  border-radius: 6px;
   background: var(--bg-elev-1);
 }
 .user-mark > span,
@@ -196,12 +196,12 @@ body {
   letter-spacing: -0.04em;
 }
 .user-mark > img {
-  /* 26×26 fills the 1px inset (::after) entirely so the avatar sits
+  /* 24×24 fills the 2px inset (::after) entirely so the avatar sits
      flush against the gradient stroke — no white ring between img
      and stroke. The ::after still backs the initials fallback. */
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   object-fit: cover;
 }
 
