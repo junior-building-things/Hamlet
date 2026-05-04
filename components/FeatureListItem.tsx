@@ -257,7 +257,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
         <div className="flex items-start justify-between gap-2">
           <button
             onClick={() => openRow(feature)}
-            className="text-[var(--foreground)] text-sm font-semibold leading-tight text-left hover:text-blue-300 transition-colors cursor-pointer"
+            className="text-[var(--text)] text-sm leading-tight text-left hover:text-blue-300 transition-colors cursor-pointer"
           >
             {feature.name}
           </button>
@@ -332,7 +332,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
               <EditableText
                 value={feature.name}
                 onSave={v => onFieldUpdate(feature.id, { name: v })}
-                className="text-[var(--foreground)] text-xs font-medium truncate block w-full"
+                className="text-[var(--text)] text-xs truncate block w-full"
               />
             </Tip>
             {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
@@ -340,7 +340,7 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
         ) : (
           <button
             onClick={() => openRow(feature)}
-            className="flex items-center gap-2 w-full min-w-0 text-left text-[var(--foreground)] text-xs font-medium hover:text-blue-300 transition-colors cursor-pointer"
+            className="flex items-center gap-2 w-full min-w-0 text-left text-[var(--text)] text-xs hover:text-blue-300 transition-colors cursor-pointer"
           >
             <span className="truncate">{feature.name}</span>
             {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
