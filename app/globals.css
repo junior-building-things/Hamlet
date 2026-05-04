@@ -412,13 +412,14 @@ body {
   margin-left: auto;
 }
 
-/* Subtle "breathing" pulse — used for the group-header dot. */
+/* Subtle pulsing glow — dot itself stays put; only the box-shadow
+   halo grows + fades. Used for the group-header dot. */
 .dot-breathe {
-  animation: dot-breathe 2.4s ease-in-out infinite;
+  animation: dot-breathe 2.6s ease-in-out infinite;
 }
 @keyframes dot-breathe {
-  0%, 100% { opacity: 0.55; transform: scale(1); }
-  50%      { opacity: 1;    transform: scale(1.18); }
+  0%, 100% { box-shadow: 0 0 0 0   currentColor; }
+  50%      { box-shadow: 0 0 6px 1px currentColor; }
 }
 
 /* ============================================================
