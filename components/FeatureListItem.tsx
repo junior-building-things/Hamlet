@@ -248,9 +248,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
   }
 
   return (
-    <div className={`bg-transparent border-b border-[var(--hairline)] hover:bg-[var(--bg-elev-2)] transition-colors
+    <div
+      onClick={() => openRow(feature)}
+      className={`bg-transparent border-b border-[var(--hairline)] hover:bg-[var(--bg-elev-2)] transition-colors cursor-pointer
                     sm:col-span-full sm:grid sm:[grid-template-columns:subgrid] sm:items-center
-                    ${pinned ? 'bg-[var(--ai-soft)] shadow-[inset_2px_0_0_var(--ai)]' : ''}`}>
+                    ${pinned ? 'bg-[var(--ai-soft)] shadow-[inset_2px_0_0_var(--ai)]' : ''}`}
+    >
 
       {/* Mobile layout */}
       <div className="sm:hidden px-4 py-3 flex flex-col gap-2">
@@ -311,67 +314,57 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
         )}
       </div>
 
-      {/* Desktop cells — direct subgrid children */}
+      {/* Desktop cells — direct subgrid children. The whole row is the
+          click target (handled by the parent <div onClick>); cells just
+          inherit unless they explicitly stop propagation (Links, Notes,
+          Action, Sync). */}
 
-      {/* Name (editable) */}
+      {/* Name (read-only — click anywhere on the row opens the drawer) */}
       <div className="hidden sm:flex items-center pl-4 py-2.5 w-full min-w-0">
-        {onFieldUpdate ? (
-          <div className="flex items-center gap-2 w-full min-w-0">
-            <Tip
-              wrapClassName="!flex flex-1 min-w-0"
-              content={
-                <>
-                  <div className="tip-label" style={{ marginBottom: 4 }}>Feature</div>
-                  <div style={{ fontSize: 12.5, lineHeight: 1.4 }}>{feature.name}</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    FEATURE-{(feature.meegoIssueId ?? feature.id).slice(-7)}
-                  </div>
-                </>
-              }
-            >
-              <EditableText
-                value={feature.name}
-                onSave={v => onFieldUpdate(feature.id, { name: v })}
-                className="text-[var(--text)] text-xs truncate block w-full"
-              />
-            </Tip>
-            {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
-          </div>
-        ) : (
-          <button
-            onClick={() => openRow(feature)}
-            className="flex items-center gap-2 w-full min-w-0 text-left text-[var(--text)] text-xs hover:text-blue-300 transition-colors cursor-pointer"
-          >
-            <span className="truncate">{feature.name}</span>
-            {pinned && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
-          </button>
-        )}
+        <Tip
+          wrapClassName="!flex flex-1 min-w-0"
+          content={
+            <>
+              <div className="tip-label" style={{ marginBottom: 4 }}>Feature</div>
+              <div style={{ fontSize: 12.5, lineHeight: 1.4 }}>{feature.name}</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                FEATURE-{(feature.meegoIssueId ?? feature.id).slice(-7)}
+              </div>
+            </>
+          }
+        >
+          <span className="text-[var(--text)] text-xs truncate block w-full">{feature.name}</span>
+        </Tip>
+        {pinned && <span className="ml-2 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
       </div>
 
       {!hideStatus && (
-        <div className="hidden sm:flex py-2.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
+        <div className="hidden sm:flex py-2.5 pl-4">
           <StatusBadge status={feature.status} />
         </div>
       )}
 
-      <div className="hidden sm:flex items-center py-2.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
+      <div className="hidden sm:flex items-center py-2.5 pl-4">
         <VersionBadge version={feature.iosVersion} versionHistory={feature.versionHistory} />
       </div>
 
       {!hidePriority && (
-        <div className="hidden sm:flex py-2.5 cursor-pointer" onClick={() => openRow(feature)}>
+        <div className="hidden sm:flex py-2.5">
           <PriorityBadge priority={feature.priority} />
         </div>
       )}
 
-      <div className="hidden sm:flex items-center py-2.5 pl-4 overflow-visible relative">
+      <div
+        className="hidden sm:flex items-center py-2.5 pl-4 overflow-visible relative"
+        onClick={e => e.stopPropagation()}
+      >
         <LinkIcons feature={feature} ringColor="var(--card)"
           onPackageClick={(ios) => { setShowPackage(true); if (ios) setShowIos(true); }}
           onLinkUpdate={onFieldUpdate ? handleLinkUpdate : undefined} />
       </div>
 
       {/* Team avatars */}
-      <div className="hidden sm:flex items-center py-2.5 pl-4 cursor-pointer" onClick={() => openRow(feature)}>
+      <div className="hidden sm:flex items-center py-2.5 pl-4">
         <TeamAvatars feature={feature} ringColor="var(--card)" onToggleAgent={onToggleAgent} />
       </div>
 
@@ -380,8 +373,13 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
         <RiskBadge feature={feature} onClick={() => openRow(feature)} />
       </div>
 
-      {/* Notes (editable, manual user input) */}
-      <div className="hidden sm:flex items-center py-2.5 pl-4 max-w-[200px]">
+      {/* Notes (editable, manual user input) — stop propagation so the
+          click → enter-edit-mode doesn't bubble up to the row's
+          open-drawer handler. */}
+      <div
+        className="hidden sm:flex items-center py-2.5 pl-4 max-w-[200px]"
+        onClick={e => e.stopPropagation()}
+      >
         {onFieldUpdate ? (
           <EditableText
             value={feature.notes ?? ''}
