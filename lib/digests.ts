@@ -4283,10 +4283,24 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         // produces enough text for Gemini to work with.
         if (versionChangesChanged && nextVersionChanges && nextVersionChanges.length > 0 && (cached.chatId || cached.meegoUrl)) {
           const prior = cached.versionChanges ?? [];
-          const isKnown = (e: { date: string; from: string; to: string }) =>
-            prior.some(p => p.date === e.date && p.from === e.from && p.to === e.to);
+          // Look up a cached entry by (date, from, to). Used to:
+          //   1. Preserve a previously-inferred `reason` when paths (ii)/(iii)
+          //      drop+recreate an entry on a same-day re-run (the recreated
+          //      entry has no reason field, but the slip itself is the same).
+          //   2. Skip Gemini for entries that already had a reason inferred,
+          //      so we never re-infer (and risk a different answer) once a
+          //      reason is locked in.
+          const findCached = (e: { date: string; from: string; to: string }) =>
+            prior.find(p => p.date === e.date && p.from === e.from && p.to === e.to);
           const updated = await Promise.all(nextVersionChanges.map(async e => {
-            if (isKnown(e)) return e; // already inferred (or pre-dates the field)
+            const cachedEntry = findCached(e);
+            // If the cached entry has a reason, always carry it forward —
+            // never overwrite an already-inferred reason.
+            if (cachedEntry?.reason) return { ...e, reason: cachedEntry.reason };
+            // Same triple in cache but no reason → predates the field or
+            // Gemini previously declined ("unknown"). Don't keep re-asking.
+            if (cachedEntry) return e;
+            // Truly new slip — run Gemini once and persist the result.
             try {
               const reason = await inferVersionSlipReason(cached.name, e.from, e.to, cached.chatId ?? '', botToken, cached.meegoUrl);
               return reason ? { ...e, reason } : e;
