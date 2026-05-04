@@ -4327,19 +4327,163 @@ export async function runDigestSection(sectionId: string): Promise<DigestSection
     case 'digest.line_review': return drainLineReviewQueue();
     case 'digest.ab_open': return drainAbOpenQueue();
     case 'digest.prd_changes': return drainPrdChangesQueue();
+    case 'digest.unanswered': return runUnansweredFromSnapshots();
     case 'digest.risk':
-    case 'digest.unanswered':
     case 'digest.ab_concluded': {
-      // Scan-based sections: re-use runDailyDigests with a sectionFilter so
-      // we get the same scan + send logic, but only this card actually fires.
+      // Scan-based sections still on the legacy path: re-use
+      // runDailyDigests with a sectionFilter so we get the same scan +
+      // send logic, but only this card actually fires. (digest.unanswered
+      // has its own snapshot-based fast path above.)
       const result = await runDailyDigests({ mode: 'full', sectionFilter: sectionId });
       const sent = sectionId === 'digest.risk' ? result.riskSent
-        : sectionId === 'digest.unanswered' ? result.unansweredSent
         : false; // ab_concluded is fire-and-forget; can't tell from result
       return { sectionId, sent, count: 1, note: 'scan-based' };
     }
     default:
       throw new Error(`unknown digest section: ${sectionId}`);
+  }
+}
+
+/**
+ * Fast path for digest.unanswered: read inDev features + juniorChats from
+ * the snapshot file written by `refresh-feature-cache`, run ONLY the Q&A
+ * scan (chat + PRD comments), build + send the card. Skips Meego pull,
+ * link extraction, PRD diff, risk eval, and AB-concluded scan — all
+ * irrelevant to this section.
+ *
+ * Trade-off: depends on snapshots being fresh. If the file is missing or
+ * stale (>24h), falls back to the legacy full-pipeline path so the card
+ * still fires.
+ */
+async function runUnansweredFromSnapshots(): Promise<DigestSectionResult> {
+  const t0 = Date.now();
+  const { loadFeatureSnapshots } = await import('./feature-snapshots');
+  const snapshots = await loadFeatureSnapshots();
+  if (!snapshots) {
+    console.warn('[digests:unanswered] no feature-snapshots.json — falling back to full pipeline');
+    const result = await runDailyDigests({ mode: 'full', sectionFilter: 'digest.unanswered' });
+    return { sectionId: 'digest.unanswered', sent: result.unansweredSent, count: 1, note: 'fallback: snapshots missing' };
+  }
+  const refreshAgeH = (Date.now() - new Date(snapshots.refreshedAtIso).getTime()) / (60 * 60 * 1000);
+  if (refreshAgeH > 24) {
+    console.warn(`[digests:unanswered] snapshots are ${refreshAgeH.toFixed(1)}h old — falling back to full pipeline`);
+    const result = await runDailyDigests({ mode: 'full', sectionFilter: 'digest.unanswered' });
+    return { sectionId: 'digest.unanswered', sent: result.unansweredSent, count: 1, note: 'fallback: snapshots stale' };
+  }
+
+  const inDevById = new Map<string, MeegoFeature>();
+  for (const id of snapshots.inDevIds) {
+    const f = snapshots.features[id];
+    if (f) inDevById.set(id, f);
+  }
+  const juniorChats = snapshots.juniorChats ?? [];
+  console.log(`[digests:unanswered] using snapshots refreshed ${refreshAgeH.toFixed(1)}h ago — ${inDevById.size} inDev features, ${juniorChats.length} junior chats`);
+
+  // Resolve owner open_id (required for the @-mention filter).
+  const botToken = await getLarkBotToken();
+  if (!botToken) {
+    console.warn('[digests:unanswered] no bot token — cannot scan or send');
+    return { sectionId: 'digest.unanswered', sent: false, count: 0, note: 'no bot token' };
+  }
+  const ownerEmail = process.env.OWNER_EMAIL;
+  let ownerOpenId = '';
+  if (ownerEmail) {
+    try {
+      const map = await resolveOpenIds([ownerEmail], botToken);
+      ownerOpenId = map[ownerEmail] ?? '';
+    } catch (e) {
+      console.warn('[digests:unanswered] failed to resolve owner open_id:', e);
+    }
+  }
+  if (!ownerOpenId) {
+    console.warn('[digests:unanswered] owner open_id not resolved — cannot scan');
+    return { sectionId: 'digest.unanswered', sent: false, count: 0, note: 'no owner open_id' };
+  }
+
+  const sinceMs = Date.now() - UNANSWERED_WINDOW_MS;
+  const unansweredByFeature = new Map<string, UnansweredFinding>();
+
+  // Step A: chat scan — iterate juniorChats, look up the matching MeegoFeature
+  // from snapshots, run collectUnansweredForFeature.
+  let chatScanned = 0;
+  for (const chat of juniorChats) {
+    const feature = inDevById.get(chat.meegoId);
+    if (!feature) continue;
+    if (feature.overallStatusKey === 'end') continue;
+    chatScanned++;
+    try {
+      const finding = await collectUnansweredForFeature(
+        feature, chat.chatId, sinceMs, ownerOpenId, botToken,
+      );
+      if (finding) {
+        finding.feature.chatId = chat.chatId;
+        unansweredByFeature.set(feature.workItemId, finding);
+      }
+    } catch (e) {
+      console.warn(`[digests:unanswered] chat scan failed for "${feature.name}":`, e);
+    }
+  }
+  console.log(`[digests:unanswered] chat scan: ${chatScanned} chats, ${unansweredByFeature.size} with unanswered`);
+
+  // Step B: PRD-comment scan. Pull cached features (for PRD URLs) and
+  // iterate ones that have a snapshot match.
+  try {
+    const cache = await readFeatureCache();
+    if (cache) {
+      let prdScanned = 0;
+      let prdWithUnanswered = 0;
+      for (const cached of cache.features) {
+        const fId = cached.meegoIssueId ?? cached.id;
+        const meegoFeature = inDevById.get(fId);
+        if (!meegoFeature) continue;
+        if (meegoFeature.overallStatusKey === 'end') continue;
+        if (!cached.prd) continue;
+        prdScanned++;
+        try {
+          const commentQs = await collectUnansweredCommentsForFeature(
+            meegoFeature, ownerOpenId, sinceMs,
+          );
+          if (commentQs.length === 0) continue;
+          prdWithUnanswered++;
+          const existing = unansweredByFeature.get(fId);
+          if (existing) {
+            existing.questions = [...existing.questions, ...commentQs]
+              .sort((a, b) => b.timestamp - a.timestamp)
+              .slice(0, MAX_QUESTIONS_PER_FEATURE);
+          } else {
+            unansweredByFeature.set(fId, { feature: meegoFeature, questions: commentQs });
+          }
+        } catch (e) {
+          console.warn(`[digests:unanswered] PRD-comment scan failed for "${meegoFeature.name}":`, e);
+        }
+      }
+      console.log(`[digests:unanswered] PRD-comment scan: ${prdScanned} scanned, ${prdWithUnanswered} with unanswered`);
+    }
+  } catch (e) {
+    console.warn('[digests:unanswered] PRD-comment scan errored:', e);
+  }
+
+  const findings = [...unansweredByFeature.values()];
+  if (findings.length === 0) {
+    console.log(`[digests:unanswered] no findings (took ${((Date.now() - t0) / 1000).toFixed(1)}s) — skipping send`);
+    return { sectionId: 'digest.unanswered', sent: false, count: 0, note: 'no findings' };
+  }
+
+  // Send to PM group, same as the legacy path.
+  const card = buildUnansweredDigestCard(findings);
+  const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
+  console.log('[digests:unanswered] card preview:\n' + preview);
+  try {
+    const id = await sendInteractiveCardToChat(
+      PM_GROUP_CHAT_ID, card.title, card.template, card.sections, botToken,
+    );
+    const sent = id !== null;
+    const totalQs = findings.reduce((sum, f) => sum + f.questions.length, 0);
+    console.log(`[digests:unanswered] ${sent ? 'sent' : 'send returned no id'} — ${findings.length} features, ${totalQs} questions, took ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    return { sectionId: 'digest.unanswered', sent, count: totalQs };
+  } catch (e) {
+    console.warn('[digests:unanswered] send failed:', e);
+    return { sectionId: 'digest.unanswered', sent: false, count: 0, note: 'send failed' };
   }
 }
 
