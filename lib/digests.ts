@@ -4274,14 +4274,18 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           if (nextVersionChanges && nextVersionChanges.length > 0) versionDelayed++;
         }
 
-        // (iv) For any NEW slip entry (not in the cached list before this run),
-        // infer a one-clause reason from the recent chat via Gemini and
-        // attach it to the entry. We only run this for newly-detected slips
-        // so subsequent runs don't keep re-inferring the same one.
-        // Run inference if we have ANY source available (chat OR meegoUrl).
-        // The helper itself checks both and quietly returns null when neither
-        // produces enough text for Gemini to work with.
-        if (versionChangesChanged && nextVersionChanges && nextVersionChanges.length > 0 && (cached.chatId || cached.meegoUrl)) {
+        // (iv) Slip-reason inference. Runs in two cases:
+        //   - A new slip was detected this run (versionChangesChanged).
+        //   - A cached slip exists that has neither `reason` nor
+        //     `reasonAttempted` — this catches entries written before
+        //     reason inference shipped, giving them one retroactive pass.
+        // The helper itself short-circuits when there's no chat AND no
+        // meegoUrl, so this is safe to gate generously.
+        if (!nextVersionChanges) nextVersionChanges = cached.versionChanges;
+        const needsRetroactive = (nextVersionChanges ?? []).some(
+          e => !e.reason && !e.reasonAttempted,
+        );
+        if ((versionChangesChanged || needsRetroactive) && nextVersionChanges && nextVersionChanges.length > 0 && (cached.chatId || cached.meegoUrl)) {
           const prior = cached.versionChanges ?? [];
           // Look up a cached entry by (date, from, to). Used to:
           //   1. Preserve a previously-inferred `reason` when paths (ii)/(iii)
@@ -4294,21 +4298,41 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             prior.find(p => p.date === e.date && p.from === e.from && p.to === e.to);
           const updated = await Promise.all(nextVersionChanges.map(async e => {
             const cachedEntry = findCached(e);
-            // If the cached entry has a reason, always carry it forward —
-            // never overwrite an already-inferred reason.
-            if (cachedEntry?.reason) return { ...e, reason: cachedEntry.reason };
-            // Same triple in cache but no reason → predates the field or
-            // Gemini previously declined ("unknown"). Don't keep re-asking.
-            if (cachedEntry) return e;
-            // Truly new slip — run Gemini once and persist the result.
+            // 1. Cached entry already has a reason → carry it forward verbatim.
+            //    Never re-infer (avoids the answer drifting between runs).
+            if (cachedEntry?.reason) {
+              return { ...e, reason: cachedEntry.reason, reasonAttempted: true };
+            }
+            // 2. Cached entry exists, no reason, but inference was already
+            //    attempted (Gemini said "unknown"). Don't keep re-asking.
+            if (cachedEntry?.reasonAttempted) {
+              return { ...e, reasonAttempted: true };
+            }
+            // 3. Cached entry without reason AND without reasonAttempted —
+            //    this is either a brand-new slip OR an entry that predates
+            //    the reason field. Either way, run Gemini once. Mark
+            //    reasonAttempted so we don't loop on "unknown" verdicts.
             try {
               const reason = await inferVersionSlipReason(cached.name, e.from, e.to, cached.chatId ?? '', botToken, cached.meegoUrl);
-              return reason ? { ...e, reason } : e;
+              return reason
+                ? { ...e, reason, reasonAttempted: true }
+                : { ...e, reasonAttempted: true };
             } catch (err) {
               console.warn(`[digests] slip-reason inference failed for "${cached.name}":`, err);
+              // Don't mark attempted on transient errors — let the next
+              // refresh retry. Gemini hiccups shouldn't permanently
+              // disable inference for an entry.
               return e;
             }
           }));
+          // If inference added a reason or attempted flag to any entry,
+          // mark versionChangesChanged so the delta gets persisted even
+          // when no new slip was detected this run (retroactive pass).
+          const inferenceChanged = updated.some((u, i) => {
+            const before = nextVersionChanges![i];
+            return u.reason !== before.reason || u.reasonAttempted !== before.reasonAttempted;
+          });
+          if (inferenceChanged) versionChangesChanged = true;
           nextVersionChanges = updated;
         }
 

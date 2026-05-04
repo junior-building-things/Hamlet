@@ -84,12 +84,20 @@ export interface Feature {
    * and the list is shown on hover (formatted as "M/D: from → to").
    *
    * `reason` is a short clause Gemini infers from the feature's recent
-   * chat at the time the slip was detected (e.g. "several UAT issues").
-   * Optional — older entries written before this field existed have no
-   * reason. Inferred once per slip and cached for the drawer to surface
-   * without re-running Gemini on every load.
+   * chat + Meego comments at the time the slip was detected (e.g.
+   * "several UAT issues"). Optional. `reasonAttempted` is set the first
+   * time inference runs (whether Gemini gave a clause or said "unknown")
+   * so subsequent refreshes don't keep re-asking. Both fields are
+   * absent on entries written before this feature existed; those get
+   * one retroactive Gemini pass on the next refresh.
    */
-  versionChanges?: Array<{ date: string; from: string; to: string; reason?: string }>;
+  versionChanges?: Array<{
+    date: string;
+    from: string;
+    to: string;
+    reason?: string;
+    reasonAttempted?: boolean;
+  }>;
   /**
    * Chronological log of risk-level transitions detected by the daily
    * digest. Each entry records the change Junior observed between two
