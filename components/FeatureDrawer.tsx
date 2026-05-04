@@ -223,29 +223,30 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   // updates (all populated by the digest pipeline), then sort newest-first
   // and cap to the last 12. Last sync time is appended as a tail entry.
   type ActivityEntry =
-    | { kind: 'version_slip';   date: string; from: string; to: string }
-    | { kind: 'risk_change';    date: string; from: string; to: string }
-    | { kind: 'prd_update';     date: string; summary: string }
-    | { kind: 'question';       date: string; sender: string; text: string; source: 'chat' | 'prd_comment' }
+    | { kind: 'version_slip';   date: string; iso?: string; from: string; to: string }
+    | { kind: 'risk_change';    date: string; iso?: string; from: string; to: string }
+    | { kind: 'prd_update';     date: string; iso?: string; summary: string }
+    | { kind: 'question';       date: string; iso?: string; sender: string; text: string; source: 'chat' | 'prd_comment' }
     | { kind: 'sync';           iso: string };
 
   type DatedEntry = Exclude<ActivityEntry, { kind: 'sync' }>;
   const dated: DatedEntry[] = [
     ...(feature.versionChanges ?? []).map((c): DatedEntry => ({
-      kind: 'version_slip', date: c.date, from: c.from, to: c.to,
+      kind: 'version_slip', date: c.date, iso: c.iso, from: c.from, to: c.to,
     })),
     ...(feature.riskHistory ?? []).map((r): DatedEntry => ({
-      kind: 'risk_change', date: r.date, from: r.from, to: r.to,
+      kind: 'risk_change', date: r.date, iso: r.iso, from: r.from, to: r.to,
     })),
     ...(feature.prdUpdates ?? []).map((p): DatedEntry => ({
-      kind: 'prd_update', date: p.date, summary: p.summary,
+      kind: 'prd_update', date: p.date, iso: p.iso, summary: p.summary,
     })),
     ...(feature.unansweredQuestions ?? []).map((q): DatedEntry => ({
-      kind: 'question', date: q.date, sender: q.sender, text: q.text, source: q.source,
+      kind: 'question', date: q.date, iso: q.iso, sender: q.sender, text: q.text, source: q.source,
     })),
   ];
-  // Sort newest first by ISO date.
-  dated.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  // Sort newest first — by iso when present, else by date.
+  const sortKey = (e: DatedEntry) => e.iso ?? `${e.date}T00:00:00+08:00`;
+  dated.sort((a, b) => sortKey(a) < sortKey(b) ? 1 : sortKey(a) > sortKey(b) ? -1 : 0);
   const activity: ActivityEntry[] = dated.slice(0, 12);
   if (updatedAtIso) {
     activity.push({ kind: 'sync', iso: updatedAtIso });
@@ -410,7 +411,7 @@ function Key({ children }: { children: React.ReactNode }) {
 }
 
 function Val({ children }: { children: React.ReactNode }) {
-  return <div className="font-semibold text-[var(--text)]">{children}</div>;
+  return <div className="text-[var(--text)]">{children}</div>;
 }
 
 function CalloutTag({ tone, children }: { tone: 'rose' | 'amber' | 'blue'; children: React.ReactNode }) {
@@ -434,7 +435,7 @@ function PocRow({ role, name, grad }: { role: string; name: string; grad: string
   return (
     <>
       <Key>{role}</Key>
-      <div className="flex items-center gap-2 font-semibold text-[var(--text)]">
+      <div className="flex items-center gap-2 text-[var(--text)]">
         <span
           className="w-5 h-5 rounded-full grid place-items-center font-mono text-[8.5px] text-white shrink-0"
           style={{ background: grad }}
@@ -447,6 +448,8 @@ function PocRow({ role, name, grad }: { role: string; name: string; grad: string
   );
 }
 
+// Backwards-compat for the Junior banner's "Updated Xm ago" line —
+// pure relative formatter, no Today/SGT logic.
 function formatRel(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   if (!Number.isFinite(ms) || ms < 0) return iso;
@@ -460,11 +463,48 @@ function formatRel(iso: string): string {
   return `${d}d ago`;
 }
 
+const SGT_TZ = 'Asia/Singapore';
+
+// Activity-row time formatter:
+//   - Within 3h ago → "25m ago" / "2h ago"
+//   - Today (over 3h) → "Today HH:MM"
+//   - Older → "YYYY-MM-DD HH:MM"
+//   - Date-only entries (legacy, no iso) → "Today" if today, else
+//     just the YYYY-MM-DD string.
+//   All times rendered in Singapore time.
+function formatActivityTime(input: { iso?: string; date?: string }): string {
+  if (input.iso) {
+    const ts = new Date(input.iso);
+    if (!isNaN(ts.getTime())) {
+      const ms = Date.now() - ts.getTime();
+      if (ms >= 0 && ms < 3 * 60 * 60 * 1000) {
+        const m = Math.round(ms / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return `${m}m ago`;
+        return `${Math.round(m / 60)}h ago`;
+      }
+      const todaySgt = new Date().toLocaleDateString('en-CA', { timeZone: SGT_TZ });
+      const itemDateSgt = ts.toLocaleDateString('en-CA', { timeZone: SGT_TZ });
+      const time = ts.toLocaleTimeString('en-GB', {
+        timeZone: SGT_TZ, hour: '2-digit', minute: '2-digit',
+      });
+      if (itemDateSgt === todaySgt) return `Today ${time}`;
+      return `${itemDateSgt} ${time}`;
+    }
+  }
+  if (input.date) {
+    const todaySgt = new Date().toLocaleDateString('en-CA', { timeZone: SGT_TZ });
+    if (input.date === todaySgt) return 'Today';
+    return input.date;
+  }
+  return '';
+}
+
 type ActivityEntryT =
-  | { kind: 'version_slip'; date: string; from: string; to: string }
-  | { kind: 'risk_change';  date: string; from: string; to: string }
-  | { kind: 'prd_update';   date: string; summary: string }
-  | { kind: 'question';     date: string; sender: string; text: string; source: 'chat' | 'prd_comment' }
+  | { kind: 'version_slip'; date: string; iso?: string; from: string; to: string }
+  | { kind: 'risk_change';  date: string; iso?: string; from: string; to: string }
+  | { kind: 'prd_update';   date: string; iso?: string; summary: string }
+  | { kind: 'question';     date: string; iso?: string; sender: string; text: string; source: 'chat' | 'prd_comment' }
   | { kind: 'sync';         iso: string };
 
 const RISK_COLOR: Record<string, { bg: string; fg: string; border: string }> = {
@@ -492,7 +532,7 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
         actor="Junior"
         actorColor="var(--ai)"
         body={`flagged version slip ${entry.from} → ${entry.to}`}
-        meta={entry.date}
+        meta={formatActivityTime(entry)}
       />
     );
   }
@@ -514,7 +554,7 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
             </strong>
           </>
         }
-        meta={entry.date}
+        meta={formatActivityTime(entry)}
       />
     );
   }
@@ -532,7 +572,7 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
             updated PRD — <span style={{ color: 'var(--text-muted)' }}>{entry.summary}</span>
           </>
         }
-        meta={entry.date}
+        meta={formatActivityTime(entry)}
       />
     );
   }
@@ -552,7 +592,7 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
             asked in {sourceLabel} — <span style={{ color: 'var(--text-muted)' }}>&ldquo;{preview}{preview.length === 140 ? '…' : ''}&rdquo;</span>
           </>
         }
-        meta={entry.date}
+        meta={formatActivityTime(entry)}
       />
     );
   }
@@ -566,7 +606,7 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
       actor="Updated"
       actorColor="var(--text)"
       body="latest sync"
-      meta={formatRel(entry.iso)}
+      meta={formatActivityTime({ iso: entry.iso })}
     />
   );
 }

@@ -927,7 +927,7 @@ async function resolveVersionShortName(versionId: string | number): Promise<stri
 export async function getAllVersionChanges(
   meegoUrl: string,
   sinceMs = 0,
-): Promise<Array<{ date: string; from: string; to: string }>> {
+): Promise<Array<{ date: string; iso: string; from: string; to: string }>> {
   const records = await fetchRecentOpRecords(meegoUrl, sinceMs, 50);
   if (records.length === 0) return [];
 
@@ -958,7 +958,7 @@ export async function getAllVersionChanges(
     nameById.set(id, await resolveVersionShortName(id));
   }));
 
-  const out: Array<{ date: string; from: string; to: string }> = [];
+  const out: Array<{ date: string; iso: string; from: string; to: string }> = [];
   for (const r of raws) {
     const from = nameById.get(String(r.oldId)) ?? String(r.oldId);
     const to   = nameById.get(String(r.newId)) ?? String(r.newId);
@@ -967,7 +967,7 @@ export async function getAllVersionChanges(
     if (isNaN(d.getTime())) continue;
     // Use Singapore time so the day boundary matches the rest of the digest.
     const date = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' }); // YYYY-MM-DD
-    out.push({ date, from, to });
+    out.push({ date, iso: d.toISOString(), from, to });
   }
   out.sort((a, b) => a.date.localeCompare(b.date));
   return out;
@@ -1611,7 +1611,7 @@ async function patchVersionChangesInCache(
           try { date = await findLatestFieldEditDate(meegoUrl, launchedFieldKey); } catch {}
           if (!date) date = today;
           const cleaned = list.filter(c => !matchesPair(c));
-          nextVersionChanges = [...cleaned, { date, from: mismatch.planned, to: mismatch.actual }]
+          nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: mismatch.planned, to: mismatch.actual }]
             .sort((a, b) => a.date.localeCompare(b.date));
           versionChangesChanged = true;
         }
@@ -1634,7 +1634,7 @@ async function patchVersionChangesInCache(
           try { date = await findLatestFieldEditDate(meegoUrl, 'field_cde888'); } catch {}
           if (!date) date = today;
           const cleaned = list.filter(c => !matchesPair(c));
-          nextVersionChanges = [...cleaned, { date, from: serverDelay.planned, to: serverDelay.scheduled }]
+          nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: serverDelay.planned, to: serverDelay.scheduled }]
             .sort((a, b) => a.date.localeCompare(b.date));
           versionChangesChanged = true;
         }
@@ -3773,7 +3773,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
               cf => cf.id === f.workItemId || cf.meegoIssueId === f.workItemId,
             );
             if (cached) {
-              const next = appendCappedHistory(cached.prdUpdates, { date: today, summary });
+              const next = appendCappedHistory(cached.prdUpdates, { date: today, iso: new Date().toISOString(), summary });
               await patchFeaturesInCache(new Map([[f.workItemId, { prdUpdates: next }]]));
             }
           } catch (e) {
@@ -4307,6 +4307,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         if (prev === next) return;
         delta.riskHistory = appendCappedHistory(cached.riskHistory, {
           date: todayDate,
+          iso:  new Date().toISOString(),
           from: prev as 'red' | 'yellow' | 'green' | 'none',
           to:   next as 'red' | 'yellow' | 'green' | 'none',
         });
@@ -4399,7 +4400,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
                 // a stale date (e.g. previously written as "today" before
                 // the op-log lookup was wired in).
                 const cleaned = list.filter(c => !matchesPair(c));
-                nextVersionChanges = [...cleaned, { date, from: mismatch.planned, to: mismatch.actual }]
+                nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: mismatch.planned, to: mismatch.actual }]
                   .sort((a, b) => a.date.localeCompare(b.date));
                 versionChangesChanged = true;
               }
@@ -4431,7 +4432,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
                 }
                 if (!date) date = today;
                 const cleaned = list.filter(c => !matchesPair(c));
-                nextVersionChanges = [...cleaned, { date, from: serverDelay.planned, to: serverDelay.scheduled }]
+                nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: serverDelay.planned, to: serverDelay.scheduled }]
                   .sort((a, b) => a.date.localeCompare(b.date));
                 versionChangesChanged = true;
               }
@@ -4845,6 +4846,12 @@ async function runUnansweredFromSnapshots(): Promise<DigestSectionResult> {
           .filter(q => !seenIds.has(q.messageId))
           .map(q => ({
             date: today,
+            // Prefer the original message create_time (q.timestamp is
+            // ms-since-epoch). Fall back to "now" if absent so the
+            // Activity row always has a time to render.
+            iso: q.timestamp && Number.isFinite(q.timestamp)
+              ? new Date(q.timestamp).toISOString()
+              : new Date().toISOString(),
             sender: q.senderName || 'Unknown',
             text: q.text,
             source: (q.source ?? 'chat') as 'chat' | 'prd_comment',

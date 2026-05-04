@@ -93,6 +93,11 @@ export interface Feature {
    */
   versionChanges?: Array<{
     date: string;
+    /** ISO timestamp (with time + offset) of when the slip was
+     *  recorded. Optional; legacy entries pre-date this field and
+     *  will only have `date`. The drawer's Activity row prefers this
+     *  when present. */
+    iso?: string;
     from: string;
     to: string;
     reason?: string;
@@ -107,7 +112,7 @@ export interface Feature {
    *
    *   { date: 'YYYY-MM-DD', from: 'green', to: 'yellow' }
    */
-  riskHistory?: Array<{ date: string; from: 'red' | 'yellow' | 'green' | 'none'; to: 'red' | 'yellow' | 'green' | 'none' }>;
+  riskHistory?: Array<{ date: string; iso?: string; from: 'red' | 'yellow' | 'green' | 'none'; to: 'red' | 'yellow' | 'green' | 'none' }>;
   /**
    * Chronological log of PRD content updates detected by the digest.
    * Each entry is the Gemini-summarised diff that was appended to the
@@ -115,7 +120,7 @@ export interface Feature {
    *
    *   { date: 'YYYY-MM-DD', summary: 'Added migration plan…' }
    */
-  prdUpdates?: Array<{ date: string; summary: string }>;
+  prdUpdates?: Array<{ date: string; iso?: string; summary: string }>;
   /**
    * Outstanding @-mention questions Junior surfaced in the Q&A digest.
    * Capped to the last ~10. Source is either a chat message or a PRD
@@ -127,6 +132,7 @@ export interface Feature {
    */
   unansweredQuestions?: Array<{
     date: string;
+    iso?: string;
     sender: string;
     text: string;
     source: 'chat' | 'prd_comment';
