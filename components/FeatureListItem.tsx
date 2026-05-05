@@ -254,10 +254,10 @@ function RiskBadge({ feature, onClick }: { feature: Feature; onClick: () => void
               })}
             </ul>
           ) : reasons.length === 1 ? (
-            <div style={{ fontSize: 12, lineHeight: 1.45 }}>{reasons[0]}</div>
+            <div style={{ fontSize: 12, lineHeight: 1.45 }}>{reasons[0].charAt(0).toUpperCase() + reasons[0].slice(1)}</div>
           ) : (
             <ul className="list-disc list-inside space-y-0.5">
-              {reasons.map((r, i) => <li key={i} style={{ fontSize: 12, lineHeight: 1.45 }}>{r}</li>)}
+              {reasons.map((r, i) => <li key={i} style={{ fontSize: 12, lineHeight: 1.45 }}>{r.charAt(0).toUpperCase() + r.slice(1)}</li>)}
             </ul>
           )}
         </div>,

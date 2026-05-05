@@ -142,8 +142,14 @@ export function FeatureDrawer({ feature, onClose }: Props) {
     // or Gemini couldn't infer one.
     const reasonText = latest.reason
       || (hasRiskNotes ? feature.riskNotes!.join('; ') : '');
+    // Strip trailing punctuation and lowercase the first letter so it
+    // reads as the tail of "Version A → B due to <reason>." regardless
+    // of whether Gemini emitted lowercase or sentence case.
     const trimmedReason = reasonText.replace(/[.!?]+\s*$/, '').trim();
-    const suffix = trimmedReason ? ` due to ${trimmedReason}` : '';
+    const reasonForSuffix = trimmedReason
+      ? trimmedReason.charAt(0).toLowerCase() + trimmedReason.slice(1)
+      : '';
+    const suffix = reasonForSuffix ? ` due to ${reasonForSuffix}` : '';
     callouts.push({
       tag: 'Delayed',
       tone: 'rose',
@@ -154,7 +160,11 @@ export function FeatureDrawer({ feature, onClose }: Props) {
       ? 'High risk'
       : feature.riskLevel === 'yellow' ? 'Medium risk' : 'Risk';
     const tone: Callout['tone'] = feature.riskLevel === 'red' ? 'rose' : 'amber';
-    callouts.push({ tag, tone, note: feature.riskNotes!.join(' · ') });
+    // Standalone callout — capitalise the first letter so legacy
+    // lowercase entries also read cleanly.
+    const note = feature.riskNotes!.join(' · ');
+    const cased = note ? note.charAt(0).toUpperCase() + note.slice(1) : note;
+    callouts.push({ tag, tone, note: cased });
   }
   if (recentPrdUpdate) {
     callouts.push({

@@ -200,7 +200,7 @@ CHAT (oldest first):
 \${messages}
 
 Respond with ONLY a single JSON object on one line, no markdown fences:
-{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, lowercase, no trailing period; empty string when level is none>"}
+{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, sentence case (capitalise the first letter only), no trailing period; empty string when level is none>"}
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
@@ -230,7 +230,7 @@ CHAT (oldest first):
 \${messages}
 
 Respond with ONLY a single JSON object on one line, no markdown fences:
-{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, lowercase, no trailing period; empty string when level is none>"}
+{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, sentence case (capitalise the first letter only), no trailing period; empty string when level is none>"}
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
@@ -250,11 +250,11 @@ Two sources are provided below:
 
 Prefer the Meego comments when both mention the slip; chat is supplementary context. Infer in ONE short clause (under 12 words) why the slip happened. Reply with ONLY that clause — no leading "due to", no trailing period, no quotes. If neither source mentions any specific reason, reply with the single word: unknown.
 
-Examples of good replies:
-- several UAT issues
-- compliance review still open
-- waiting on backend dependency
-- design review delayed
+Examples of good replies (sentence case, capitalise first letter only):
+- Several UAT issues
+- Compliance review still open
+- Waiting on backend dependency
+- Design review delayed
 
 MEEGO COMMENTS (oldest first):
 \${comments}

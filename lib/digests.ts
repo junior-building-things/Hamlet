@@ -1944,8 +1944,11 @@ async function buildFeatureSectionContent(finding: RiskFinding): Promise<string>
   if (finding.delay) {
     lines.push(`**Risk:** Delayed (${escapeMd(finding.delay.detail)})`);
   } else {
+    // Reasons display in parens after the level label — capitalise the
+    // first letter of each so they read as their own short clauses
+    // regardless of how Gemini emitted them.
     const riskValue = finding.reasons.length > 0
-      ? `${label} (${finding.reasons.map(escapeMd).join(', ')})`
+      ? `${label} (${finding.reasons.map(r => escapeMd(r ? r.charAt(0).toUpperCase() + r.slice(1) : r)).join(', ')})`
       : label;
     lines.push(`**Risk:** ${riskValue}`);
   }

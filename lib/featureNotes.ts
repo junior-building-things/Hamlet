@@ -52,6 +52,15 @@ function isManualNoteFresh(notesEditedAt: string | undefined): boolean {
   return businessDaysSince(notesEditedAt) < MANUAL_COOLDOWN_BUSINESS_DAYS;
 }
 
+/** Capitalise first letter (no-op if already cased or empty). */
+function sentenceCase(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+/** Lowercase first letter — for embedding inside "due to <…>". */
+function midSentence(s: string): string {
+  return s ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+}
+
 /** Compute the auto-prefill text per the priority order. Returns '' if no signal. */
 export function computePrefilledNote(feature: Feature): string {
   // 1. Delayed → version transition + reason if known.
@@ -60,16 +69,16 @@ export function computePrefilledNote(feature: Feature): string {
     const latest = slips[slips.length - 1];
     const reason = latest.reason || (feature.riskNotes ?? []).filter(n => n !== `${latest.from} → ${latest.to}`)[0];
     return reason
-      ? `${latest.from} → ${latest.to} due to ${reason}`
+      ? `${latest.from} → ${latest.to} due to ${midSentence(reason)}`
       : `Delayed ${latest.from} → ${latest.to}`;
   }
   // 2. High risk.
   if (feature.riskLevel === 'red' && feature.riskNotes && feature.riskNotes.length > 0) {
-    return feature.riskNotes.join(' · ');
+    return sentenceCase(feature.riskNotes.join(' · '));
   }
   // 3. Medium risk.
   if (feature.riskLevel === 'yellow' && feature.riskNotes && feature.riskNotes.length > 0) {
-    return feature.riskNotes.join(' · ');
+    return sentenceCase(feature.riskNotes.join(' · '));
   }
   // 4. Open questions in the last 7 days. Match the drawer's wording —
   //    minus the leading "the" + trailing period to save row space.
