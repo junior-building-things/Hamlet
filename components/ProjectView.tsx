@@ -88,8 +88,6 @@ function GroupHeader({ label, count, first, groupBy }: { label: string; count: n
 interface Props {
   features: Feature[];
   setFeatures: React.Dispatch<React.SetStateAction<Feature[]>>;
-  pinnedId?: string | null;
-  onClearPin?: () => void;
   /** When set, pop the drawer for the matching feature on the next
    *  render where that id exists in the list. Used by the page after
    *  a New Feature create completes. */
@@ -99,7 +97,7 @@ interface Props {
   onDrawerOpened?: () => void;
 }
 
-export function ProjectView({ features, setFeatures, pinnedId, onClearPin, openDrawerForId, onDrawerOpened }: Props) {
+export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOpened }: Props) {
   const [search,         setSearch]         = useState('');
   const [statusFilter,   setStatusFilterState]   = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
@@ -485,14 +483,13 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin, openD
   }, [setFeatures]);
 
   const syncAll = useCallback(async () => {
-    onClearPin?.();
     setSyncingAll(true);
     const list = await fetchFromMeego(true); // force=true bypasses GCS cache
     setSyncingAll(false);
     if (list) {
       syncAllDetails(list);
     }
-  }, [onClearPin, fetchFromMeego, syncAllDetails]);
+  }, [fetchFromMeego, syncAllDetails]);
 
   // Expose syncAll + sync state to the page-level context so the
   // floating top-right Sync All button (visible on every tab) works.
@@ -579,22 +576,8 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin, openD
         return sortDir === 'asc' ? cmp : -cmp;
       });
     }
-    // Pin newly created feature to the top
-    if (pinnedId) {
-      const idx = list.findIndex(f => f.id === pinnedId);
-      console.log('[pin] pinnedId:', pinnedId, 'idx in list:', idx, 'list length:', list.length, 'ids:', list.slice(0, 5).map(f => f.id));
-      if (idx > 0) {
-        const [pinned] = list.splice(idx, 1);
-        list.unshift(pinned);
-      } else if (idx === -1) {
-        // Feature might be filtered out — find it in the full features list and prepend
-        const pinned = features.find(f => f.id === pinnedId);
-        console.log('[pin] fallback lookup in features:', !!pinned);
-        if (pinned) list.unshift(pinned);
-      }
-    }
     return list;
-  }, [filtered, features, sortBy, sortDir, pinnedId]);
+  }, [filtered, sortBy, sortDir]);
 
   // ── Group ──────────────────────────────────────────────────────────────────
 
@@ -785,7 +768,7 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin, openD
         onOpenDetail={openDrawer}
         onSync={syncOne}
         completing={completingId === f.id} onComplete={handleComplete}
-        pinned={f.id === pinnedId} hasUpdate={hasUnread(f)} onToggleAgent={handleToggleAgent}
+        hasUpdate={hasUnread(f)} onToggleAgent={handleToggleAgent}
         onFieldUpdate={handleFieldUpdate}
         hideStatus={hideStatus}
         hidePriority={hidePriority}
@@ -845,15 +828,10 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin, openD
           // ── Grouped list view ──────────────────────────────────────────────
           <div className={listGridCls}>
             <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} hideAction={hideAction} gridTemplateColumns={gridTemplateColumns} />
-            {/* Render pinned feature above all groups */}
-            {pinnedId && (() => {
-              const pinned = features.find(f => f.id === pinnedId);
-              return pinned ? renderListRows([pinned]) : null;
-            })()}
             {groups.map((group, gi) => (
               <React.Fragment key={group.key}>
                 <GroupHeader label={group.label} count={group.items.length} first={gi === 0} groupBy={groupBy} />
-                {renderListRows(group.items.filter(f => f.id !== pinnedId))}
+                {renderListRows(group.items)}
               </React.Fragment>
             ))}
           </div>

@@ -43,7 +43,6 @@ export default function Home() {
     return 'project';
   });
   const [showAddModal,  setShowAddModal]  = useState(false);
-  const [pinnedId,      setPinnedId]      = useState<string | null>(null);
   // Set right after a "New Feature" create succeeds — ProjectView
   // watches this and pops the drawer for the matching feature, then
   // calls back to clear it. Avoids the legacy in-modal edit UI.
@@ -140,19 +139,11 @@ export default function Home() {
   /** Replace temp feature with the real one, or remove it on failure */
   function handleFeatureCreated(tempId: string, feature: Feature | null) {
     if (feature) {
-      console.log('[pin] setting pinnedId:', feature.id, 'tempId:', tempId);
       setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
       // If the drawer is currently keyed to the temp id, re-key it
       // to the real id so the drawer doesn't close when the temp
       // entry is replaced.
       setOpenDrawerForId(prev => prev === tempId ? feature.id : prev);
-      // Pin the new feature to the top of the list for 30 seconds
-      setPinnedId(feature.id);
-      // Scroll to top so the pinned feature is visible
-      setTimeout(() => {
-        document.getElementById('main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 100);
-      setTimeout(() => setPinnedId(prev => prev === feature.id ? null : prev), 30_000);
     } else {
       setFeatures(prev => prev.filter(f => f.id !== tempId));
     }
@@ -194,8 +185,6 @@ export default function Home() {
             <ProjectView
               features={features}
               setFeatures={setFeatures}
-              pinnedId={pinnedId}
-              onClearPin={() => setPinnedId(null)}
               openDrawerForId={openDrawerForId}
               onDrawerOpened={() => setOpenDrawerForId(null)}
             />

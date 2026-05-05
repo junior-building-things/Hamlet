@@ -23,7 +23,6 @@ interface Props {
   onSync: (feature: Feature) => void;
   completing?: boolean;
   onComplete?: (feature: Feature) => void;
-  pinned?: boolean;
   /** Junior surfaced new info (PRD edit / risk worsening) since the user
    *  last opened this row. Renders a blue dot before the name. */
   hasUpdate?: boolean;
@@ -340,7 +339,7 @@ function FeatureNameTip({ feature }: { feature: Feature }) {
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, pinned, hasUpdate, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, hideAction, gridTemplateColumns }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, hasUpdate, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, hideAction, gridTemplateColumns }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
   // Row clicks open the drawer (Phase C). Falls back to onEdit when no
@@ -360,9 +359,8 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
   return (
     <div
       onClick={() => openRow(feature)}
-      className={`bg-transparent border-b border-[var(--hairline)] hover:bg-[var(--bg-elev-2)] transition-colors cursor-pointer
-                    sm:grid sm:items-center
-                    ${pinned ? 'bg-[var(--ai-soft)] shadow-[inset_2px_0_0_var(--ai)]' : ''}`}
+      className="bg-transparent border-b border-[var(--hairline)] hover:bg-[var(--bg-elev-2)] transition-colors cursor-pointer
+                    sm:grid sm:items-center"
       style={{ gridTemplateColumns, columnGap: '0.75rem' }}
     >
 
@@ -444,7 +442,6 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
           />
         )}
         <FeatureNameTip feature={feature} />
-        {pinned && <span className="ml-2 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600/30 text-blue-400 border border-blue-500/40">NEW</span>}
       </div>
 
       {!hideStatus && (
