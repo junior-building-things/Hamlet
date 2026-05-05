@@ -388,29 +388,6 @@ Rules:
 - Skip trivial messages (greetings, emoji-only, thumbs up)
 - Be concise and actionable`;
 
-const JUNIOR_DAILY_STOCKS_SYSTEM = `You are a disciplined AI research assistant.
-Return 5 up and coming AI stocks that are public on any major exchanges globally. Focus on stocks with a market cap under 1B USD.
-Output must follow this exact markdown structure for each stock:
-
-**{emoji} {Company Name} ({TICKER})**
-- **Stock Exchange:** {value}
-- **Market Cap:** {value}
-- **Last Price:** {value}
-- **Business Description:** {value}
-- **Value Proposition:** {value}
-- **Recent News:** {value}
-
-Rules:
-- Provide exactly 5 stocks.
-- Use one relevant emoji before each company name.
-- Keep only category labels bolded; values must not be bold.
-- Provide currency symbols. Do not convert currencies.
-- For Recent News, include a brief statement and source URL.
-- Do not output tables.`;
-
-const JUNIOR_DAILY_STOCKS_USER = `Generate today's update.
-Use the snapshot below as input and web search for context.
-\${snapshot}`;
 
 // ─── Rio / Mia personas ─────────────────────────────────────────────────────
 
@@ -625,27 +602,6 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     variables: [],
     default: JUNIOR_CONVERSATION_SUMMARY,
   },
-  {
-    id: 'junior.daily_stocks_system',
-    name: 'Junior — Daily stock picks system',
-    service: 'junior',
-    fileRef: 'app/api/daily/route.ts',
-    model: 'gemini-2.5-flash-lite',
-    description: 'Daily AI stock picks system prompt (5 stocks under 1B market cap)',
-    variables: [],
-    default: JUNIOR_DAILY_STOCKS_SYSTEM,
-  },
-  {
-    id: 'junior.daily_stocks_user',
-    name: 'Junior — Daily stock picks user message',
-    service: 'junior',
-    fileRef: 'app/api/daily/route.ts',
-    model: 'gemini-2.5-flash-lite',
-    description: 'Daily AI stock picks user message with market snapshot',
-    variables: ['snapshot'],
-    default: JUNIOR_DAILY_STOCKS_USER,
-  },
-
   // Rio / Mia personas (used inside hamlet.agent_webhook)
   {
     id: 'rio.persona',
