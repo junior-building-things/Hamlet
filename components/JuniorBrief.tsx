@@ -80,16 +80,61 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning 
   let lead: string;
   let summary: string;
   if (mode === 'risk') {
-    lead = `${items.length} feature${items.length === 1 ? '' : 's'} to watch this week.`;
-    summary = items
-      .map(f => {
-        const note = (f.riskNotes ?? [])[0]?.trim();
-        if (note) return `${f.name} ${note.toLowerCase()}`;
-        const slip = (f.versionChanges ?? []).slice(-1)[0];
-        if (slip) return `${f.name} planned version slipped ${slip.from} → ${slip.to}`;
-        return `${f.name} flagged at risk`;
-      })
-      .join(', ') + '.';
+    // Split items into "new since yesterday" (most-recent transition
+    // into red/yellow OR a fresh version slip in the last 36h) vs
+    // "ongoing" (already at-risk in earlier briefs). The 36h window
+    // covers a Mon→Tue overnight gap and the 12h between the two
+    // refresh-feature-cache cron runs.
+    const NEW_WINDOW_MS = 36 * 60 * 60 * 1000;
+    const cutoff = Date.now() - NEW_WINDOW_MS;
+    const isNewlyFlagged = (f: Feature): boolean => {
+      const lastRisk = (f.riskHistory ?? []).slice(-1)[0];
+      if (lastRisk && (lastRisk.to === 'red' || lastRisk.to === 'yellow')) {
+        const ts = lastRisk.iso ? Date.parse(lastRisk.iso) : Date.parse(`${lastRisk.date}T00:00:00+08:00`);
+        if (Number.isFinite(ts) && ts >= cutoff) return true;
+      }
+      const lastSlip = (f.versionChanges ?? []).slice(-1)[0];
+      if (lastSlip) {
+        const ts = lastSlip.iso ? Date.parse(lastSlip.iso) : Date.parse(`${lastSlip.date}T00:00:00+08:00`);
+        if (Number.isFinite(ts) && ts >= cutoff) return true;
+      }
+      return false;
+    };
+    const newItems = items.filter(isNewlyFlagged);
+    const ongoingItems = items.filter(f => !isNewlyFlagged(f));
+
+    // Per-feature one-liner — short cause without echoing the whole
+    // banner verbatim. Drops the trailing period; sentence joining
+    // adds them back.
+    const oneLiner = (f: Feature): string => {
+      const slip = (f.versionChanges ?? []).slice(-1)[0];
+      if (slip) {
+        const reason = slip.reason || (f.riskNotes ?? [])[0];
+        return reason
+          ? `${f.name} slipped ${slip.from} → ${slip.to} — ${reason.charAt(0).toLowerCase() + reason.slice(1)}`
+          : `${f.name} slipped ${slip.from} → ${slip.to}`;
+      }
+      const note = (f.riskNotes ?? [])[0];
+      if (note) return `${f.name} — ${note.charAt(0).toLowerCase() + note.slice(1)}`;
+      return `${f.name} flagged at risk`;
+    };
+
+    if (newItems.length > 0) {
+      // Lead with the count of new things since yesterday.
+      lead = `${newItems.length} new since yesterday.`;
+      const NEW_INLINE_CAP = 3;
+      const shown = newItems.slice(0, NEW_INLINE_CAP).map(oneLiner);
+      const overflow = newItems.length - shown.length;
+      const newSentence = shown.join('. ') + (overflow > 0 ? `. +${overflow} more new` : '') + '.';
+      summary = newSentence + (ongoingItems.length > 0
+        ? ` ${ongoingItems.length} ongoing from earlier this week.`
+        : '');
+    } else {
+      // No new escalations — the brief is just a "still active"
+      // reminder. Keep it short; the user already knows the details.
+      lead = `${ongoingItems.length} feature${ongoingItems.length === 1 ? '' : 's'} still at risk.`;
+      summary = 'Same situations from earlier this week — no fresh activity.';
+    }
   } else {
     lead = `${items.length} feature${items.length === 1 ? '' : 's'} need${items.length === 1 ? 's' : ''} your attention.`;
     // Group by current status, build one phrase per status.
