@@ -2667,6 +2667,22 @@ export interface ChatMessage {
 }
 
 /**
+ * Normalise Lark's `create_time` to ms-since-epoch. The chat-messages
+ * list endpoint returns it in seconds (10-digit string) but the
+ * thread-container endpoint returns it in milliseconds (13-digit
+ * string). Detect by magnitude: anything below 10^12 is seconds —
+ * 10^12 is year 2001 in ms vs year 33658 if mistakenly read as
+ * seconds, so the boundary is unambiguous for any plausible message.
+ * Returns 0 when the field is missing or unparseable.
+ */
+export function createTimeMs(raw: string | undefined): number {
+  if (!raw) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n < 1e12 ? n * 1000 : n;
+}
+
+/**
  * Extract the sender's open_id from a ChatMessage. Lark's v1
  * list-messages returns `{sender: {id: "ou_xxx", id_type: "open_id"}}`,
  * while webhook payloads use `{sender: {sender_id: {open_id: "ou_xxx"}}}`.
@@ -2788,7 +2804,6 @@ export async function readChatMessages(
     const MAX_THREAD_FETCHES = 100;
     let fetched = 0;
     let recentRepliesFound = 0;
-    const sinceSec = Math.floor(sinceMs / 1000);
     for (const msg of allTopLevel) {
       if (fetched >= MAX_THREAD_FETCHES) break;
       // Lark v1 uses `?container_id_type=thread&container_id=<root_id>` to
@@ -2815,8 +2830,11 @@ export async function readChatMessages(
         if (rData.code === 0 && rData.data?.items) {
           // Skip the thread root itself (returned first in the thread
           // container); keep only replies within the scan window.
+          // The thread endpoint returns create_time in milliseconds
+          // (vs seconds for the messages list endpoint) — go through
+          // createTimeMs() so both shapes compare correctly.
           const replies = rData.data.items.filter(
-            r => r.message_id !== threadRoot && Number(r.create_time ?? 0) >= sinceSec,
+            r => r.message_id !== threadRoot && createTimeMs(r.create_time) >= sinceMs,
           );
           if (replies.length > 0) {
             messages.push(...replies);

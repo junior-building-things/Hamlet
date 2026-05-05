@@ -23,6 +23,7 @@ import {
   listMessageReactions,
   PostParagraph,
   ChatMessage,
+  createTimeMs,
   mentionOpenId,
   senderOpenIdOf,
   CardButton,
@@ -2100,18 +2101,18 @@ function isQuestionAnswered(question: ChatMessage, all: ChatMessage[]): boolean 
 function findLaterThreadMessages(question: ChatMessage, all: ChatMessage[]): ChatMessage[] {
   const qId = question.message_id;
   const qRoot = question.root_id ?? '';
-  const qTime = Number(question.create_time ?? 0);
+  const qTime = createTimeMs(question.create_time);
   const out: ChatMessage[] = [];
   for (const m of all) {
     if (m.message_id === qId) continue;
-    const mt = Number(m.create_time ?? 0);
+    const mt = createTimeMs(m.create_time);
     const matches =
       m.parent_id === qId ||
       m.root_id === qId ||
       (qRoot !== '' && m.root_id === qRoot && mt > qTime);
     if (matches) out.push(m);
   }
-  out.sort((a, b) => Number(a.create_time ?? 0) - Number(b.create_time ?? 0));
+  out.sort((a, b) => createTimeMs(a.create_time) - createTimeMs(b.create_time));
   return out;
 }
 
@@ -2211,7 +2212,7 @@ export async function collectUnansweredForFeature(
   // the last 24h.
   const botOpenId = process.env.LARK_BOT_OPEN_ID ?? '';
   const mentionMsgs = messages.filter(m => {
-    const createMs = Number(m.create_time ?? 0) * 1000;
+    const createMs = createTimeMs(m.create_time);
     if (createMs && createMs < sinceMs) return false;
     if (!(m.mentions ?? []).some(mention => mentionOpenId(mention) === ownerOpenId)) return false;
     const sender = senderOpenIdOf(m);
@@ -2222,7 +2223,7 @@ export async function collectUnansweredForFeature(
   if (mentionMsgs.length === 0) return null;
 
   // Newest first — per-chat dedup means the freshest unanswered wins.
-  mentionMsgs.sort((a, b) => Number(b.create_time ?? 0) - Number(a.create_time ?? 0));
+  mentionMsgs.sort((a, b) => createTimeMs(b.create_time) - createTimeMs(a.create_time));
 
   // Decision rules (per-question), in order:
   //   (a) Owner reacted with any emoji on the question → answered.
@@ -2261,10 +2262,10 @@ export async function collectUnansweredForFeature(
     // laterChat includes both top-level messages and in-thread replies
     // sent after this question, because readChatMessages was called
     // with includeThreadReplies: true.
-    const qTime = Number(msg.create_time ?? 0);
+    const qTime = createTimeMs(msg.create_time);
     const laterChat = messages
-      .filter(m => m.message_id !== msg.message_id && Number(m.create_time ?? 0) > qTime)
-      .sort((a, b) => Number(a.create_time ?? 0) - Number(b.create_time ?? 0));
+      .filter(m => m.message_id !== msg.message_id && createTimeMs(m.create_time) > qTime)
+      .sort((a, b) => createTimeMs(a.create_time) - createTimeMs(b.create_time));
     const threadReplyCount = findLaterThreadMessages(msg, messages).length;
     console.log(`[digests] ${qLabel} → Gemini check (${laterChat.length} later msgs, ${threadReplyCount} thread replies)`);
     const questionText = chatMessageText(msg);
@@ -2291,7 +2292,7 @@ async function buildUnansweredQuestion(msg: ChatMessage): Promise<UnansweredQues
     mentionNames: (msg.mentions ?? []).map(m => m.name),
     text: text.slice(0, 280),
     messageId: msg.message_id,
-    timestamp: Number(msg.create_time ?? 0) * 1000,
+    timestamp: createTimeMs(msg.create_time),
     source: 'chat',
   };
 }
