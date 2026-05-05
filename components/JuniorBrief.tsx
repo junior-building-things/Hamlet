@@ -136,7 +136,11 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning,
 
   const cacheKey = useMemo(() => {
     if (!briefPayload) return null;
-    return `hamlet:juniorBrief:${todayKey()}:${hashKey(briefPayload)}`;
+    // Version suffix: bump when the prompt structure changes so old
+    // cached briefs (which followed a different format) get
+    // invalidated automatically. v2: "highlight is count-only,
+    // rest starts with ' — '" prompt revision.
+    return `hamlet:juniorBrief:v2:${todayKey()}:${hashKey(briefPayload)}`;
   }, [briefPayload]);
 
   const [aiBrief, setAiBrief] = useState<BriefContent | null>(null);

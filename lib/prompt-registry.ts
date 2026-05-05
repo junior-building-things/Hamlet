@@ -252,13 +252,25 @@ ONGOING issues from earlier this week, no fresh activity (just the feature names
 
 Output ONLY a single-line JSON object in this exact shape (no markdown fences, no commentary):
 
-{"greeting":"<warm 4-7 word greeting addressing \${userName} by first name, ending with !>","highlight":"<short phrase summarising the count + recency of new issues, e.g. 'You have 1 new issue from last week' or 'Two fresh updates since yesterday' — empty string when there are zero new issues>","rest":"<the actual content: detail the new issue(s) using the cause text in lowercase mid-sentence, then mention the ongoing items if any (use the feature names with parentheses + 'etc.' once 3 or more), single sentence flow, no bullet lists>","outro":"<one short reassuring closing sentence in Junior's voice, e.g. \\"I'll let you know if anything changes.\\">"}
+{"greeting":"<warm 4-7 word greeting addressing \${userName} by first name, ending with !>","highlight":"<short count + recency phrase ONLY, e.g. '1 new issue since yesterday' or 'Two fresh updates this morning' — no verbs like 'we have', no 'You have', no detail; empty string when zero new issues>","rest":"<starts with ' — ' (space-em-dash-space) when highlight is non-empty, then jumps straight into the issue WITHOUT repeating any preamble. Detail each new issue as '<Feature Name> has <cause-in-lowercase>' or '<Feature Name> is <state>'. Then mention ongoing items naturally (use feature names; 3+ items use parentheses + 'etc.'). One flowing sentence, no bullet lists.>","outro":"<one short reassuring closing sentence in Junior's voice, e.g. \\"I'll let you know if anything changes.\\">"}
 
-Tone: warm, direct, conversational — like a chief-of-staff giving a verbal brief. Use feature names verbatim (no IDs, no quotes). Don't repeat the count between greeting/highlight/rest. Total greeting+highlight+rest+outro under 70 words.
+CRITICAL RULES:
+- Never repeat the count or the "new issue" preamble between highlight and rest. The highlight states the count once; the rest starts immediately with the feature name.
+- Never start \`rest\` with phrases like "We have a new issue", "There is a new issue", "Specifically", or any restatement of the count. It should begin with " — <Feature Name> ..." or, when highlight is empty, with a normal capital sentence.
 
-When there are zero NEW issues but some ONGOING: leave \`highlight\` empty, summarise the ongoing situation in \`rest\` (e.g. "Three features are still flagged from earlier this week — same situations, no fresh activity.").
+EXAMPLE 1 (1 new + 3 ongoing):
+{"greeting":"Good morning, Thomas!","highlight":"1 new issue since yesterday","rest":" — Support comments typing recommendation expansion has a lack of resources and difficulty obtaining a specific timeline. AI Self in Mix Studio, [SA ]AI theatre ID 录入合并, and Switch SA UGC workflow to Seedream 4.5 are still ongoing.","outro":"I'll let you know if anything changes."}
 
-When there are zero of both: leave \`highlight\` empty and \`rest\` like "Nothing new to flag — every in-flight feature is on track.".`;
+EXAMPLE 2 (2 new + 0 ongoing):
+{"greeting":"Hi Thomas!","highlight":"2 fresh updates this morning","rest":" — AI Self in Mix Studio slipped 44.9 → 45.0 due to several UAT issues, and Photo Comment Sticker is paused waiting on legal review.","outro":"I'll keep an eye on both."}
+
+EXAMPLE 3 (0 new, 4 ongoing):
+{"greeting":"Hey Thomas!","highlight":"","rest":"Four features are still flagged from earlier this week — same situations, no fresh activity.","outro":"I'll flag the moment anything moves."}
+
+EXAMPLE 4 (0 new, 0 ongoing):
+{"greeting":"Morning, Thomas!","highlight":"","rest":"Nothing new to flag — every in-flight feature is on track.","outro":"I'll let you know if that changes."}
+
+Tone: warm, direct, conversational — like a chief-of-staff giving a verbal brief. Use feature names verbatim (no IDs, no quotes). Total greeting+highlight+rest+outro under 70 words.`;
 
 const HAMLET_VERSION_SLIP_REASON = `The TikTok feature "\${featureName}" just slipped its planned ship version: \${fromVersion} → \${toVersion}.
 
