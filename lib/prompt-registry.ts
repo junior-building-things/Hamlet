@@ -200,9 +200,7 @@ CHAT (oldest first):
 \${messages}
 
 Respond with ONLY a single JSON object on one line, no markdown fences:
-{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, lowercase, no trailing period; empty string when level is none>","corroborated":true}
-
-`corroborated` should always be true here (this is a fresh detection — by definition the sources support the level you returned).
+{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, lowercase, no trailing period; empty string when level is none>"}
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
@@ -232,9 +230,7 @@ CHAT (oldest first):
 \${messages}
 
 Respond with ONLY a single JSON object on one line, no markdown fences:
-{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, lowercase, no trailing period; empty string when level is none>","corroborated":true|false}
-
-Set `corroborated` to true if the new sources actually MENTION or RELATE to the risk you're reporting (i.e. you have fresh evidence the risk is still active). Set it to false when you're carrying the prior level forward purely because nothing in the new material contradicts it — i.e. the new comments / chat are about unrelated topics. (When level is "none", `corroborated` is ignored.)
+{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, lowercase, no trailing period; empty string when level is none>"}
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
