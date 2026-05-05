@@ -1399,6 +1399,15 @@ const CHAT_RISK_WINDOW_MS = 24 * 60 * 60 * 1000;
 export interface ChatRiskFinding {
   level: 'none' | 'yellow' | 'red';
   summary: string;
+  /**
+   * Set on this finding only when Gemini actually saw fresh chat or
+   * Meego comments and returned non-none. Carry-forward returns
+   * (prior unchanged because there was no new material) leave this
+   * undefined so the persisted lastCorroboratedIso doesn't tick
+   * forward without real evidence — that's what drives the
+   * RISK_STALE_PRIOR_DAYS expiry.
+   */
+  freshCorroborationIso?: string;
 }
 
 /** Optional prior-risk context handed to Gemini so it can carry / clear / escalate. */
@@ -1406,7 +1415,17 @@ export interface PriorChatRisk {
   level: 'yellow' | 'red';
   summary: string;
   raisedAtIso: string;
+  /** Last time this risk was corroborated by fresh chat / Meego comments. */
+  lastCorroboratedIso?: string;
 }
+
+/**
+ * Stale-prior expiry: if the prior risk hasn't been corroborated by fresh
+ * chat / Meego comments in this many days, drop it automatically. The
+ * Delayed marker (versionChanges) is unaffected — that's a discrete event
+ * tracked separately.
+ */
+const RISK_STALE_PRIOR_DAYS = 7;
 
 /**
  * Read the last 24h of messages in a feature's Meego group chat and use
@@ -1768,8 +1787,21 @@ export async function evaluateChatRisk(
 
   if (!chatFormatted && !commentsFormatted) {
     if (prior) {
+      // Stale-prior expiry: if the last fresh corroboration was more
+      // than RISK_STALE_PRIOR_DAYS ago, clear automatically. Falls
+      // back to raisedAtIso when lastCorroboratedIso isn't set
+      // (entries persisted before this field shipped).
+      const baselineIso = prior.lastCorroboratedIso ?? prior.raisedAtIso;
+      const ageMs = Date.now() - Date.parse(baselineIso);
+      const ageDays = Number.isFinite(ageMs) ? ageMs / (24 * 60 * 60 * 1000) : 0;
+      if (ageDays >= RISK_STALE_PRIOR_DAYS) {
+        console.log(
+          `[digests] risk for "${featureName}" stale (${ageDays.toFixed(1)}d without corroboration) → clearing`,
+        );
+        return { level: 'none', summary: '' };
+      }
       console.log(
-        `[digests] Gemini chat risk for "${featureName}" (no recent chat or comments, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
+        `[digests] Gemini chat risk for "${featureName}" (no recent chat or comments, ${ageDays.toFixed(1)}d since corroboration, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
       );
       return { level: prior.level, summary: prior.summary };
     }
@@ -1815,7 +1847,11 @@ export async function evaluateChatRisk(
       `[digests] Gemini risk for "${featureName}" (${messages.length} msgs/7d, ${commentsFormatted ? 'with' : 'no'} Meego comments${priorTag}): ${JSON.stringify({ level, summary })}`,
     );
     if (level === 'none') return { level, summary: '' };
-    return { level, summary };
+    // Gemini saw fresh chat or comments AND returned non-none →
+    // genuine corroboration. Stamp the timestamp so the staleness
+    // expiry can tell apart "still active, just confirmed" from
+    // "carried forward in silence".
+    return { level, summary, freshCorroborationIso: new Date().toISOString() };
   } catch (e) {
     console.warn(`[digests] Gemini chat risk eval failed for ${featureName}:`, e);
     // Gemini failed — fall back to carrying the prior risk if any.
@@ -4033,12 +4069,22 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           feature.name,
           botToken,
           priorChat
-            ? { level: priorChat.level, summary: priorChat.summary, raisedAtIso: priorChat.raisedAtIso }
+            ? {
+                level: priorChat.level,
+                summary: priorChat.summary,
+                raisedAtIso: priorChat.raisedAtIso,
+                lastCorroboratedIso: priorChat.lastCorroboratedIso,
+              }
             : undefined,
           feature.meegoUrl,
         );
 
-        // Persist or clear chat risk on the entry.
+        // Persist or clear chat risk on the entry. The fact that
+        // evaluateChatRisk ran AND returned a non-none level means it
+        // saw fresh material (chat or comments in the 7d window), so
+        // bump lastCorroboratedIso to now. The stale-prior expiry
+        // path returns 'none' without re-corroboration, so 'none'
+        // intentionally clears the entry.
         const entry = state.features[feature.workItemId] ?? { name: feature.name, lastSeenIso: nowIso };
         entry.name = feature.name;
         entry.lastSeenIso = nowIso;
@@ -4049,6 +4095,14 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             level: chatRisk.level,
             summary: chatRisk.summary,
             raisedAtIso: priorChat?.raisedAtIso ?? nowIso,
+            // Bump only when Gemini actually saw fresh material this run.
+            // Carry forward whatever was there before otherwise — that
+            // keeps the staleness clock ticking on silently-persistent
+            // priors so they expire after RISK_STALE_PRIOR_DAYS.
+            lastCorroboratedIso: chatRisk.freshCorroborationIso
+              ?? priorChat?.lastCorroboratedIso
+              ?? priorChat?.raisedAtIso
+              ?? nowIso,
           };
         }
         if (entry.chatRisk) {

@@ -35,6 +35,16 @@ export interface PersistedChatRisk {
   summary: string;
   /** ISO timestamp of when this risk was first detected. */
   raisedAtIso: string;
+  /**
+   * ISO timestamp of the most recent run where Gemini saw fresh
+   * chat / Meego comments AND confirmed the risk was still active.
+   * Used by the staleness expiry: if this is older than 7 days,
+   * the prior is dropped automatically and the feature returns to
+   * Low risk on the next digest run. Optional for backward-compat
+   * with entries written before this field shipped — those use
+   * `raisedAtIso` as the fallback corroboration baseline.
+   */
+  lastCorroboratedIso?: string;
 }
 
 export interface PersistedDelayChange {
