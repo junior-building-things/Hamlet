@@ -140,7 +140,7 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning,
     // cached briefs (which followed a different format) get
     // invalidated automatically. v2: "highlight is count-only,
     // rest starts with ' — '" prompt revision.
-    return `hamlet:juniorBrief:v2:${todayKey()}:${hashKey(briefPayload)}`;
+    return `hamlet:juniorBrief:v3:${todayKey()}:${hashKey(briefPayload)}`;
   }, [briefPayload]);
 
   const [aiBrief, setAiBrief] = useState<BriefContent | null>(null);
@@ -294,10 +294,13 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning,
               {aiBrief.highlight && (
                 <>
                   <span className="font-medium" style={{ color: 'var(--ai)' }}>{aiBrief.highlight}</span>
-                  {aiBrief.rest.startsWith(' ') || aiBrief.rest.startsWith(',') || aiBrief.rest.startsWith('—') ? '' : ' '}
+                  {' — '}
                 </>
               )}
-              {aiBrief.rest}
+              {/* Strip whatever leading separator Gemini emitted (em-dash,
+                  hyphen, colon, comma, whitespace) so the renderer can
+                  enforce a consistent " — " join above. */}
+              {aiBrief.rest.replace(/^[\s—\-,:]+/, '')}
               {aiBrief.outro && (
                 <>
                   {' '}
