@@ -1734,14 +1734,24 @@ export async function evaluateChatRisk(
     .join('\n');
 
   // Pull recent Meego ticket comments — devs/PMs often log the cause
-  // there directly. Mirrors inferVersionSlipReason's source mix.
+  // there directly. Filter to the same 7d window as the chat: a comment
+  // from 4+ weeks ago describing a since-resolved blocker shouldn't
+  // drive current-state risk inference. (Slip-reason is different and
+  // intentionally keeps a wider window — the slip is a discrete event
+  // that may have been discussed weeks before the field actually moved.)
   let commentsFormatted = '';
   if (meegoUrl) {
     const m = meegoUrl.match(/meego\.larkoffice\.com\/([^/]+)\/(?:[^/]+)\/detail\/(\d+)/);
     if (m) {
       try {
-        const comments = await fetchTicketComments(m[1], m[2]);
-        commentsFormatted = comments
+        const allComments = await fetchTicketComments(m[1], m[2]);
+        const cutoffMs = Date.now() - SLIP_REASON_WINDOW_MS;
+        const recent = allComments.filter(c => {
+          if (!c.createdAt) return false;
+          const ts = Date.parse(`${c.createdAt}T00:00:00+08:00`);
+          return Number.isFinite(ts) && ts >= cutoffMs;
+        });
+        commentsFormatted = recent
           .slice(-SLIP_REASON_MAX_COMMENTS)
           .map(c => {
             const date = c.createdAt ? `${c.createdAt} ` : '';
@@ -1759,7 +1769,7 @@ export async function evaluateChatRisk(
   if (!chatFormatted && !commentsFormatted) {
     if (prior) {
       console.log(
-        `[digests] Gemini chat risk for "${featureName}" (no chat or comments, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
+        `[digests] Gemini chat risk for "${featureName}" (no recent chat or comments, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
       );
       return { level: prior.level, summary: prior.summary };
     }
