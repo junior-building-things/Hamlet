@@ -1836,22 +1836,33 @@ export async function evaluateChatRisk(
     const raw = result.response.text().trim();
     // Strip optional ```json fences if Gemini ignored the instruction
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
-    const parsed = JSON.parse(cleaned) as { level?: string; summary?: string };
+    const parsed = JSON.parse(cleaned) as { level?: string; summary?: string; corroborated?: boolean };
     const level: ChatRiskFinding['level'] =
       parsed.level === 'red' ? 'red' :
       parsed.level === 'yellow' ? 'yellow' :
       'none';
     const summary = (parsed.summary ?? '').trim();
+    // corroborated=true means the new sources actually mention/relate
+    // to the risk. Default to true when no prior was passed (fresh
+    // detection is, by definition, corroborated by the sources). For
+    // carry-forward calls with a prior, default false if Gemini omitted
+    // the field — safer for the staleness clock to under-bump than
+    // over-bump on ambiguous returns.
+    const corroborated = parsed.corroborated !== undefined
+      ? parsed.corroborated === true
+      : !prior;
     const priorTag = prior ? `, prior=${prior.level}` : '';
     console.log(
-      `[digests] Gemini risk for "${featureName}" (${messages.length} msgs/7d, ${commentsFormatted ? 'with' : 'no'} Meego comments${priorTag}): ${JSON.stringify({ level, summary })}`,
+      `[digests] Gemini risk for "${featureName}" (${messages.length} msgs/7d, ${commentsFormatted ? 'with' : 'no'} Meego comments${priorTag}): ${JSON.stringify({ level, summary, corroborated })}`,
     );
     if (level === 'none') return { level, summary: '' };
-    // Gemini saw fresh chat or comments AND returned non-none →
-    // genuine corroboration. Stamp the timestamp so the staleness
-    // expiry can tell apart "still active, just confirmed" from
-    // "carried forward in silence".
-    return { level, summary, freshCorroborationIso: new Date().toISOString() };
+    // Only stamp freshCorroborationIso when Gemini said the new
+    // material actually relates to the risk. An unrelated new comment
+    // that just doesn't contradict the prior keeps the staleness
+    // clock ticking.
+    return corroborated
+      ? { level, summary, freshCorroborationIso: new Date().toISOString() }
+      : { level, summary };
   } catch (e) {
     console.warn(`[digests] Gemini chat risk eval failed for ${featureName}:`, e);
     // Gemini failed — fall back to carrying the prior risk if any.
