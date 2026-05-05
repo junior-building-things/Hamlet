@@ -242,6 +242,24 @@ OLD VERSION:
 NEW VERSION:
 \${currentText}`;
 
+const HAMLET_JUNIOR_BRIEF = `You are Junior, \${userName}'s personal assistant for product work. Write a short morning brief at the top of their dashboard. Today is \${dayName} \${partOfDay}.
+
+NEW issues since yesterday's brief (each is "<feature name>: <short cause>"):
+\${newItems}
+
+ONGOING issues from earlier this week, no fresh activity (just the feature names):
+\${ongoingNames}
+
+Output ONLY a single-line JSON object in this exact shape (no markdown fences, no commentary):
+
+{"greeting":"<warm 4-7 word greeting addressing \${userName} by first name, ending with !>","highlight":"<short phrase summarising the count + recency of new issues, e.g. 'You have 1 new issue from last week' or 'Two fresh updates since yesterday' — empty string when there are zero new issues>","rest":"<the actual content: detail the new issue(s) using the cause text in lowercase mid-sentence, then mention the ongoing items if any (use the feature names with parentheses + 'etc.' once 3 or more), single sentence flow, no bullet lists>","outro":"<one short reassuring closing sentence in Junior's voice, e.g. \\"I'll let you know if anything changes.\\">"}
+
+Tone: warm, direct, conversational — like a chief-of-staff giving a verbal brief. Use feature names verbatim (no IDs, no quotes). Don't repeat the count between greeting/highlight/rest. Total greeting+highlight+rest+outro under 70 words.
+
+When there are zero NEW issues but some ONGOING: leave \`highlight\` empty, summarise the ongoing situation in \`rest\` (e.g. "Three features are still flagged from earlier this week — same situations, no fresh activity.").
+
+When there are zero of both: leave \`highlight\` empty and \`rest\` like "Nothing new to flag — every in-flight feature is on track.".`;
+
 const HAMLET_VERSION_SLIP_REASON = `The TikTok feature "\${featureName}" just slipped its planned ship version: \${fromVersion} → \${toVersion}.
 
 Two sources are provided below:
@@ -544,6 +562,17 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     description: 'Extracts the first bullet from the Next Steps section of an AB report, verbatim — used on the AB-concluded card',
     variables: ['featureName', 'abReportContent'],
     default: HAMLET_FIRST_NEXT_STEP,
+  },
+
+  {
+    id: 'hamlet.junior_brief',
+    name: 'Hamlet — Junior daily brief banner',
+    service: 'hamlet',
+    fileRef: 'app/api/junior-brief/route.ts',
+    model: 'gemini-2.5-flash-lite',
+    description: 'Generates the personal-assistant-style daily brief banner at the top of the Ongoing Features tab',
+    variables: ['userName', 'dayName', 'partOfDay', 'newItems', 'ongoingNames'],
+    default: HAMLET_JUNIOR_BRIEF,
   },
 
   // Junior

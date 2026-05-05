@@ -4,6 +4,21 @@ import { Feature } from '@/lib/types';
 import { Sparkles, CheckCircle2, Loader2 } from 'lucide-react';
 import { useSync } from '@/components/SyncContext';
 
+/** Stable hash of the brief inputs for the per-day cache key. */
+function hashKey(input: unknown): string {
+  const s = JSON.stringify(input);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36);
+}
+
+interface BriefContent {
+  greeting: string;
+  highlight: string;
+  rest: string;
+  outro: string;
+}
+
 /**
  * Top-of-tab "Junior" banner.
  *
@@ -30,6 +45,9 @@ interface Props {
   /** Disabled state for the "Complete all" action (e.g. while a
    *  bulk run is in flight). */
   completeAllRunning?: boolean;
+  /** Used for the AI-generated greeting in mode='risk'. Defaults to
+   *  "Thomas" if not supplied. */
+  userName?: string;
 }
 
 const STORAGE_KEYS: Record<Mode, string> = {
@@ -41,7 +59,7 @@ function todayKey(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
 }
 
-export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning }: Props) {
+export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning, userName }: Props) {
   const { refreshCronLastRunAt, lastSyncedAt } = useSync();
 
   // Pick the right feature subset for the mode.
@@ -157,6 +175,88 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning 
     }
   }
 
+  // ── AI-generated brief (mode='risk' only) ─────────────────────────
+  // Build a stable signature from the categorized items so the
+  // localStorage cache invalidates when the underlying state shifts.
+  // Falls back to the static `lead`/`summary` above while loading or
+  // on any failure.
+  const briefPayload = useMemo(() => {
+    if (mode !== 'risk') return null;
+    const isNewlyFlagged = (f: Feature): boolean => {
+      const NEW_WINDOW_MS = 36 * 60 * 60 * 1000;
+      const cutoff = Date.now() - NEW_WINDOW_MS;
+      const lastRisk = (f.riskHistory ?? []).slice(-1)[0];
+      if (lastRisk && (lastRisk.to === 'red' || lastRisk.to === 'yellow')) {
+        const ts = lastRisk.iso ? Date.parse(lastRisk.iso) : Date.parse(`${lastRisk.date}T00:00:00+08:00`);
+        if (Number.isFinite(ts) && ts >= cutoff) return true;
+      }
+      const lastSlip = (f.versionChanges ?? []).slice(-1)[0];
+      if (lastSlip) {
+        const ts = lastSlip.iso ? Date.parse(lastSlip.iso) : Date.parse(`${lastSlip.date}T00:00:00+08:00`);
+        if (Number.isFinite(ts) && ts >= cutoff) return true;
+      }
+      return false;
+    };
+    const causeOf = (f: Feature): string => {
+      const slip = (f.versionChanges ?? []).slice(-1)[0];
+      if (slip) {
+        const reason = slip.reason || (f.riskNotes ?? [])[0] || '';
+        return reason
+          ? `slipped ${slip.from} → ${slip.to} due to ${reason}`
+          : `slipped ${slip.from} → ${slip.to}`;
+      }
+      const note = (f.riskNotes ?? [])[0];
+      return note || 'flagged at risk';
+    };
+    const newItemsList = items.filter(isNewlyFlagged).map(f => ({ name: f.name, cause: causeOf(f) }));
+    const ongoingNames = items.filter(f => !isNewlyFlagged(f)).map(f => f.name);
+    return {
+      userName: userName?.trim() || 'Thomas',
+      newItems: newItemsList,
+      ongoingNames,
+    };
+  }, [mode, items, userName]);
+
+  const cacheKey = useMemo(() => {
+    if (!briefPayload) return null;
+    return `hamlet:juniorBrief:${todayKey()}:${hashKey(briefPayload)}`;
+  }, [briefPayload]);
+
+  const [aiBrief, setAiBrief] = useState<BriefContent | null>(() => {
+    // Synchronous read from localStorage so the first paint shows the
+    // cached AI version directly (no flash of the static fallback).
+    if (typeof window === 'undefined' || !cacheKey) return null;
+    try {
+      const raw = window.localStorage.getItem(cacheKey);
+      return raw ? JSON.parse(raw) as BriefContent : null;
+    } catch { return null; }
+  });
+
+  useEffect(() => {
+    if (mode !== 'risk' || !cacheKey || !briefPayload) return;
+    // Cache hit → already populated above; skip the fetch.
+    try {
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) { setAiBrief(JSON.parse(cached)); return; }
+    } catch { /* ignore */ }
+    // Miss → fetch from Gemini.
+    let cancelled = false;
+    fetch('/api/junior-brief', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(briefPayload),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then((data: BriefContent) => {
+        if (cancelled) return;
+        if (!data || !data.greeting) return;
+        try { window.localStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* quota */ }
+        setAiBrief(data);
+      })
+      .catch(e => console.warn('[JuniorBrief] Gemini brief fetch failed, using static fallback:', e));
+    return () => { cancelled = true; };
+  }, [mode, cacheKey, briefPayload]);
+
   // "Generated Xm ago" — pick the freshest of the cron run + last sync.
   const generatedIso = [refreshCronLastRunAt, lastSyncedAt]
     .filter((s): s is string => !!s && Number.isFinite(new Date(s).getTime()))
@@ -180,8 +280,29 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning 
       </span>
       <div className="flex-1 min-w-0">
         <div className="text-[12.5px] leading-[1.5] text-[var(--text)]">
-          <span className="font-medium" style={{ color: 'var(--ai)' }}>{lead}</span>{' '}
-          {summary}
+          {mode === 'risk' && aiBrief ? (
+            <>
+              <span className="font-medium" style={{ color: 'var(--ai)' }}>{aiBrief.greeting}</span>{' '}
+              {aiBrief.highlight && (
+                <>
+                  <span className="font-medium" style={{ color: 'var(--ai)' }}>{aiBrief.highlight}</span>
+                  {aiBrief.rest.startsWith(' ') || aiBrief.rest.startsWith(',') || aiBrief.rest.startsWith('—') ? '' : ' '}
+                </>
+              )}
+              {aiBrief.rest}
+              {aiBrief.outro && (
+                <>
+                  {' '}
+                  <span className="text-[var(--text-muted)]">{aiBrief.outro}</span>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="font-medium" style={{ color: 'var(--ai)' }}>{lead}</span>{' '}
+              {summary}
+            </>
+          )}
         </div>
         {generatedIso && (
           <div className="font-mono text-[10px] text-[var(--text-muted)] mt-1">
