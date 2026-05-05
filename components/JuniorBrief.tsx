@@ -92,6 +92,92 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning,
     setDismissed(true);
   }
 
+  // ── AI-generated brief (mode='risk' only) ─────────────────────────
+  // IMPORTANT: these hooks must run unconditionally on every render,
+  // ahead of the `items.length === 0 || dismissed` early-return below,
+  // or React will throw "Rendered fewer hooks than during the previous
+  // render" the moment the brief becomes empty / gets dismissed.
+  const briefPayload = useMemo(() => {
+    if (mode !== 'risk') return null;
+    const isNewlyFlagged = (f: Feature): boolean => {
+      const NEW_WINDOW_MS = 36 * 60 * 60 * 1000;
+      const cutoff = Date.now() - NEW_WINDOW_MS;
+      const lastRisk = (f.riskHistory ?? []).slice(-1)[0];
+      if (lastRisk && (lastRisk.to === 'red' || lastRisk.to === 'yellow')) {
+        const ts = lastRisk.iso ? Date.parse(lastRisk.iso) : Date.parse(`${lastRisk.date}T00:00:00+08:00`);
+        if (Number.isFinite(ts) && ts >= cutoff) return true;
+      }
+      const lastSlip = (f.versionChanges ?? []).slice(-1)[0];
+      if (lastSlip) {
+        const ts = lastSlip.iso ? Date.parse(lastSlip.iso) : Date.parse(`${lastSlip.date}T00:00:00+08:00`);
+        if (Number.isFinite(ts) && ts >= cutoff) return true;
+      }
+      return false;
+    };
+    const causeOf = (f: Feature): string => {
+      const slip = (f.versionChanges ?? []).slice(-1)[0];
+      if (slip) {
+        const reason = slip.reason || (f.riskNotes ?? [])[0] || '';
+        return reason
+          ? `slipped ${slip.from} → ${slip.to} due to ${reason}`
+          : `slipped ${slip.from} → ${slip.to}`;
+      }
+      const note = (f.riskNotes ?? [])[0];
+      return note || 'flagged at risk';
+    };
+    const newItemsList = items.filter(isNewlyFlagged).map(f => ({ name: f.name, cause: causeOf(f) }));
+    const ongoingNames = items.filter(f => !isNewlyFlagged(f)).map(f => f.name);
+    return {
+      userName: userName?.trim() || 'Thomas',
+      newItems: newItemsList,
+      ongoingNames,
+    };
+  }, [mode, items, userName]);
+
+  const cacheKey = useMemo(() => {
+    if (!briefPayload) return null;
+    return `hamlet:juniorBrief:${todayKey()}:${hashKey(briefPayload)}`;
+  }, [briefPayload]);
+
+  const [aiBrief, setAiBrief] = useState<BriefContent | null>(null);
+
+  // Sync-read from localStorage on mount + whenever the cache key changes.
+  // We do this in an effect rather than a useState initializer so the
+  // initial render is always SSR-safe and the value updates when the
+  // underlying input hash shifts.
+  useEffect(() => {
+    if (mode !== 'risk' || !cacheKey) { setAiBrief(null); return; }
+    try {
+      const raw = window.localStorage.getItem(cacheKey);
+      if (raw) { setAiBrief(JSON.parse(raw) as BriefContent); return; }
+    } catch { /* ignore */ }
+    setAiBrief(null);
+  }, [mode, cacheKey]);
+
+  useEffect(() => {
+    if (mode !== 'risk' || !cacheKey || !briefPayload) return;
+    // Cache already populated by the effect above? Skip the fetch.
+    try {
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) return;
+    } catch { /* ignore */ }
+    let cancelled = false;
+    fetch('/api/junior-brief', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(briefPayload),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then((data: BriefContent) => {
+        if (cancelled) return;
+        if (!data || !data.greeting) return;
+        try { window.localStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* quota */ }
+        setAiBrief(data);
+      })
+      .catch(e => console.warn('[JuniorBrief] Gemini brief fetch failed, using static fallback:', e));
+    return () => { cancelled = true; };
+  }, [mode, cacheKey, briefPayload]);
+
   if (items.length === 0 || dismissed) return null;
 
   // Lead text + body summary.
@@ -174,88 +260,6 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning,
       summary = `${phrases.slice(0, -1).join(', ')}, and ${phrases.at(-1)}.`;
     }
   }
-
-  // ── AI-generated brief (mode='risk' only) ─────────────────────────
-  // Build a stable signature from the categorized items so the
-  // localStorage cache invalidates when the underlying state shifts.
-  // Falls back to the static `lead`/`summary` above while loading or
-  // on any failure.
-  const briefPayload = useMemo(() => {
-    if (mode !== 'risk') return null;
-    const isNewlyFlagged = (f: Feature): boolean => {
-      const NEW_WINDOW_MS = 36 * 60 * 60 * 1000;
-      const cutoff = Date.now() - NEW_WINDOW_MS;
-      const lastRisk = (f.riskHistory ?? []).slice(-1)[0];
-      if (lastRisk && (lastRisk.to === 'red' || lastRisk.to === 'yellow')) {
-        const ts = lastRisk.iso ? Date.parse(lastRisk.iso) : Date.parse(`${lastRisk.date}T00:00:00+08:00`);
-        if (Number.isFinite(ts) && ts >= cutoff) return true;
-      }
-      const lastSlip = (f.versionChanges ?? []).slice(-1)[0];
-      if (lastSlip) {
-        const ts = lastSlip.iso ? Date.parse(lastSlip.iso) : Date.parse(`${lastSlip.date}T00:00:00+08:00`);
-        if (Number.isFinite(ts) && ts >= cutoff) return true;
-      }
-      return false;
-    };
-    const causeOf = (f: Feature): string => {
-      const slip = (f.versionChanges ?? []).slice(-1)[0];
-      if (slip) {
-        const reason = slip.reason || (f.riskNotes ?? [])[0] || '';
-        return reason
-          ? `slipped ${slip.from} → ${slip.to} due to ${reason}`
-          : `slipped ${slip.from} → ${slip.to}`;
-      }
-      const note = (f.riskNotes ?? [])[0];
-      return note || 'flagged at risk';
-    };
-    const newItemsList = items.filter(isNewlyFlagged).map(f => ({ name: f.name, cause: causeOf(f) }));
-    const ongoingNames = items.filter(f => !isNewlyFlagged(f)).map(f => f.name);
-    return {
-      userName: userName?.trim() || 'Thomas',
-      newItems: newItemsList,
-      ongoingNames,
-    };
-  }, [mode, items, userName]);
-
-  const cacheKey = useMemo(() => {
-    if (!briefPayload) return null;
-    return `hamlet:juniorBrief:${todayKey()}:${hashKey(briefPayload)}`;
-  }, [briefPayload]);
-
-  const [aiBrief, setAiBrief] = useState<BriefContent | null>(() => {
-    // Synchronous read from localStorage so the first paint shows the
-    // cached AI version directly (no flash of the static fallback).
-    if (typeof window === 'undefined' || !cacheKey) return null;
-    try {
-      const raw = window.localStorage.getItem(cacheKey);
-      return raw ? JSON.parse(raw) as BriefContent : null;
-    } catch { return null; }
-  });
-
-  useEffect(() => {
-    if (mode !== 'risk' || !cacheKey || !briefPayload) return;
-    // Cache hit → already populated above; skip the fetch.
-    try {
-      const cached = window.localStorage.getItem(cacheKey);
-      if (cached) { setAiBrief(JSON.parse(cached)); return; }
-    } catch { /* ignore */ }
-    // Miss → fetch from Gemini.
-    let cancelled = false;
-    fetch('/api/junior-brief', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(briefPayload),
-    })
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then((data: BriefContent) => {
-        if (cancelled) return;
-        if (!data || !data.greeting) return;
-        try { window.localStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* quota */ }
-        setAiBrief(data);
-      })
-      .catch(e => console.warn('[JuniorBrief] Gemini brief fetch failed, using static fallback:', e));
-    return () => { cancelled = true; };
-  }, [mode, cacheKey, briefPayload]);
 
   // "Generated Xm ago" — pick the freshest of the cron run + last sync.
   const generatedIso = [refreshCronLastRunAt, lastSyncedAt]
