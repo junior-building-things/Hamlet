@@ -44,6 +44,10 @@ export default function Home() {
   });
   const [showAddModal,  setShowAddModal]  = useState(false);
   const [pinnedId,      setPinnedId]      = useState<string | null>(null);
+  // Set right after a "New Feature" create succeeds — ProjectView
+  // watches this and pops the drawer for the matching feature, then
+  // calls back to clear it. Avoids the legacy in-modal edit UI.
+  const [openDrawerForId, setOpenDrawerForId] = useState<string | null>(null);
   const [user,          setUser]          = useState<{ name: string; avatarUrl: string } | undefined>();
 
   // Sync URL when view changes
@@ -130,6 +134,7 @@ export default function Home() {
    */
   function handleTempAdded(feature: Feature) {
     setFeatures(prev => [...prev, feature]);
+    setOpenDrawerForId(feature.id);
   }
 
   /** Replace temp feature with the real one, or remove it on failure */
@@ -137,6 +142,10 @@ export default function Home() {
     if (feature) {
       console.log('[pin] setting pinnedId:', feature.id, 'tempId:', tempId);
       setFeatures(prev => prev.map(f => f.id === tempId ? feature : f));
+      // If the drawer is currently keyed to the temp id, re-key it
+      // to the real id so the drawer doesn't close when the temp
+      // entry is replaced.
+      setOpenDrawerForId(prev => prev === tempId ? feature.id : prev);
       // Pin the new feature to the top of the list for 30 seconds
       setPinnedId(feature.id);
       // Scroll to top so the pinned feature is visible
@@ -182,7 +191,14 @@ export default function Home() {
               an auto-height div) — otherwise it grows with content
               and the page-level scroll takes over. */}
           <div className={`h-full ${activeView === 'project' ? '' : 'hidden'}`}>
-            <ProjectView features={features} setFeatures={setFeatures} pinnedId={pinnedId} onClearPin={() => setPinnedId(null)} />
+            <ProjectView
+              features={features}
+              setFeatures={setFeatures}
+              pinnedId={pinnedId}
+              onClearPin={() => setPinnedId(null)}
+              openDrawerForId={openDrawerForId}
+              onDrawerOpened={() => setOpenDrawerForId(null)}
+            />
           </div>
           {activeView === 'chat' && (
             <ChatView onFeatureCreated={f => setFeatures(prev => [f, ...prev])} />

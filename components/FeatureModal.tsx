@@ -376,8 +376,12 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
         techOwner:       lookup(TECH_OWNERS(), form.techOwner),
       };
       onSave(newFeature);
-      setCreatedFeature(newFeature);
       toast.success(`"${form.name.trim()}" created`);
+      // Close the add modal — page.tsx pops the new sidebar drawer
+      // for this feature instead of dropping into the legacy in-modal
+      // edit UI.
+      onClose();
+      return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Create failed';
       setCreateError(msg);

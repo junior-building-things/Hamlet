@@ -90,9 +90,16 @@ interface Props {
   setFeatures: React.Dispatch<React.SetStateAction<Feature[]>>;
   pinnedId?: string | null;
   onClearPin?: () => void;
+  /** When set, pop the drawer for the matching feature on the next
+   *  render where that id exists in the list. Used by the page after
+   *  a New Feature create completes. */
+  openDrawerForId?: string | null;
+  /** Called once the drawer has been opened for `openDrawerForId` so
+   *  the page can clear the signal. */
+  onDrawerOpened?: () => void;
 }
 
-export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Props) {
+export function ProjectView({ features, setFeatures, pinnedId, onClearPin, openDrawerForId, onDrawerOpened }: Props) {
   const [search,         setSearch]         = useState('');
   const [statusFilter,   setStatusFilterState]   = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
@@ -123,6 +130,17 @@ export function ProjectView({ features, setFeatures, pinnedId, onClearPin }: Pro
     markViewed(f.id);
     setDrawerFeature(f);
   }, [markViewed]);
+
+  // Page asks to pop the drawer for a specific feature (e.g. right
+  // after New Feature create succeeded). Match by id; if the feature
+  // is in the list, open + acknowledge.
+  useEffect(() => {
+    if (!openDrawerForId) return;
+    const f = features.find(x => x.id === openDrawerForId);
+    if (!f) return;
+    openDrawer(f);
+    onDrawerOpened?.();
+  }, [openDrawerForId, features, openDrawer, onDrawerOpened]);
 
   // ── Persisted group + sort preferences ───────────────────────────────────
 
