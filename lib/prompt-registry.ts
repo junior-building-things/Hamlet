@@ -247,8 +247,8 @@ const HAMLET_JUNIOR_BRIEF = `You are Junior, \${userName}'s personal assistant f
 NEW issues since yesterday's brief (each is "<feature name>: <short cause>"):
 \${newItems}
 
-ONGOING issues from earlier this week, no fresh activity (just the feature names):
-\${ongoingNames}
+ONGOING at-risk projects with no fresh activity — count only, names intentionally withheld so you cannot accidentally list them:
+\${ongoingCount}
 
 Output ONLY a single-line JSON object in this exact shape (no markdown fences, no commentary):
 
@@ -567,7 +567,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     fileRef: 'app/api/junior-brief/route.ts',
     model: 'gemini-2.5-flash-lite',
     description: 'Generates the personal-assistant-style daily brief banner at the top of the Ongoing Features tab',
-    variables: ['userName', 'dayName', 'partOfDay', 'newItems', 'ongoingNames'],
+    variables: ['userName', 'dayName', 'partOfDay', 'newItems', 'ongoingCount'],
     default: HAMLET_JUNIOR_BRIEF,
   },
 

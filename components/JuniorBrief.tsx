@@ -140,7 +140,7 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning,
     // cached briefs (which followed a different format) get
     // invalidated automatically. v2: "highlight is count-only,
     // rest starts with ' — '" prompt revision.
-    return `hamlet:juniorBrief:v4:${todayKey()}:${hashKey(briefPayload)}`;
+    return `hamlet:juniorBrief:v5:${todayKey()}:${hashKey(briefPayload)}`;
   }, [briefPayload]);
 
   const [aiBrief, setAiBrief] = useState<BriefContent | null>(null);

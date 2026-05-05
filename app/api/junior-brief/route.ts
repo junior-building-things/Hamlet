@@ -30,7 +30,11 @@ export async function POST(req: NextRequest) {
 
   const userName = body.userName?.trim() || 'Thomas';
   const newItems = (body.newItems ?? []).slice(0, 6);
-  const ongoingNames = (body.ongoingNames ?? []).slice(0, 12);
+  // We deliberately don't pass the ongoing feature NAMES into the
+  // prompt — only the count. Gemini was ignoring "don't list them"
+  // instructions and surfacing the names anyway; passing just the
+  // count makes the rule physically enforceable.
+  const ongoingCount = (body.ongoingNames ?? []).length;
 
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
@@ -53,9 +57,7 @@ export async function POST(req: NextRequest) {
   const newItemsBlock = newItems.length === 0
     ? '(none)'
     : newItems.map(i => `- ${i.name}: ${i.cause || '(no specific cause inferred)'}`).join('\n');
-  const ongoingBlock = ongoingNames.length === 0
-    ? '(none)'
-    : ongoingNames.map(n => `- ${n}`).join('\n');
+  const ongoingCountBlock = String(ongoingCount);
 
   const def = getPromptDef('hamlet.junior_brief');
   const tmpl = await getPrompt('hamlet.junior_brief', def?.default ?? '');
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest) {
     dayName,
     partOfDay,
     newItems: newItemsBlock,
-    ongoingNames: ongoingBlock,
+    ongoingCount: ongoingCountBlock,
   });
 
   try {
