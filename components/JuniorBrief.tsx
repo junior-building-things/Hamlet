@@ -293,7 +293,7 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning,
               <span className="font-medium" style={{ color: 'var(--ai)' }}>{aiBrief.greeting}</span>{' '}
               {aiBrief.highlight && (
                 <>
-                  <span className="font-medium" style={{ color: 'var(--ai)' }}>{aiBrief.highlight}</span>
+                  {aiBrief.highlight}
                   {' — '}
                 </>
               )}
