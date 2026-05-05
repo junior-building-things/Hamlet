@@ -304,7 +304,7 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning,
               {aiBrief.outro && (
                 <>
                   {' '}
-                  <span className="text-[var(--text-muted)]">{aiBrief.outro}</span>
+                  {aiBrief.outro}
                 </>
               )}
             </>
