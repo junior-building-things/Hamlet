@@ -84,17 +84,15 @@ function LoginContent() {
             </p>
           )}
 
-          {/* Login button — solid --text background to match the
-              "New Feature" button style elsewhere in the app. */}
-          <a
-            href="/api/auth/login"
-            className="mt-5 mx-auto max-w-[360px] flex items-center justify-center gap-2.5 px-5 py-3 rounded-[var(--r-md)] text-[13px] font-medium tracking-[-0.01em] bg-[var(--text)] text-[var(--bg)] transition-transform hover:-translate-y-px"
-            style={{ boxShadow: '0 0 0 1px var(--hairline-strong), var(--shadow-sm)' }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/lark.png" alt="" width={18} height={18} className="rounded-[4px]" />
-            Log in with Lark
-          </a>
+          {/* Login button — same chip style as the "Complete" button
+              on each todo row (.hm-btn .hm-btn-ai). */}
+          <div className="mt-5 flex justify-center">
+            <a href="/api/auth/login" className="hm-btn hm-btn-ai">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/lark.png" alt="" width={14} height={14} className="rounded-[3px]" />
+              Log in with Lark
+            </a>
+          </div>
 
           {/* Footer */}
           <p className="mt-6 text-[12px] text-[var(--text-muted)]">
