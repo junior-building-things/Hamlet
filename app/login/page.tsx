@@ -92,7 +92,7 @@ function LoginContent() {
             style={{ boxShadow: '0 0 0 1px var(--hairline-strong), var(--shadow-sm)' }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/lark_logo.png" alt="" width={18} height={18} />
+            <img src="/lark.png" alt="" width={18} height={18} className="rounded-[4px]" />
             Log in with Lark
           </a>
 
