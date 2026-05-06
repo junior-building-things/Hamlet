@@ -14,21 +14,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 const FEATURES = [
-  {
-    icon: <LayoutList className="w-5 h-5 text-blue-400" />,
-    bg:   'bg-blue-400/10',
-    text: 'Track all your features in one place',
-  },
-  {
-    icon: <FileText className="w-5 h-5 text-blue-400" />,
-    bg:   'bg-blue-400/10',
-    text: 'Auto-generate Meego, PRD, and compliance review',
-  },
-  {
-    icon: <RefreshCw className="w-5 h-5 text-emerald-400" />,
-    bg:   'bg-emerald-400/10',
-    text: 'Connect to your agent of choice',
-  },
+  { icon: LayoutList, text: 'Track all your features in one place' },
+  { icon: FileText,   text: 'Auto-generate Meego, PRD, and compliance review' },
+  { icon: RefreshCw,  text: 'Connect to your agent of choice' },
 ];
 
 function LoginContent() {
@@ -36,59 +24,83 @@ function LoginContent() {
   const error  = params.get('error');
 
   return (
-    <div className="min-h-screen bg-transparent flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    // relative + z-10 so the card sits above the fixed .app-bg dot
+    // pattern — same wrapper as /access-limited.
+    <div className="min-h-screen flex items-center justify-center p-4 relative z-10">
+      <div className="w-full max-w-xl">
+        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-10 shadow-2xl text-center">
 
-        {/* Logo + wordmark */}
-        <div className="text-center mb-8 flex flex-col items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/hamlet.png" alt="Hamlet" className="w-16 h-16 object-contain" />
-          <h1 className="text-5xl text-[var(--foreground)]" style={{ fontFamily: 'var(--font-newsreader)' }}>Hamlet</h1>
-        </div>
-
-        <div className="bg-[var(--background)] border border-[var(--border)] rounded-2xl p-8 shadow-2xl flex flex-col gap-6">
-
-          {/* Feature bullets */}
-          <div className="flex flex-col gap-4">
-            {FEATURES.map(({ icon, bg, text }) => (
-              <div key={text} className="flex items-center gap-4">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}`}>
-                  {icon}
-                </div>
-                <span className="text-sm font-semibold text-[var(--foreground)] leading-snug">{text}</span>
-              </div>
-            ))}
+          {/* Wordmark — inline mono pill, same treatment as the
+              "Hamlet" pill on /access-limited. */}
+          <div className="mb-6 flex justify-center">
+            <span
+              className="inline-flex items-baseline px-3 py-1 rounded-[8px] text-[24px]"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                background: 'var(--ai-soft)',
+                color: 'var(--ai)',
+                fontWeight: 500,
+              }}
+            >
+              Hamlet
+            </span>
           </div>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-[var(--card-hover)]" />
-            <span className="text-[11px] font-semibold tracking-widest text-gray-500 uppercase">Continue with</span>
-            <div className="flex-1 h-px bg-[var(--card-hover)]" />
+          {/* Feature bullets — centred column, soft mono labels, --ai
+              accent for the icons so the whole card reads as one
+              colour family. */}
+          <ul className="mt-2 flex flex-col gap-3 max-w-[360px] mx-auto text-left">
+            {FEATURES.map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-center gap-3">
+                <span
+                  className="grid place-items-center w-8 h-8 rounded-[8px] shrink-0"
+                  style={{ background: 'var(--ai-soft)' }}
+                >
+                  <Icon className="w-4 h-4" style={{ color: 'var(--ai)' }} />
+                </span>
+                <span className="text-[13.5px] leading-[1.4] text-[var(--text)]">{text}</span>
+              </li>
+            ))}
+          </ul>
+
+          {/* Divider — Continue with */}
+          <div className="mt-7 flex items-center gap-3 max-w-[360px] mx-auto">
+            <div className="flex-1 h-px bg-[var(--hairline)]" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-dim)]">Continue with</span>
+            <div className="flex-1 h-px bg-[var(--hairline)]" />
           </div>
 
           {/* Error */}
           {error && (
-            <p className="text-center text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-2">
+            <p
+              className="mt-5 mx-auto max-w-[360px] text-[12px] rounded-[8px] px-4 py-2"
+              style={{
+                color: 'var(--rose)',
+                background: 'oklch(0.72 0.18 22 / 0.10)',
+                border: '1px solid oklch(0.72 0.18 22 / 0.25)',
+              }}
+            >
               {ERROR_MESSAGES[error] ?? 'An error occurred — please try again.'}
             </p>
           )}
 
-          {/* Login button */}
+          {/* Login button — solid --text background to match the
+              "New Feature" button style elsewhere in the app. */}
           <a
             href="/api/auth/login"
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 font-semibold text-sm px-5 py-3 rounded-xl transition-colors shadow"
+            className="mt-5 mx-auto max-w-[360px] flex items-center justify-center gap-2.5 px-5 py-3 rounded-[var(--r-md)] text-[13px] font-medium tracking-[-0.01em] bg-[var(--text)] text-[var(--bg)] transition-transform hover:-translate-y-px"
+            style={{ boxShadow: '0 0 0 1px var(--hairline-strong), var(--shadow-sm)' }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/lark_logo.png" alt="" width={20} height={20} />
+            <img src="/lark_logo.png" alt="" width={18} height={18} />
             Log in with Lark
           </a>
 
+          {/* Footer */}
+          <p className="mt-6 text-[12px] text-[var(--text-muted)]">
+            Access restricted to ByteDance employees.
+          </p>
         </div>
-
-        <p className="text-center text-xs text-gray-600 mt-6">
-          Access restricted to ByteDance employees.
-        </p>
       </div>
     </div>
   );

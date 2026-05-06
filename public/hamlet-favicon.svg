@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Letter H in Geist Mono (with monospace fallback for browsers that don't have it) -->
+  <text
+    x="16"
+    y="22.5"
+    font-family="Geist Mono, ui-monospace, SF Mono, Menlo, Consolas, monospace"
+    font-size="22"
+    font-weight="500"
+    fill="oklch(0.55 0.13 220)"
+    text-anchor="middle"
+  >H</text>
+</svg>
