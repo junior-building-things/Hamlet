@@ -2,7 +2,6 @@
 
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { LayoutList, FileText, RefreshCw } from 'lucide-react';
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_state:  'Authentication failed — please try again.',
@@ -12,12 +11,6 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_user:        'Login failed — please try again.',
   access_limited: 'Sorry, access is currently limited. Stay tuned!',
 };
-
-const FEATURES = [
-  { icon: LayoutList, text: 'Track all your features in one place' },
-  { icon: FileText,   text: 'Auto-generate Meego, PRD, and compliance review' },
-  { icon: RefreshCw,  text: 'Connect to your agent of choice' },
-];
 
 function LoginContent() {
   const params = useSearchParams();
@@ -46,22 +39,11 @@ function LoginContent() {
             </span>
           </div>
 
-          {/* Feature bullets — centred column, soft mono labels, --ai
-              accent for the icons so the whole card reads as one
-              colour family. */}
-          <ul className="mt-2 flex flex-col gap-3 max-w-[360px] mx-auto text-left">
-            {FEATURES.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-center gap-3">
-                <span
-                  className="grid place-items-center w-8 h-8 rounded-[8px] shrink-0"
-                  style={{ background: 'var(--ai-soft)' }}
-                >
-                  <Icon className="w-4 h-4" style={{ color: 'var(--ai)' }} />
-                </span>
-                <span className="text-[13.5px] leading-[1.4] text-[var(--text)]">{text}</span>
-              </li>
-            ))}
-          </ul>
+          {/* Body — same copy as /access-limited. */}
+          <p className="mt-2 text-[14px] leading-[1.55] text-[var(--text-muted)]">
+            Hamlet is an internal AI co-pilot for the product team — it<br />
+            watches features, drafts updates, and keeps PMs unblocked.
+          </p>
 
           {/* Divider — Continue with */}
           <div className="mt-7 flex items-center gap-3 max-w-[360px] mx-auto">
