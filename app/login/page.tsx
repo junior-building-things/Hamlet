@@ -87,7 +87,7 @@ function LoginContent() {
           </div>
 
           {/* Footer */}
-          <p className="mt-6 text-[12px] text-[var(--text-muted)]">
+          <p className="mt-3 text-[12px] text-[var(--text-muted)]">
             Access restricted to ByteDance employees.
           </p>
         </div>
