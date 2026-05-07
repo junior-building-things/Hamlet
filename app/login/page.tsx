@@ -44,28 +44,19 @@ function LoginContent() {
               }}
             >
               Hamlet
-            </span><br />
-            with your Lark account
+            </span>
           </h1>
 
           {/* Body */}
           <p className="mt-5 text-[14px] leading-[1.55] text-[var(--text-muted)]">
-            Hamlet uses your Lark identity to sync chats, post digests, and<br />
-            respect your group permissions. We never read DMs and only<br />
-            access groups you&apos;ve added Junior to.
+            Hamlet is an internal AI co-pilot for the product team — it<br />
+            watches features, drafts updates, and keeps PMs unblocked.
           </p>
-
-          {/* Divider — Continue with */}
-          <div className="mt-7 flex items-center gap-3 max-w-[360px] mx-auto">
-            <div className="flex-1 h-px bg-[var(--hairline)]" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-dim)]">Continue with</span>
-            <div className="flex-1 h-px bg-[var(--hairline)]" />
-          </div>
 
           {/* Error */}
           {error && (
             <p
-              className="mt-5 mx-auto max-w-[360px] text-[12px] rounded-[8px] px-4 py-2"
+              className="mt-6 mx-auto text-[12px] rounded-[8px] px-4 py-2"
               style={{
                 color: 'var(--rose)',
                 background: 'oklch(0.72 0.18 22 / 0.10)',
@@ -76,19 +67,23 @@ function LoginContent() {
             </p>
           )}
 
-          {/* Login button — solid --text background, semibold label. */}
+          {/* Continue-with-Lark CTA — full-width, dark, with the
+              lark logo housed in a small white tile. */}
           <a
             href="/api/auth/login"
-            className="mt-5 mx-auto max-w-[360px] flex items-center justify-center gap-2.5 px-5 py-3 rounded-[var(--r-md)] text-[13px] font-semibold tracking-[-0.01em] bg-[var(--text)] text-[var(--bg)] transition-transform hover:-translate-y-px"
+            className="mt-7 w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-[var(--r-md)] text-[14px] font-semibold tracking-[-0.01em] bg-[var(--text)] text-[var(--bg)] transition-transform hover:-translate-y-px"
             style={{ boxShadow: '0 0 0 1px var(--hairline-strong), var(--shadow-sm)' }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/lark.png" alt="" width={18} height={18} className="rounded-[4px]" />
-            Log in with Lark
+            <span className="grid place-items-center w-7 h-7 rounded-[6px] bg-white shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/lark.png" alt="" width={18} height={18} className="rounded-[3px]" />
+            </span>
+            Continue with Lark
           </a>
 
-          {/* Footer */}
-          <p className="mt-6 text-[12px] text-[var(--text-muted)]">
+          {/* Hairline + footer */}
+          <div className="mt-6 h-px bg-[var(--hairline)]" />
+          <p className="mt-4 text-[12px] text-[var(--text-muted)]">
             Access restricted to ByteDance employees.
           </p>
         </div>
