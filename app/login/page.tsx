@@ -23,9 +23,28 @@ function LoginContent() {
       <div className="w-full max-w-xl">
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-10 shadow-2xl text-center">
 
-          {/* Wordmark — inline mono pill, same treatment as the
-              "Hamlet" pill on /access-limited. */}
-          <div className="mb-6 flex justify-center">
+          {/* App icon + wordmark — icon is the 28×28 hex/cube glyph
+              from the design's brand strip, placed inline left of
+              the "Hamlet" pill. */}
+          <div className="mb-6 flex justify-center items-center gap-2.5">
+            <span
+              className="grid place-items-center w-7 h-7 rounded-[6px]"
+              style={{
+                background: 'var(--ai-soft)',
+                color: 'var(--ai)',
+                border: '1px solid oklch(0.82 0.14 var(--ai-h) / 0.3)',
+              }}
+              aria-hidden
+            >
+              <svg
+                viewBox="0 0 24 24" width="14" height="14"
+                fill="none" stroke="currentColor"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+              >
+                <path d="M12 2 L20 7 L20 17 L12 22 L4 17 L4 7 Z" />
+                <path d="M12 2 L12 12 M12 12 L20 7 M12 12 L4 7 M12 12 L12 22" />
+              </svg>
+            </span>
             <span
               className="inline-flex items-baseline px-3 py-1 rounded-[8px] text-[24px]"
               style={{
