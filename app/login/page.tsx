@@ -84,8 +84,11 @@ function LoginContent() {
             </a>
           </div>
 
-          {/* Hairline + footer */}
-          <div className="mt-6 h-px bg-[var(--hairline)]" />
+          {/* Hairline + footer — divider sized to match the CTA. */}
+          <div
+            className="mt-6 h-px bg-[var(--hairline)] mx-auto"
+            style={{ width: 374 }}
+          />
           <p className="mt-4 text-[12px] text-[var(--text-muted)]">
             Access restricted to ByteDance employees.
           </p>
