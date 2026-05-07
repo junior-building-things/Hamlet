@@ -23,22 +23,19 @@ function LoginContent() {
       <div className="w-full max-w-xl">
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-10 shadow-2xl text-center">
 
-          {/* App icon + wordmark — hex/cube glyph from the design,
-              rendered bare (no background, no border) inline left of
-              the "Hamlet" pill. */}
-          <div className="mb-6 flex justify-center items-center gap-2.5">
-            <svg
-              viewBox="0 0 24 24" width="22" height="22"
-              fill="none" stroke="currentColor"
-              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-              style={{ color: 'var(--ai)' }}
-              aria-hidden
-            >
-              <path d="M12 2 L20 7 L20 17 L12 22 L4 17 L4 7 Z" />
-              <path d="M12 2 L12 12 M12 12 L20 7 M12 12 L4 7 M12 12 L12 22" />
-            </svg>
+          {/* — SINGLE SIGN-ON — eyebrow */}
+          <div
+            className="text-[12px] tracking-[0.18em] uppercase text-[var(--ai)] mb-5"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            — Single sign-on —
+          </div>
+
+          {/* Headline with inline mono pill on the brand name */}
+          <h1 className="text-[34px] leading-[1.15] font-bold tracking-[-0.01em] text-[var(--text)]">
+            Sign in to{' '}
             <span
-              className="inline-flex items-baseline px-3 py-1 rounded-[8px] text-[24px]"
+              className="inline-flex items-baseline px-2.5 py-0.5 rounded-[6px] align-baseline"
               style={{
                 fontFamily: 'var(--font-mono)',
                 background: 'var(--ai-soft)',
@@ -47,13 +44,15 @@ function LoginContent() {
               }}
             >
               Hamlet
-            </span>
-          </div>
+            </span><br />
+            with your Lark account
+          </h1>
 
-          {/* Body — same copy as /access-limited. */}
-          <p className="mt-2 text-[14px] leading-[1.55] text-[var(--text-muted)]">
-            Hamlet is an internal AI co-pilot for the product team — it<br />
-            watches features, drafts updates, and keeps PMs unblocked.
+          {/* Body */}
+          <p className="mt-5 text-[14px] leading-[1.55] text-[var(--text-muted)]">
+            Hamlet uses your Lark identity to sync chats, post digests, and<br />
+            respect your group permissions. We never read DMs and only<br />
+            access groups you&apos;ve added Junior to.
           </p>
 
           {/* Divider — Continue with */}
