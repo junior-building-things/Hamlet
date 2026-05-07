@@ -78,10 +78,8 @@ function LoginContent() {
                 boxShadow: '0 0 0 1px var(--hairline-strong), var(--shadow-sm)',
               }}
             >
-              <span className="grid place-items-center w-6 h-6 rounded-[4px] bg-white shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/lark.png" alt="" width={16} height={16} className="rounded-[3px]" />
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/lark.png" alt="" width={18} height={18} className="rounded-[3px] shrink-0" />
               Continue with Lark
             </a>
           </div>
