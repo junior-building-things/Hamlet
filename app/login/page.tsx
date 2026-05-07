@@ -67,19 +67,21 @@ function LoginContent() {
             </p>
           )}
 
-          {/* Continue-with-Lark CTA — full-width, dark, with the
-              lark logo housed in a small white tile. */}
-          <a
-            href="/api/auth/login"
-            className="mt-7 w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-[var(--r-md)] text-[14px] font-semibold tracking-[-0.01em] bg-[var(--text)] text-[var(--bg)] transition-transform hover:-translate-y-px"
-            style={{ boxShadow: '0 0 0 1px var(--hairline-strong), var(--shadow-sm)' }}
-          >
-            <span className="grid place-items-center w-7 h-7 rounded-[6px] bg-white shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/lark.png" alt="" width={18} height={18} className="rounded-[3px]" />
-            </span>
-            Continue with Lark
-          </a>
+          {/* Continue-with-Lark CTA — dark, sized for a single-action
+              page. Centred, not full-width. */}
+          <div className="mt-7 flex justify-center">
+            <a
+              href="/api/auth/login"
+              className="inline-flex items-center justify-center gap-2.5 px-4 py-2 rounded-[var(--r-md)] text-[13px] font-semibold tracking-[-0.01em] bg-[var(--text)] text-[var(--bg)] transition-transform hover:-translate-y-px"
+              style={{ boxShadow: '0 0 0 1px var(--hairline-strong), var(--shadow-sm)' }}
+            >
+              <span className="grid place-items-center w-5 h-5 rounded-[4px] bg-white shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/lark.png" alt="" width={14} height={14} className="rounded-[2px]" />
+              </span>
+              Continue with Lark
+            </a>
+          </div>
 
           {/* Hairline + footer */}
           <div className="mt-6 h-px bg-[var(--hairline)]" />
