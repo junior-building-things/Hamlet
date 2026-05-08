@@ -3052,6 +3052,7 @@ export async function buildAbConcludedSection(
   abReportUrl: string,
   libraUrl: string,
   userAccessToken?: string,
+  botToken?: string,
 ): Promise<{
   cardContent: string;
   cardImages: Array<{ image_key: string; alt?: string }>;
@@ -3149,11 +3150,41 @@ export async function buildAbConcludedSection(
     }
   }
 
-  // Trailing cc@Thomas mention (matches AB-open).
-  postParagraphs.push([
+  // Trailing cc — PM (Thomas) plus the same stakeholder set the
+  // PRD-change message uses (Tech_Owner, Server, Android, iOS, QA, DA).
+  // Lark `at` tags in posts need user_id (open_id), not email, so we
+  // resolve the POC emails via batch_get_id when a bot token is
+  // available. Without a token we fall back to PM-only.
+  const ccInlines: PostParagraph = [
     { tag: 'text', text: 'cc' },
     { tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID },
-  ]);
+  ];
+  if (botToken) {
+    const POC_ROLE_KEYS = ['Tech_Owner', 'Server', 'Android', 'iOS', 'QA', 'DA'];
+    const pocEmails: string[] = [];
+    for (const roleKey of POC_ROLE_KEYS) {
+      for (const memberName of feature.roles[roleKey] ?? []) {
+        const email = feature.roleEmails[memberName];
+        if (email && !pocEmails.includes(email)) pocEmails.push(email);
+      }
+    }
+    if (pocEmails.length > 0) {
+      try {
+        const map = await resolveOpenIds(pocEmails, botToken);
+        const seen = new Set<string>([AB_OPEN_MENTION_OPEN_ID]);
+        for (const email of pocEmails) {
+          const openId = map[email];
+          if (openId && !seen.has(openId)) {
+            seen.add(openId);
+            ccInlines.push({ tag: 'at', user_id: openId });
+          }
+        }
+      } catch (e) {
+        console.warn(`[digests] AB-concluded POC open_id resolve failed for "${feature.name}":`, e);
+      }
+    }
+  }
+  postParagraphs.push(ccInlines);
 
   return { cardContent, cardImages, postTitle, postParagraphs };
 }
@@ -3259,7 +3290,7 @@ export async function sendAbConcludedDigestCard(
   const built: Array<PromiseSettledResult<{ cardContent: string; cardImages: Array<{ image_key: string; alt?: string }>; postTitle: string; postParagraphs: PostParagraph[] }>> = [];
   for (const { feature, abReportUrl, libraUrl } of features) {
     try {
-      const value = await buildAbConcludedSection(feature, abReportUrl, libraUrl, userAccessToken);
+      const value = await buildAbConcludedSection(feature, abReportUrl, libraUrl, userAccessToken, token);
       built.push({ status: 'fulfilled', value });
     } catch (e) {
       built.push({ status: 'rejected', reason: e });
