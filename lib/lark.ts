@@ -3212,14 +3212,18 @@ export async function resolveOpenIds(
       );
       const d = await res.json() as {
         code: number;
-        data?: { user_list?: Array<{ email?: string; user_id?: string }> };
+        msg?: string;
+        data?: { user_list?: Array<{ email?: string; user_id?: string; mobile?: string }> };
       };
+      console.log(`[lark] resolveOpenIds batch=${JSON.stringify(batch)} code=${d.code} msg="${d.msg ?? ''}" user_list=${JSON.stringify(d.data?.user_list ?? [])}`);
       if (d.code === 0) {
         for (const u of d.data?.user_list ?? []) {
           if (u.email && u.user_id) result[u.email] = u.user_id;
         }
       }
-    } catch { /* skip */ }
+    } catch (e) {
+      console.warn(`[lark] resolveOpenIds threw for batch=${JSON.stringify(batch)}:`, e);
+    }
   }
   return result;
 }
