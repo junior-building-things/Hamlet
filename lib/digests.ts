@@ -3284,6 +3284,17 @@ export async function sendAbConcludedDigestCard(
           value: { action: 'send_ab_open_to_pm_group', postTitle, postParagraphs },
         },
         {
+          text: 'Send to Feature Group',
+          type: 'default',
+          value: {
+            action: 'send_ab_concluded_to_feature_group',
+            postTitle,
+            postParagraphs,
+            featureWorkItemId: f.feature.workItemId,
+            featureName: f.feature.name,
+          },
+        },
+        {
           text: 'Edit',
           type: 'default',
           value: {

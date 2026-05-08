@@ -217,6 +217,90 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (actionName === 'send_ab_concluded_to_feature_group') {
+    // Same payload shape as send_ab_open_to_pm_group, but the target
+    // chat is the feature's own Lark group (resolved from the cached
+    // chatId on the Feature record, which the refresh-feature-cache
+    // cron populates from the juniorChats discovery).
+    const postTitle = String(actionValue?.postTitle ?? '');
+    const postParagraphs = Array.isArray(actionValue?.postParagraphs)
+      ? (actionValue.postParagraphs as PostParagraph[])
+      : null;
+    const featureWorkItemId = String(actionValue?.featureWorkItemId ?? '');
+    const featureName = String(actionValue?.featureName ?? '');
+    if (!postParagraphs || postParagraphs.length === 0) {
+      return NextResponse.json({ toast: { type: 'error', content: 'Missing post payload' } });
+    }
+    if (!featureWorkItemId) {
+      return NextResponse.json({ toast: { type: 'error', content: 'Missing feature id' } });
+    }
+
+    // Resolve the feature's chatId. Prefer the UI feature cache, fall
+    // back to the juniorChats list in DigestState if the cache miss.
+    let targetChatId = '';
+    let prdUrl = '';
+    try {
+      const { readFeatureCache } = await import('@/lib/feature-cache');
+      const featureCache = await readFeatureCache();
+      const feature = featureCache?.features.find(f => (f.meegoIssueId ?? f.id) === featureWorkItemId);
+      if (feature) {
+        targetChatId = feature.chatId ?? '';
+        prdUrl = feature.prd ?? '';
+      }
+    } catch (e) {
+      console.warn('[card-action] feature lookup failed:', e);
+    }
+    if (!targetChatId) {
+      try {
+        const state = await loadDigestState();
+        const jc = state.juniorChatsCache?.chats?.find(c => c.meegoId === featureWorkItemId);
+        if (jc) targetChatId = jc.chatId;
+      } catch { /* ignore */ }
+    }
+    if (!targetChatId) {
+      console.warn(`[card-action] no feature chatId for ${featureWorkItemId} (${featureName})`);
+      return NextResponse.json({
+        toast: { type: 'error', content: 'No feature group chat found' },
+      });
+    }
+
+    try {
+      const botToken = await getLarkBotToken();
+      const id = await sendPostToChat(targetChatId, postTitle, postParagraphs, botToken);
+      if (!id) {
+        return NextResponse.json({
+          toast: { type: 'error', content: 'Failed to send — bot may not be in chat' },
+        }, { status: 500 });
+      }
+      console.log(`[card-action] sent AB-concluded post to feature group ${targetChatId}: msg_id=${id}`);
+      // Mirror the postFeatureMap bookkeeping the PM-group handler does
+      // so thread replies on this post still resolve to the right feature.
+      try {
+        const state = await loadDigestState();
+        if (!state.postFeatureMap) state.postFeatureMap = {};
+        state.postFeatureMap[id] = {
+          workItemId: featureWorkItemId,
+          featureName,
+          prdUrl,
+          sentAtIso: new Date().toISOString(),
+        };
+        const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+        for (const [k, v] of Object.entries(state.postFeatureMap)) {
+          if (new Date(v.sentAtIso).getTime() < cutoff) delete state.postFeatureMap[k];
+        }
+        await saveDigestState(state);
+      } catch (e) {
+        console.warn('[card-action] postFeatureMap save failed:', e);
+      }
+      return NextResponse.json({ toast: { type: 'success', content: 'Sent to feature group ✓' } });
+    } catch (e) {
+      console.warn('[card-action] send AB-concluded to feature group failed:', e);
+      return NextResponse.json({
+        toast: { type: 'error', content: 'Failed to send' },
+      }, { status: 500 });
+    }
+  }
+
   if (actionName === 'edit_ab_card') {
     const cardKind = String(actionValue?.cardKind ?? '');
     const featureWorkItemId = String(actionValue?.featureWorkItemId ?? '');
