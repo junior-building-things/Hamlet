@@ -3159,7 +3159,14 @@ export async function buildAbConcludedSection(
     { tag: 'text', text: 'cc' },
     { tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID },
   ];
-  if (botToken) {
+  // Resolve POC emails → open_ids for the @-mentions. The bot's
+  // app token can only resolve users it has direct contact-read
+  // scope for (typically the installer + bot members of chats it's
+  // in). The user access token (Thomas's personal scope) sees the
+  // full org contact directory, so prefer it when available and
+  // fall back to bot token.
+  const tokenForResolve = userAccessToken || botToken;
+  if (tokenForResolve) {
     const POC_ROLE_KEYS = ['Tech_Owner', 'Server', 'Android', 'iOS', 'QA', 'DA'];
     const pocEmails: string[] = [];
     for (const roleKey of POC_ROLE_KEYS) {
@@ -3168,11 +3175,9 @@ export async function buildAbConcludedSection(
         if (email && !pocEmails.includes(email)) pocEmails.push(email);
       }
     }
-    console.log(`[digests] AB-concluded cc "${feature.name}": botToken=yes, pocEmails=${JSON.stringify(pocEmails)}`);
     if (pocEmails.length > 0) {
       try {
-        const map = await resolveOpenIds(pocEmails, botToken);
-        console.log(`[digests] AB-concluded cc "${feature.name}": resolveOpenIds map=${JSON.stringify(map)}`);
+        const map = await resolveOpenIds(pocEmails, tokenForResolve);
         const seen = new Set<string>([AB_OPEN_MENTION_OPEN_ID]);
         let added = 0;
         for (const email of pocEmails) {
@@ -3183,13 +3188,11 @@ export async function buildAbConcludedSection(
             added++;
           }
         }
-        console.log(`[digests] AB-concluded cc "${feature.name}": added ${added} POC mentions`);
+        console.log(`[digests] AB-concluded cc "${feature.name}": ${added}/${pocEmails.length} POC mentions resolved`);
       } catch (e) {
         console.warn(`[digests] AB-concluded POC open_id resolve failed for "${feature.name}":`, e);
       }
     }
-  } else {
-    console.log(`[digests] AB-concluded cc "${feature.name}": botToken=no, skipping POC mentions`);
   }
   postParagraphs.push(ccInlines);
 
