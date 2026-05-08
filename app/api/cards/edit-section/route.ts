@@ -58,18 +58,29 @@ export async function POST(req: NextRequest) {
 
     // Update the snapshot — both cardContent and postParagraphs.
     // Re-derive the BODY from the new markdown, then append the
-    // image paragraphs (from cardImages) + the trailing cc@Thomas
-    // mention so the rich-text post that "Send to PM Group" sends
-    // continues to mirror the build-time structure.
+    // image paragraphs (from cardImages) + the trailing cc paragraph.
+    // Preserve the existing cc paragraph from the previous build so
+    // any @-mentions resolved at build time (PM + POC stakeholders for
+    // AB-concluded) carry through the edit instead of being reset to
+    // PM-only.
     const featureSnap = ctx.features[featureIdx];
     const bodyParagraphs = cardContentToPostParagraphs(newCardContent);
     const imageParagraphs: PostParagraph[] = featureSnap.cardImages.map(img => [
       { tag: 'img', image_key: img.image_key } as PostInline,
     ]);
-    const ccParagraph: PostParagraph = [
+    let ccParagraph: PostParagraph = [
       { tag: 'text', text: 'cc' },
       { tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID },
     ];
+    try {
+      const prev = JSON.parse(featureSnap.postParagraphsJson) as PostParagraph[];
+      const last = prev[prev.length - 1];
+      // The build-time code always appends the cc paragraph last,
+      // identifiable by containing at least one `at` tag.
+      if (Array.isArray(last) && last.some(x => x.tag === 'at')) {
+        ccParagraph = last;
+      }
+    } catch { /* fall back to PM-only */ }
     const newPostParagraphs: PostParagraph[] = [
       ...bodyParagraphs,
       ...imageParagraphs,
@@ -93,17 +104,34 @@ export async function POST(req: NextRequest) {
           type: 'primary',
           value: { action: 'send_ab_open_to_pm_group', postTitle: f.postTitle, postParagraphs },
         },
-        {
-          text: 'Edit',
+      ];
+      // AB-concluded gets the extra "Send to Feature Group" button
+      // (matches the build-time card layout in
+      // sendAbConcludedDigestCard). AB-open keeps the original two-
+      // button layout.
+      if (ctx.cardKind === 'ab_concluded') {
+        buttons.push({
+          text: 'Send to Feature Group',
           type: 'default',
           value: {
-            action: 'edit_ab_card',
-            cardKind: ctx.cardKind,
+            action: 'send_ab_concluded_to_feature_group',
+            postTitle: f.postTitle,
+            postParagraphs,
             featureWorkItemId: f.workItemId,
             featureName: f.featureName,
           },
+        });
+      }
+      buttons.push({
+        text: 'Edit',
+        type: 'default',
+        value: {
+          action: 'edit_ab_card',
+          cardKind: ctx.cardKind,
+          featureWorkItemId: f.workItemId,
+          featureName: f.featureName,
         },
-      ];
+      });
       return {
         content: f.cardContent,
         images: f.cardImages,
