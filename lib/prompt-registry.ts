@@ -234,7 +234,7 @@ Respond with ONLY a single JSON object on one line, no markdown fences:
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
-const HAMLET_PRD_CHANGE_SUMMARY = `A PRD (Product Requirements Document) was edited. Compare the old and new versions and write a 1-sentence summary of what changed. Focus on CONTENT changes (new sections, removed requirements, updated logic), not formatting. If it's just minor wording tweaks, say "Minor wording edits". Reply with ONLY the summary, no prefix.
+const HAMLET_PRD_CHANGE_SUMMARY = `A PRD (Product Requirements Document) was edited. Compare the old and new versions and write a 1-sentence summary of what changed. Focus on REQUIREMENT CONTENT changes (new sections, removed requirements, updated logic), not formatting or bookkeeping. If it's just minor wording tweaks or changes to the "change log" section, say "Minor wording edits". Reply with ONLY the summary, no prefix.
 
 OLD VERSION:
 \${prevText}
