@@ -964,10 +964,11 @@ export async function getAllVersionChanges(
     const from = nameById.get(String(r.oldId)) ?? String(r.oldId);
     const to   = nameById.get(String(r.newId)) ?? String(r.newId);
     if (!from || !to || from === to) continue;
-    // Only count forward slips (e.g. 42.8 → 42.9). A backward edit
-    // (42.8 → 42.7) means the team pulled the feature into an earlier
-    // version, which isn't a delay.
-    if (!isForwardChange(from, to)) continue;
+    // Emit ALL transitions (forward + backward). The chain is
+    // consolidated into forward-only entries by `applyEntryRewrite`
+    // in `computeNextVersionChanges`, where backward edges can
+    // rewrite or cancel a prior forward entry — semantics that
+    // can't be captured by emit-time filtering alone.
     const d = new Date(r.ts);
     if (isNaN(d.getTime())) continue;
     // Use Singapore time so the day boundary matches the rest of the digest.
@@ -1030,6 +1031,74 @@ function isForwardChange(from: string, to: string): boolean {
   const d = compareLaunchDateLabel(to, from);
   if (d !== null) return d > 0;
   return true;
+}
+
+type VersionChangeEntry = NonNullable<import('./types').Feature['versionChanges']>[number];
+
+/**
+ * Consolidate a chronologically-sorted chain of version-change edges
+ * (forward + backward) into the forward-only entries that the UI and
+ * digest cards care about. Backward edges don't appear as entries
+ * themselves — they rewrite or cancel a prior forward entry whose
+ * `to` matches the backward edge's `from`.
+ *
+ * Algorithm — for each backward edge X→Y (Y < X):
+ *   1. Find the latest forward entry on the stack with to === X.
+ *      If none, the backward edge has no recorded slip to undo —
+ *      skip it.
+ *   2. Propose rewriting that entry's `to` to Y.
+ *      - If from === Y: perfect revert; pop the entry.
+ *      - If Y > from: partial revert; rewrite the entry's `to` to Y.
+ *      - If Y < from: the entry is fully undone AND the revert
+ *        propagates further; pop it, then look for the entry below
+ *        whose to === entry.from and apply the same backward edge.
+ *
+ * The rewrite preserves the entry's `date`, `iso`, `reason`, and
+ * `reasonAttempted` — the slip is the same one, just re-targeted.
+ *
+ * Examples (all using single-digit minor versions):
+ *   [42.3→42.5, 42.5→42.3]            → []          (full revert)
+ *   [42.3→42.5, 42.5→42.4]            → [42.3→42.4] (partial revert)
+ *   [42.3→42.5, 42.5→42.7, 42.7→42.4] → [42.3→42.4] (cascading)
+ *   [42.3→42.5, 42.5→42.7, 42.7→42.0] → []          (revert below origin)
+ */
+function applyEntryRewrite(edges: readonly VersionChangeEntry[]): VersionChangeEntry[] {
+  const sorted = [...edges].sort((a, b) => {
+    const ai = a.iso ?? '';
+    const bi = b.iso ?? '';
+    if (ai !== bi) return ai.localeCompare(bi);
+    return a.date.localeCompare(b.date);
+  });
+  const stack: VersionChangeEntry[] = [];
+  for (const edge of sorted) {
+    if (isForwardChange(edge.from, edge.to)) {
+      stack.push(edge);
+      continue;
+    }
+    // Backward edge: cascade-pop / rewrite prior forward entries.
+    let X = edge.from;
+    let Y = edge.to;
+    while (true) {
+      let idx = -1;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].to === X) { idx = i; break; }
+      }
+      if (idx === -1) break; // no matching prior slip — orphan revert
+      const prior = stack[idx];
+      if (prior.from === Y) {
+        stack.splice(idx, 1);
+        break;
+      }
+      if (isForwardChange(prior.from, Y)) {
+        stack[idx] = { ...prior, to: Y };
+        break;
+      }
+      // Y is at or below prior.from — entry fully undone, propagate.
+      stack.splice(idx, 1);
+      X = prior.from;
+    }
+  }
+  return stack.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /**
@@ -1609,26 +1678,42 @@ async function computeNextVersionChanges(
 ): Promise<{
   nextVersionChanges: import('./types').Feature['versionChanges'];
   changed: boolean;
+  nextScannedThroughIso: string | undefined;
 }> {
   let nextVersionChanges = cached.versionChanges;
   let changed = false;
+  // Track op-log scan progress separately from entry timestamps —
+  // a rewritten entry's iso reflects the underlying chain start, not
+  // what we've scanned. Without this, re-scanning op-log on the next
+  // run would re-feed raw edges that were already folded into the
+  // rewrite, producing duplicate entries.
+  const cachedScannedThroughIso = cached.versionChangesScannedThroughIso;
+  let latestScannedMs = cachedScannedThroughIso
+    ? (Date.parse(cachedScannedThroughIso) || 0)
+    : 0;
+  let scannedThroughChanged = false;
 
   // (i) Op-log scan: planned-version field changes over time.
   try {
-    const existing = cached.versionChanges ?? [];
-    const sinceMs = existing.length > 0
-      ? Date.parse(existing[existing.length - 1].date + 'T00:00:00+08:00') || 0
-      : 0;
-    const fresh = await getAllVersionChanges(meegoUrl, sinceMs);
+    const fresh = await getAllVersionChanges(meegoUrl, latestScannedMs);
     if (fresh.length > 0) {
+      const existing = nextVersionChanges ?? [];
       const seen = new Set(existing.map(c => `${c.date}|${c.from}|${c.to}`));
       const merged = [...existing];
       for (const c of fresh) {
         const k = `${c.date}|${c.from}|${c.to}`;
         if (!seen.has(k)) { merged.push(c); seen.add(k); }
+        const cMs = Date.parse(c.iso);
+        if (!isNaN(cMs) && cMs > latestScannedMs) {
+          latestScannedMs = cMs;
+          scannedThroughChanged = true;
+        }
       }
-      merged.sort((a, b) => a.date.localeCompare(b.date));
-      nextVersionChanges = merged;
+      // Apply chain consolidation now — backward edges from `fresh`
+      // can rewrite forward entries (either pre-existing rewrites or
+      // freshly-merged raw edges). The rewrite is idempotent on
+      // already-consolidated chains.
+      nextVersionChanges = applyEntryRewrite(merged);
       changed = true;
     }
   } catch (e) {
@@ -1691,17 +1776,22 @@ async function computeNextVersionChanges(
     console.warn(`[digests:vc] server-launch-delay check failed for ${cached.name}:`, e);
   }
 
-  // Forward-only filter: only forward slips (e.g. 42.8 → 42.9, or
-  // Apr 5 → Apr 8) count as delays. Drop any backward entries —
-  // including legacy ones written before this rule shipped — so the
-  // feature un-delays after a revert. Path (i) already filters at
-  // emission; this is the safety net for paths (ii)/(iii) and old
-  // cache data.
+  // Final consolidation pass. Catches three cases path (i) above
+  // doesn't on its own:
+  //   - Legacy backward entries written before the forward-only rule
+  //     shipped — drop them so reverted features un-delay.
+  //   - A path-(ii)/(iii) emit that needs to land in the rewritten
+  //     chain (no-op for forward entries; safety net for any backward
+  //     ones that slip through).
+  //   - First run after upgrade with no fresh op-log activity, where
+  //     path (i) didn't run the rewrite.
   if (!nextVersionChanges) nextVersionChanges = cached.versionChanges;
   if (nextVersionChanges && nextVersionChanges.length > 0) {
-    const filtered = nextVersionChanges.filter(e => isForwardChange(e.from, e.to));
-    if (filtered.length !== nextVersionChanges.length) {
-      nextVersionChanges = filtered;
+    const consolidated = applyEntryRewrite(nextVersionChanges);
+    const beforeKey = nextVersionChanges.map(e => `${e.date}|${e.from}|${e.to}`).join(',');
+    const afterKey = consolidated.map(e => `${e.date}|${e.from}|${e.to}`).join(',');
+    if (beforeKey !== afterKey) {
+      nextVersionChanges = consolidated;
       changed = true;
     }
   }
@@ -1739,7 +1829,10 @@ async function computeNextVersionChanges(
     nextVersionChanges = updated;
   }
 
-  return { nextVersionChanges, changed };
+  const nextScannedThroughIso = scannedThroughChanged
+    ? new Date(latestScannedMs).toISOString()
+    : cachedScannedThroughIso;
+  return { nextVersionChanges, changed, nextScannedThroughIso };
 }
 
 /**
@@ -1773,10 +1866,15 @@ async function patchVersionChangesInCache(
     const meegoUrl = meegoFeature?.meegoUrl ?? cached.meegoUrl;
     if (!meegoUrl) continue;
     scanned++;
-    const { nextVersionChanges, changed: vcChanged } = await computeNextVersionChanges(cached, meegoUrl, botToken);
-    if (vcChanged) {
-      deltas.set(fId, { versionChanges: nextVersionChanges });
-      changed++;
+    const { nextVersionChanges, changed: vcChanged, nextScannedThroughIso } =
+      await computeNextVersionChanges(cached, meegoUrl, botToken);
+    const scannedAdvanced = nextScannedThroughIso !== cached.versionChangesScannedThroughIso;
+    if (vcChanged || scannedAdvanced) {
+      const delta: Partial<import('./types').Feature> = {};
+      if (vcChanged) delta.versionChanges = nextVersionChanges;
+      if (scannedAdvanced) delta.versionChangesScannedThroughIso = nextScannedThroughIso;
+      deltas.set(fId, delta);
+      if (vcChanged) changed++;
     }
   }
   if (deltas.size > 0) {
@@ -4558,16 +4656,21 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         // suppresses the riskLevel badge, not the Delayed badge.
         let nextVersionChanges = cached.versionChanges;
         let versionChangesChanged = false;
+        let nextScannedThroughIso: string | undefined = cached.versionChangesScannedThroughIso;
         if (meegoUrl) {
           versionScanned++;
           const result = await computeNextVersionChanges(cached, meegoUrl, botToken);
           nextVersionChanges = result.nextVersionChanges;
           versionChangesChanged = result.changed;
+          nextScannedThroughIso = result.nextScannedThroughIso;
           if (nextVersionChanges && nextVersionChanges.length > 0) versionDelayed++;
         }
 
         const delta: Partial<import('./types').Feature> = {};
         if (versionChangesChanged) delta.versionChanges = nextVersionChanges;
+        if (nextScannedThroughIso !== cached.versionChangesScannedThroughIso) {
+          delta.versionChangesScannedThroughIso = nextScannedThroughIso;
+        }
 
         // Features in AB Testing get riskLevel='green' (the UI Delayed
         // badge keys off versionChanges directly, so a delayed AB

@@ -104,6 +104,16 @@ export interface Feature {
     reasonAttempted?: boolean;
   }>;
   /**
+   * ISO timestamp of the latest Meego op-log record processed by the
+   * version-slip scan. Used as the `sinceMs` lower bound for the next
+   * incremental fetch — without this we can't tell whether a raw
+   * op-log edge was already folded into a rewritten cache entry, so
+   * re-scans would double-count. Bumped after every refresh, not
+   * derived from `versionChanges` (rewrite results' iso reflects the
+   * underlying chain, not what op-log we've seen).
+   */
+  versionChangesScannedThroughIso?: string;
+  /**
    * Chronological log of risk-level transitions detected by the daily
    * digest. Each entry records the change Junior observed between two
    * consecutive runs. Capped to the last ~20 entries; older history is
