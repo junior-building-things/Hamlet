@@ -3975,8 +3975,10 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           .replace(/\s+/g, ' ')
           .trim();
         if (prevText && normalizePrdText(prevText) !== normalizePrdText(currentText)) {
-          // PRD content changed — use Gemini to summarize the diff
-          prdChanged++;
+          // PRD content changed — use Gemini to summarize the diff.
+          // `prdChanged` counts only what actually ships downstream
+          // (digest card + PRD doc Change Log), so the increment lives
+          // past the minor-wording skip below.
           let summary = 'PRD content updated';
           try {
             const { getPrompt, getPromptModel } = await import('./prompts');
@@ -4008,6 +4010,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             snapshots[f.workItemId] = currentText;
             continue;
           }
+          prdChanged++;
           try {
             await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Thomas Jr.' }]);
           } catch (e) {
