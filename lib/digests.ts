@@ -3964,7 +3964,17 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         if (!currentText) continue;
         const prevText = snapshots[f.workItemId];
 
-        if (prevText && prevText !== currentText) {
+        // Cheap pre-check before the Gemini call: collapse whitespace
+        // and strip Lark image tokens. read_doc output isn't byte-stable
+        // across fetches — image_v3 tokens rotate on re-upload and table
+        // re-rendering tweaks whitespace — so strict equality fires
+        // Gemini for purely cosmetic churn. Normalising kills those
+        // false positives without hiding real content changes.
+        const normalizePrdText = (s: string) => s
+          .replace(/image_v3_[A-Za-z0-9]+/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (prevText && normalizePrdText(prevText) !== normalizePrdText(currentText)) {
           // PRD content changed — use Gemini to summarize the diff
           prdChanged++;
           let summary = 'PRD content updated';
@@ -3976,9 +3986,12 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             const prdGenAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '');
             const model = prdGenAI.getGenerativeModel({ model: modelName });
             const tmpl = await getPrompt('hamlet.prd_change_summary', def?.default ?? '');
+            // No char-cap: gemini-3.1-flash-lite-preview handles ~1M
+            // tokens, and a 4k head-window was missing edits below the
+            // cutoff (see commit 4ae971c for the same fix elsewhere).
             const prompt = renderPrompt(tmpl, {
-              prevText: prevText.slice(0, 4000),
-              currentText: currentText.slice(0, 4000),
+              prevText,
+              currentText,
             });
             const result = await model.generateContent(prompt);
             summary = result.response.text()?.trim() ?? 'PRD content updated';
