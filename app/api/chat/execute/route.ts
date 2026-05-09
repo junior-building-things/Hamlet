@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
-import { copyPrdTemplate, readDocContent, editDocSection, renameDocSection, addDocSection, addDocComment, listDocComments, replyToComment, duplicateDoc } from '@/lib/lark';
+import { copyPrdTemplate, readDocContent, getDocMeta, editDocSection, renameDocSection, addDocSection, addDocComment, listDocComments, replyToComment, duplicateDoc } from '@/lib/lark';
 import { getPrompt, getPromptModel } from '@/lib/prompts';
 import { getPromptDef, renderPrompt } from '@/lib/prompt-registry';
 import type { Feature } from '@/lib/types';
@@ -182,17 +182,36 @@ export async function POST(req: NextRequest) {
 
     // ── Read Doc ──────────────────────────────────────────────────────────────
     if (action === 'read_doc' && params.docUrl) {
-      const content = await readDocContent(params.docUrl);
+      // Fetch body + Drive metadata in parallel. Metadata is best-effort —
+      // if the API call fails we still answer about the body. Without this,
+      // questions like "who's the doc owner?" would force Gemini to hallucinate
+      // since the body alone never contains owner/last-modifier fields.
+      const [content, meta] = await Promise.all([
+        readDocContent(params.docUrl),
+        getDocMeta(params.docUrl).catch(() => null),
+      ]);
 
       const apiKey = process.env.GOOGLE_AI_API_KEY;
       if (!apiKey) return NextResponse.json({ reply: content, links: [{ label: '📄 Doc', url: params.docUrl }] });
+
+      // Prepend a small metadata header so Gemini can answer ownership /
+      // recency questions. Header lines use `Field: value` so they read
+      // naturally when grepped by the model.
+      const metaLines: string[] = [];
+      if (meta?.owner)               metaLines.push(`Owner: ${meta.owner}`);
+      if (meta?.lastModifier)        metaLines.push(`Last modified by: ${meta.lastModifier}`);
+      if (meta?.createTimeIso)       metaLines.push(`Created: ${meta.createTimeIso}`);
+      if (meta?.latestModifyTimeIso) metaLines.push(`Last modified: ${meta.latestModifyTimeIso}`);
+      const enriched = metaLines.length > 0
+        ? `${metaLines.join('\n')}\n\n${content}`
+        : content;
 
       const def = getPromptDef('hamlet.doc_summarize');
       const modelName = await getPromptModel('hamlet.doc_summarize', def?.model ?? 'gemini-3.1-flash-lite-preview');
       const genAI  = new GoogleGenerativeAI(apiKey);
       const model  = genAI.getGenerativeModel({ model: modelName });
       const tmpl = await getPrompt('hamlet.doc_summarize', def?.default ?? '');
-      const prompt = renderPrompt(tmpl, { content });
+      const prompt = renderPrompt(tmpl, { content: enriched });
       const result = await model.generateContent(prompt);
       const summary = result.response.text().trim();
       return NextResponse.json({ reply: summary, links: [{ label: '📄 Doc', url: params.docUrl }] });
