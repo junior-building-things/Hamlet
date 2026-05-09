@@ -1283,58 +1283,10 @@ export async function editDocSection(docUrl: string, sectionHeading: string, new
  * Format: "[YYYY-MM-DD] description"
  */
 /**
- * Resolve a Lark user open_id (or {display_name, en_name} object) to a
- * display name. Hits the contact API for the open_id form. Returns '' on
- * any failure or empty input.
+ * Get the last modifier's name for a Lark document.
+ * Uses the Drive file meta API to find who last edited the doc.
  */
-async function resolveLarkUserName(
-  raw: unknown,
-  token: string,
-): Promise<string> {
-  if (!raw) return '';
-  if (typeof raw === 'object' && raw !== null) {
-    const o = raw as { display_name?: string; en_name?: string };
-    return o.en_name || o.display_name || '';
-  }
-  if (typeof raw !== 'string') return '';
-  try {
-    const userRes = await fetch(
-      `${LARK_BASE_URL}/open-apis/contact/v3/users/${raw}?user_id_type=open_id`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    const userData = await parseJson(userRes, 'get_user') as {
-      code: number;
-      data?: { user?: { en_name?: string; name?: string } };
-    };
-    if (userData.code === 0) {
-      return userData.data?.user?.en_name || userData.data?.user?.name || '';
-    }
-  } catch { /* ignore */ }
-  return '';
-}
-
-export interface DocMeta {
-  /** Display name of the doc owner. '' when unresolvable. */
-  owner: string;
-  /** Display name of the last person to edit. '' when unresolvable. */
-  lastModifier: string;
-  /** ISO timestamp the doc was created. '' when unresolvable. */
-  createTimeIso: string;
-  /** ISO timestamp the doc was last modified. '' when unresolvable. */
-  latestModifyTimeIso: string;
-}
-
-/**
- * Look up a Lark document's metadata via the Drive metas/batch_query API:
- * owner, last modifier, and timestamps. User fields come back as either
- * an open_id string (legacy) or {display_name, en_name} object — handled
- * via resolveLarkUserName.
- *
- * Returns all fields as '' on API failure so callers can render
- * placeholders without null-checking each field.
- */
-export async function getDocMeta(docUrl: string): Promise<DocMeta> {
-  const empty: DocMeta = { owner: '', lastModifier: '', createTimeIso: '', latestModifyTimeIso: '' };
+export async function getDocLastModifier(docUrl: string): Promise<string> {
   const docId = await resolveDocId(docUrl);
   const token = await getAccessToken();
   const res = await fetch(
@@ -1350,33 +1302,31 @@ export async function getDocMeta(docUrl: string): Promise<DocMeta> {
   );
   const data = await parseJson(res, 'drive_meta') as {
     code: number;
-    data?: { metas?: Array<{
-      owner_id?: unknown;
-      latest_modify_user?: unknown;
-      create_time?: string;
-      latest_modify_time?: string;
-    }> };
+    data?: { metas?: Array<{ latest_modify_user?: { display_name?: string; en_name?: string } }> };
   };
-  if (data.code !== 0) return empty;
+  if (data.code !== 0) return '';
   const meta = data.data?.metas?.[0];
-  if (!meta) return empty;
-  const [owner, lastModifier] = await Promise.all([
-    resolveLarkUserName(meta.owner_id, token),
-    resolveLarkUserName(meta.latest_modify_user, token),
-  ]);
-  // create_time / latest_modify_time come back as Unix-seconds strings.
-  const toIso = (s?: string) => {
-    if (!s) return '';
-    const n = Number(s);
-    if (!Number.isFinite(n) || n <= 0) return '';
-    return new Date(n * 1000).toISOString();
-  };
-  return {
-    owner,
-    lastModifier,
-    createTimeIso: toIso(meta.create_time),
-    latestModifyTimeIso: toIso(meta.latest_modify_time),
-  };
+  // latest_modify_user can be a string (open_id) or an object with name fields
+  const rawUser = meta?.latest_modify_user;
+  if (!rawUser) return '';
+  if (typeof rawUser === 'object') return rawUser.en_name || rawUser.display_name || '';
+
+  // It's an open_id string — resolve to a name via contact API
+  const userId = rawUser as unknown as string;
+  try {
+    const userRes = await fetch(
+      `${LARK_BASE_URL}/open-apis/contact/v3/users/${userId}?user_id_type=open_id`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const userData = await parseJson(userRes, 'get_user') as {
+      code: number;
+      data?: { user?: { en_name?: string; name?: string } };
+    };
+    if (userData.code === 0) {
+      return userData.data?.user?.en_name || userData.data?.user?.name || '';
+    }
+  } catch { /* ignore */ }
+  return '';
 }
 
 function formatChangeLogEntry(e: { date: string; detail: string; by?: string }): string {
