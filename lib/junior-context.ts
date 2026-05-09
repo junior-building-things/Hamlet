@@ -8,9 +8,10 @@
  * names just sort the editor UI):
  *   - system.md       Junior persona, base behavior
  *   - glossary.md     org vocabulary, team names, doc locations
- *   - skill_*.md      one per skill / capability area
  *   - preferences.md  user-stated preferences (Junior auto-appends here
  *                     via the remember_preference tool)
+ *   - <name>.md       any other markdown file is treated as a skill /
+ *                     capability area (e.g. prd_review.md, ab_analysis.md)
  */
 
 const STATE_BUCKET = 'tiktok-im-hamlet-state';

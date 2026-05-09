@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Save, Trash2, Plus, FileText, History, Activity } from 'lucide-react';
+import { Loader2, Save, Trash2, Plus, FileText, History, Activity, Wrench, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface HistoryStats { fileCount: number; totalMessages: number }
@@ -12,6 +12,24 @@ interface ContextFile {
   updatedAt?: string;
 }
 
+interface ToolParam {
+  type?: string;
+  description?: string;
+}
+interface ToolDef {
+  name: string;
+  description: string;
+  parameters?: {
+    properties?: Record<string, ToolParam>;
+    required?: string[];
+  };
+}
+
+// Persona files — explicit allowlist. Everything else under
+// gs://tiktok-im-hamlet-state/junior/context/<name>.md is treated as
+// a Skill.
+const PERSONA_FILES = new Set(['system.md', 'glossary.md', 'preferences.md']);
+
 const FILE_DESCRIPTIONS: Record<string, string> = {
   'system.md': "Junior's core agent persona — base behavior, voice, defaults",
   'glossary.md': 'Org-specific vocabulary, team names, doc locations',
@@ -20,22 +38,40 @@ const FILE_DESCRIPTIONS: Record<string, string> = {
 
 function describe(name: string): string {
   if (FILE_DESCRIPTIONS[name]) return FILE_DESCRIPTIONS[name];
-  if (name.startsWith('skill_')) return `Skill: ${name.slice(6, -3).replace(/_/g, ' ')}`;
+  // Non-persona markdown is a skill capability — derive a label from the filename.
+  if (name.endsWith('.md')) return `Skill: ${name.slice(0, -3).replace(/_/g, ' ')}`;
   return '';
+}
+
+function GroupHeader({ label, count }: { label: string; count?: number }) {
+  return (
+    <div className="flex items-baseline gap-2 px-1 pt-3 pb-1.5">
+      <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+        {label}
+      </div>
+      {count !== undefined && (
+        <div className="text-[10.5px] text-[var(--text-muted)]">· {count}</div>
+      )}
+      <div className="flex-1 h-px bg-[var(--hairline)] ml-2" />
+    </div>
+  );
 }
 
 export function JuniorContextView() {
   const [files, setFiles] = useState<ContextFile[]>([]);
   const [stats, setStats] = useState<SystemContextStats>({});
+  const [tools, setTools] = useState<ToolDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedName, setExpandedName] = useState<string | null>(null);
+  const [expandedTool, setExpandedTool] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [filesRes, statsRes] = await Promise.all([
+      const [filesRes, statsRes, toolsRes] = await Promise.all([
         fetch('/api/junior-context'),
         fetch('/api/junior-history'),
+        fetch('/api/junior-tools'),
       ]);
       const filesData = await filesRes.json() as { files?: ContextFile[]; error?: string };
       if (!filesRes.ok) throw new Error(filesData.error ?? 'Failed to load files');
@@ -43,6 +79,10 @@ export function JuniorContextView() {
       if (statsRes.ok) {
         const s = await statsRes.json() as SystemContextStats;
         setStats(s);
+      }
+      if (toolsRes.ok) {
+        const t = await toolsRes.json() as { tools?: ToolDef[] };
+        setTools(t.tools ?? []);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load context');
@@ -52,6 +92,9 @@ export function JuniorContextView() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const personaFiles = files.filter(f => PERSONA_FILES.has(f.name));
+  const skillFiles = files.filter(f => !PERSONA_FILES.has(f.name));
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -71,7 +114,8 @@ export function JuniorContextView() {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {/* System context cells: live (recent chat) + stored history */}
+            {/* Messages — chat snapshot + persisted history */}
+            <GroupHeader label="Messages" />
             <SystemCell
               kind="live"
               icon={<Activity className="w-3.5 h-3.5" />}
@@ -96,19 +140,59 @@ export function JuniorContextView() {
               clearScope="user"
               onCleared={refresh}
             />
-            {/* Markdown context files */}
-            {files.length === 0 ? (
-              <div className="text-center text-sm text-gray-500 py-8">
-                No context files yet.
+
+            {/* Persona — system.md, glossary.md, preferences.md */}
+            <GroupHeader label="Persona" count={personaFiles.length} />
+            {personaFiles.length === 0 ? (
+              <div className="text-center text-sm text-gray-500 py-4">
+                No persona files yet.
               </div>
             ) : (
-              files.map(f => (
+              personaFiles.map(f => (
                 <ContextCard
                   key={f.name}
                   file={f}
                   expanded={expandedName === f.name}
                   onToggle={() => setExpandedName(expandedName === f.name ? null : f.name)}
                   onSaved={refresh}
+                />
+              ))
+            )}
+
+            {/* Skills — every other *.md file */}
+            <GroupHeader label="Skills" count={skillFiles.length} />
+            {skillFiles.length === 0 ? (
+              <div className="text-center text-sm text-gray-500 py-4">
+                No skill files yet.
+              </div>
+            ) : (
+              skillFiles.map(f => (
+                <ContextCard
+                  key={f.name}
+                  file={f}
+                  expanded={expandedName === f.name}
+                  onToggle={() => setExpandedName(expandedName === f.name ? null : f.name)}
+                  onSaved={refresh}
+                />
+              ))
+            )}
+
+            {/* Tools — read-only Gemini function declarations from junior/lib/tools.ts */}
+            <GroupHeader label="Tools" count={tools.length} />
+            <div className="text-[11.5px] text-[var(--text-muted)] px-1 mb-1">
+              Defined in <span className="font-mono">junior/lib/tools.ts</span>. Read-only — edit there to change.
+            </div>
+            {tools.length === 0 ? (
+              <div className="text-center text-sm text-gray-500 py-4">
+                Tools unavailable. Junior may be down.
+              </div>
+            ) : (
+              tools.map(t => (
+                <ToolCard
+                  key={t.name}
+                  tool={t}
+                  expanded={expandedTool === t.name}
+                  onToggle={() => setExpandedTool(expandedTool === t.name ? null : t.name)}
                 />
               ))
             )}
@@ -280,6 +364,71 @@ function ContextCard({ file, expanded, onToggle, onSaved }: {
   );
 }
 
+function ToolCard({ tool, expanded, onToggle }: {
+  tool: ToolDef;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const props = tool.parameters?.properties ?? {};
+  const required = new Set(tool.parameters?.required ?? []);
+  const paramNames = Object.keys(props);
+  const firstSentence = tool.description.split(/(?<=[.!?])\s/)[0] ?? tool.description;
+
+  return (
+    <div>
+      <button onClick={onToggle} className="context-card w-full text-left">
+        <div className="icon-wrap">
+          <Wrench className="w-3.5 h-3.5" />
+        </div>
+        <div className="body">
+          <div className="ctx-name font-mono">{tool.name}</div>
+          <div className="ctx-desc">{firstSentence}</div>
+        </div>
+        <div className="ctx-meta flex items-center gap-1.5">
+          <div>{paramNames.length === 0 ? 'no params' : `${paramNames.length} param${paramNames.length === 1 ? '' : 's'}`}</div>
+          <ChevronRight className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="bg-[var(--bg-elev-1)] border border-[var(--hairline)] border-t-0 rounded-b-[var(--r-md)] -mt-px px-4 py-3">
+          <div className="text-[12px] text-[var(--text)] leading-snug mb-3">
+            {tool.description}
+          </div>
+          {paramNames.length > 0 && (
+            <>
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)] mb-1.5">
+                Parameters
+              </div>
+              <div className="flex flex-col gap-2">
+                {paramNames.map(name => {
+                  const p = props[name];
+                  const isReq = required.has(name);
+                  return (
+                    <div key={name} className="text-[12px]">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-mono text-[var(--text)]">{name}</span>
+                        <span className="text-[10.5px] text-[var(--text-muted)]">
+                          {p.type ?? 'unknown'}{isReq ? ' · required' : ' · optional'}
+                        </span>
+                      </div>
+                      {p.description && (
+                        <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5 leading-snug">
+                          {p.description}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CreateFileModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
@@ -317,7 +466,7 @@ function CreateFileModal({ onClose, onCreated }: { onClose: () => void; onCreate
         </h2>
         <div className="flex flex-col gap-3">
           <label className="text-xs text-[var(--muted)]">
-            Filename (e.g. <code>skill_prd_review.md</code>)
+            Filename (e.g. <code>prd_review.md</code>)
             <input
               type="text"
               value={name}
