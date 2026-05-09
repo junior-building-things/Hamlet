@@ -1721,6 +1721,14 @@ async function computeNextVersionChanges(
   }
 
   // (ii) Snapshot mismatch: actual launched > planned on either platform.
+  // Supersede-by-from: only ONE current-effective slip per planned
+  // baseline. If actual moves while planned stays, the new emission
+  // replaces the prior path-(ii) entry instead of accumulating.
+  // Path-(i) entries with the same `from` survive because their
+  // `from` is the original baseline, while path-(ii)'s `from` is the
+  // current planned — the post-rewrite path-(i) chain ends at the
+  // current planned, so the only same-`from` collision is path-(ii)'s
+  // own previous emit.
   try {
     const mismatch = await detectVersionMismatch(meegoUrl);
     if (mismatch) {
@@ -1739,7 +1747,7 @@ async function computeNextVersionChanges(
           console.warn(`[digests:vc] launched-field date lookup failed for ${cached.name}:`, e);
         }
         if (!date) date = today;
-        const cleaned = list.filter(c => !matchesPair(c));
+        const cleaned = list.filter(c => c.from !== mismatch.planned);
         nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: mismatch.planned, to: mismatch.actual }]
           .sort((a, b) => a.date.localeCompare(b.date));
         changed = true;
@@ -1751,6 +1759,10 @@ async function computeNextVersionChanges(
 
   // (iii) Server-launch slip: Server上线 node scheduled later than
   // field_cde888 ("Server 计划上线时间") planned date.
+  // Supersede-by-from for the same reason as path (ii) — a scheduled
+  // date moving while planned stays should refine the entry, not
+  // accumulate (e.g. Apr 7→Apr 10 then Apr 7→Apr 8 collapses to one
+  // {Apr 7→Apr 8}).
   try {
     const serverDelay = await detectServerLaunchDelay(meegoUrl);
     if (serverDelay) {
@@ -1766,7 +1778,7 @@ async function computeNextVersionChanges(
           console.warn(`[digests:vc] server-launch date lookup failed for ${cached.name}:`, e);
         }
         if (!date) date = today;
-        const cleaned = list.filter(c => !matchesPair(c));
+        const cleaned = list.filter(c => c.from !== serverDelay.planned);
         nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: serverDelay.planned, to: serverDelay.scheduled }]
           .sort((a, b) => a.date.localeCompare(b.date));
         changed = true;
