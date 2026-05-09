@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
       const genAI  = new GoogleGenerativeAI(apiKey);
       const model  = genAI.getGenerativeModel({ model: modelName });
       const tmpl = await getPrompt('hamlet.doc_summarize', def?.default ?? '');
-      const prompt = renderPrompt(tmpl, { content: content.slice(0, 8000) });
+      const prompt = renderPrompt(tmpl, { content });
       const result = await model.generateContent(prompt);
       const summary = result.response.text().trim();
       return NextResponse.json({ reply: summary, links: [{ label: '📄 Doc', url: params.docUrl }] });
@@ -232,7 +232,7 @@ export async function POST(req: NextRequest) {
 
           let docContext = '';
           try {
-            docContext = (await readDocContent(params.docUrl)).slice(0, 4000);
+            docContext = await readDocContent(params.docUrl);
           } catch { /* best effort */ }
 
           const tmpl = await getPrompt('hamlet.prd_section_autogen', def?.default ?? '');
@@ -294,7 +294,6 @@ export async function POST(req: NextRequest) {
           let docContext = '';
           try {
             docContext = await readDocContent(params.docUrl);
-            docContext = docContext.slice(0, 4000);
           } catch { /* best effort */ }
 
           const existingReplies = target.replies.map(r => r.content).join('\n');

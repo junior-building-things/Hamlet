@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
           featureName,
           sourceLabel: questionSource === 'prd_comment' ? 'PRD comment' : 'feature group chat',
           questionText,
-          prdContent: prdContent.slice(0, 8000) || '(PRD not available)',
+          prdContent: prdContent || '(PRD not available)',
           featureContext,
           pmOpenId,
           pmName,

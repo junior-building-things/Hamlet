@@ -964,6 +964,10 @@ export async function getAllVersionChanges(
     const from = nameById.get(String(r.oldId)) ?? String(r.oldId);
     const to   = nameById.get(String(r.newId)) ?? String(r.newId);
     if (!from || !to || from === to) continue;
+    // Only count forward slips (e.g. 42.8 → 42.9). A backward edit
+    // (42.8 → 42.7) means the team pulled the feature into an earlier
+    // version, which isn't a delay.
+    if (!isForwardChange(from, to)) continue;
     const d = new Date(r.ts);
     if (isNaN(d.getTime())) continue;
     // Use Singapore time so the day boundary matches the rest of the digest.
@@ -986,6 +990,46 @@ function compareShortVersion(a: string, b: string): number | null {
   const maj = Number(pa[1]) - Number(pb[1]);
   if (maj !== 0) return maj;
   return Number(pa[2]) - Number(pb[2]);
+}
+
+/**
+ * Compare two month-day labels like "Apr 9" / "May 12" — returns
+ * positive if a is later in the year than b, negative if earlier,
+ * zero if equal. Returns null if either side can't be parsed.
+ *
+ * Cross-year heuristic: if the apparent diff exceeds half a year, we
+ * assume a year wrap (e.g. "Dec 30" → "Jan 5" is +6 days, not -360),
+ * so the wrap-around case still reads as forward.
+ */
+function compareLaunchDateLabel(a: string, b: string): number | null {
+  const REF_YEAR = 2026;
+  const parse = (s: string): number | null => {
+    const t = Date.parse(`${s}, ${REF_YEAR} GMT`);
+    return isNaN(t) ? null : t;
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  if (pa === null || pb === null) return null;
+  let diff = pa - pb;
+  const HALF_YEAR_MS = 182 * 24 * 60 * 60 * 1000;
+  const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+  if (diff < -HALF_YEAR_MS) diff += YEAR_MS;
+  else if (diff > HALF_YEAR_MS) diff -= YEAR_MS;
+  return diff;
+}
+
+/**
+ * True if `to` is greater than `from` (later version or later launch
+ * date). Used to gate version-slip recording: only forward changes
+ * count as delays. Defaults to true when neither comparator parses,
+ * to avoid silently dropping legitimate slips with unusual labels.
+ */
+function isForwardChange(from: string, to: string): boolean {
+  const v = compareShortVersion(to, from);
+  if (v !== null) return v > 0;
+  const d = compareLaunchDateLabel(to, from);
+  if (d !== null) return d > 0;
+  return true;
 }
 
 /**
@@ -1546,17 +1590,165 @@ export async function inferVersionSlipReason(
 
 /**
  * Run the version-slip detection (op-log scan + snapshot mismatch +
- * server-launch slip) and slip-reason inference for every cached
- * feature, then patch the resulting `versionChanges` arrays into the
- * GCS feature cache. The risk-level computation (riskLevel/riskNotes/
- * riskHistory) is intentionally NOT done here — that depends on the
- * Gemini chat-risk findings which only run during the full-mode
- * pipeline. This extract lets the cheap, no-Gemini-risk-dependent
- * cache writeback also happen on every refresh-feature-cache run.
+ * server-launch slip) and slip-reason inference for one cached feature,
+ * returning the merged `versionChanges` array and whether it differs
+ * from the cached value. Used by both the refresh-mode batch
+ * (`patchVersionChangesInCache`) and full-mode Step 6b.
  *
- * Idempotent: subsequent calls (including the full-mode Step 6b that
- * also runs version detection) reach the same result for unchanged
- * data.
+ * Idempotent. The slip-reason cache is keyed by `(from, to)` only —
+ * paths (ii)/(iii) sometimes re-record an entry with a slightly
+ * different date (op-log lookup vs today fallback), so keying on date
+ * would lose cached reasons and trigger Gemini re-inference with a
+ * possibly different wording. Once a reason is set for a (from, to)
+ * pair, it's carried forward verbatim.
+ */
+async function computeNextVersionChanges(
+  cached: import('./types').Feature,
+  meegoUrl: string,
+  botToken: string,
+): Promise<{
+  nextVersionChanges: import('./types').Feature['versionChanges'];
+  changed: boolean;
+}> {
+  let nextVersionChanges = cached.versionChanges;
+  let changed = false;
+
+  // (i) Op-log scan: planned-version field changes over time.
+  try {
+    const existing = cached.versionChanges ?? [];
+    const sinceMs = existing.length > 0
+      ? Date.parse(existing[existing.length - 1].date + 'T00:00:00+08:00') || 0
+      : 0;
+    const fresh = await getAllVersionChanges(meegoUrl, sinceMs);
+    if (fresh.length > 0) {
+      const seen = new Set(existing.map(c => `${c.date}|${c.from}|${c.to}`));
+      const merged = [...existing];
+      for (const c of fresh) {
+        const k = `${c.date}|${c.from}|${c.to}`;
+        if (!seen.has(k)) { merged.push(c); seen.add(k); }
+      }
+      merged.sort((a, b) => a.date.localeCompare(b.date));
+      nextVersionChanges = merged;
+      changed = true;
+    }
+  } catch (e) {
+    console.warn(`[digests:vc] op-log scan failed for ${cached.name}:`, e);
+  }
+
+  // (ii) Snapshot mismatch: actual launched > planned on either platform.
+  try {
+    const mismatch = await detectVersionMismatch(meegoUrl);
+    if (mismatch) {
+      const list = nextVersionChanges ?? [];
+      const matchesPair = (c: { from: string; to: string }) =>
+        c.from === mismatch.planned && c.to === mismatch.actual;
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+      const matchingEntries = list.filter(matchesPair);
+      const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
+      if (!alreadyCached) {
+        const launchedFieldKey = mismatch.platform === 'ios'
+          ? 'ios_actual_online_version'
+          : 'android_actual_online_version';
+        let date: string | null = null;
+        try { date = await findLatestFieldEditDate(meegoUrl, launchedFieldKey); } catch (e) {
+          console.warn(`[digests:vc] launched-field date lookup failed for ${cached.name}:`, e);
+        }
+        if (!date) date = today;
+        const cleaned = list.filter(c => !matchesPair(c));
+        nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: mismatch.planned, to: mismatch.actual }]
+          .sort((a, b) => a.date.localeCompare(b.date));
+        changed = true;
+      }
+    }
+  } catch (e) {
+    console.warn(`[digests:vc] mismatch check failed for ${cached.name}:`, e);
+  }
+
+  // (iii) Server-launch slip: Server上线 node scheduled later than
+  // field_cde888 ("Server 计划上线时间") planned date.
+  try {
+    const serverDelay = await detectServerLaunchDelay(meegoUrl);
+    if (serverDelay) {
+      const list = nextVersionChanges ?? [];
+      const matchesPair = (c: { from: string; to: string }) =>
+        c.from === serverDelay.planned && c.to === serverDelay.scheduled;
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+      const matchingEntries = list.filter(matchesPair);
+      const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
+      if (!alreadyCached) {
+        let date: string | null = null;
+        try { date = await findLatestFieldEditDate(meegoUrl, 'field_cde888'); } catch (e) {
+          console.warn(`[digests:vc] server-launch date lookup failed for ${cached.name}:`, e);
+        }
+        if (!date) date = today;
+        const cleaned = list.filter(c => !matchesPair(c));
+        nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: serverDelay.planned, to: serverDelay.scheduled }]
+          .sort((a, b) => a.date.localeCompare(b.date));
+        changed = true;
+      }
+    }
+  } catch (e) {
+    console.warn(`[digests:vc] server-launch-delay check failed for ${cached.name}:`, e);
+  }
+
+  // Forward-only filter: only forward slips (e.g. 42.8 → 42.9, or
+  // Apr 5 → Apr 8) count as delays. Drop any backward entries —
+  // including legacy ones written before this rule shipped — so the
+  // feature un-delays after a revert. Path (i) already filters at
+  // emission; this is the safety net for paths (ii)/(iii) and old
+  // cache data.
+  if (!nextVersionChanges) nextVersionChanges = cached.versionChanges;
+  if (nextVersionChanges && nextVersionChanges.length > 0) {
+    const filtered = nextVersionChanges.filter(e => isForwardChange(e.from, e.to));
+    if (filtered.length !== nextVersionChanges.length) {
+      nextVersionChanges = filtered;
+      changed = true;
+    }
+  }
+
+  // (iv) Slip-reason inference. Runs when a slip changed this run OR
+  // when an entry lacks both `reason` and `reasonAttempted` (one
+  // retroactive pass for entries written before reason inference
+  // shipped). Cached reasons carry forward verbatim — we never
+  // re-infer to avoid the answer drifting between runs.
+  if (!nextVersionChanges) nextVersionChanges = cached.versionChanges;
+  const needsRetroactive = (nextVersionChanges ?? []).some(
+    e => !e.reason && !e.reasonAttempted,
+  );
+  if ((changed || needsRetroactive) && nextVersionChanges && nextVersionChanges.length > 0 && (cached.chatId || cached.meegoUrl)) {
+    const prior = cached.versionChanges ?? [];
+    const findCached = (e: { from: string; to: string }) =>
+      prior.find(p => p.from === e.from && p.to === e.to);
+    const updated = await Promise.all(nextVersionChanges.map(async e => {
+      const cachedEntry = findCached(e);
+      if (cachedEntry?.reason) return { ...e, reason: cachedEntry.reason, reasonAttempted: true };
+      if (cachedEntry?.reasonAttempted) return { ...e, reasonAttempted: true };
+      try {
+        const reason = await inferVersionSlipReason(cached.name, e.from, e.to, cached.chatId ?? '', botToken, cached.meegoUrl);
+        return reason ? { ...e, reason, reasonAttempted: true } : { ...e, reasonAttempted: true };
+      } catch (err) {
+        console.warn(`[digests:vc] slip-reason inference failed for "${cached.name}":`, err);
+        return e;
+      }
+    }));
+    const inferenceChanged = updated.some((u, i) => {
+      const before = nextVersionChanges![i];
+      return u.reason !== before.reason || u.reasonAttempted !== before.reasonAttempted;
+    });
+    if (inferenceChanged) changed = true;
+    nextVersionChanges = updated;
+  }
+
+  return { nextVersionChanges, changed };
+}
+
+/**
+ * Refresh-mode wrapper around `computeNextVersionChanges`: scans every
+ * non-Done feature, detects version slips, and patches the resulting
+ * `versionChanges` arrays into the GCS feature cache. The risk-level
+ * computation is intentionally NOT done here — that depends on the
+ * Gemini chat-risk findings which only run during the full-mode
+ * pipeline. Step 6b handles that.
  */
 async function patchVersionChangesInCache(
   features: MeegoFeature[],
@@ -1566,7 +1758,7 @@ async function patchVersionChangesInCache(
   try {
     featureCache = await readFeatureCache();
   } catch (e) {
-    console.warn('[digests] patchVersionChangesInCache: cache read failed:', e);
+    console.warn('[digests:vc] patchVersionChangesInCache: cache read failed:', e);
     return;
   }
   if (!featureCache) return;
@@ -1581,125 +1773,18 @@ async function patchVersionChangesInCache(
     const meegoUrl = meegoFeature?.meegoUrl ?? cached.meegoUrl;
     if (!meegoUrl) continue;
     scanned++;
-    let nextVersionChanges = cached.versionChanges;
-    let versionChangesChanged = false;
-    // (i) Op-log scan.
-    try {
-      const existing = cached.versionChanges ?? [];
-      const sinceMs = existing.length > 0
-        ? Date.parse(existing[existing.length - 1].date + 'T00:00:00+08:00') || 0
-        : 0;
-      const fresh = await getAllVersionChanges(meegoUrl, sinceMs);
-      if (fresh.length > 0) {
-        const seen = new Set(existing.map(c => `${c.date}|${c.from}|${c.to}`));
-        const merged = [...existing];
-        for (const c of fresh) {
-          const k = `${c.date}|${c.from}|${c.to}`;
-          if (!seen.has(k)) { merged.push(c); seen.add(k); }
-        }
-        merged.sort((a, b) => a.date.localeCompare(b.date));
-        nextVersionChanges = merged;
-        versionChangesChanged = true;
-      }
-    } catch (e) {
-      console.warn(`[digests] patchVC: op-log scan failed for ${cached.name}:`, e);
-    }
-    // (ii) Snapshot mismatch.
-    try {
-      const mismatch = await detectVersionMismatch(meegoUrl);
-      if (mismatch) {
-        const list = nextVersionChanges ?? [];
-        const matchesPair = (c: { from: string; to: string }) =>
-          c.from === mismatch.planned && c.to === mismatch.actual;
-        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-        const matchingEntries = list.filter(matchesPair);
-        const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
-        if (!alreadyCached) {
-          const launchedFieldKey = mismatch.platform === 'ios'
-            ? 'ios_actual_online_version'
-            : 'android_actual_online_version';
-          let date: string | null = null;
-          try { date = await findLatestFieldEditDate(meegoUrl, launchedFieldKey); } catch {}
-          if (!date) date = today;
-          const cleaned = list.filter(c => !matchesPair(c));
-          nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: mismatch.planned, to: mismatch.actual }]
-            .sort((a, b) => a.date.localeCompare(b.date));
-          versionChangesChanged = true;
-        }
-      }
-    } catch (e) {
-      console.warn(`[digests] patchVC: mismatch check failed for ${cached.name}:`, e);
-    }
-    // (iii) Server-launch slip.
-    try {
-      const serverDelay = await detectServerLaunchDelay(meegoUrl);
-      if (serverDelay) {
-        const list = nextVersionChanges ?? [];
-        const matchesPair = (c: { from: string; to: string }) =>
-          c.from === serverDelay.planned && c.to === serverDelay.scheduled;
-        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-        const matchingEntries = list.filter(matchesPair);
-        const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
-        if (!alreadyCached) {
-          let date: string | null = null;
-          try { date = await findLatestFieldEditDate(meegoUrl, 'field_cde888'); } catch {}
-          if (!date) date = today;
-          const cleaned = list.filter(c => !matchesPair(c));
-          nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: serverDelay.planned, to: serverDelay.scheduled }]
-            .sort((a, b) => a.date.localeCompare(b.date));
-          versionChangesChanged = true;
-        }
-      }
-    } catch (e) {
-      console.warn(`[digests] patchVC: server-launch check failed for ${cached.name}:`, e);
-    }
-    // (iv) Slip-reason inference. Same logic as Step 6b's path (iv):
-    // carry forward cached reason; never re-infer; one retroactive
-    // pass for entries lacking both reason and reasonAttempted.
-    if (!nextVersionChanges) nextVersionChanges = cached.versionChanges;
-    const needsRetroactive = (nextVersionChanges ?? []).some(
-      e => !e.reason && !e.reasonAttempted,
-    );
-    if ((versionChangesChanged || needsRetroactive) && nextVersionChanges && nextVersionChanges.length > 0 && (cached.chatId || cached.meegoUrl)) {
-      const prior = cached.versionChanges ?? [];
-      // Match on (from, to) only — the version transition uniquely
-      // identifies the slip. Paths (ii)/(iii) sometimes re-record an
-      // entry with a slightly different date (op-log lookup vs today
-      // fallback), so keying on date here would lose the cached reason
-      // and cause Gemini to re-infer with a fresh (possibly different)
-      // wording. Once a reason is set for a (from, to) pair, keep it.
-      const findCached = (e: { from: string; to: string }) =>
-        prior.find(p => p.from === e.from && p.to === e.to);
-      const updated = await Promise.all(nextVersionChanges.map(async e => {
-        const cachedEntry = findCached(e);
-        if (cachedEntry?.reason) return { ...e, reason: cachedEntry.reason, reasonAttempted: true };
-        if (cachedEntry?.reasonAttempted) return { ...e, reasonAttempted: true };
-        try {
-          const reason = await inferVersionSlipReason(cached.name, e.from, e.to, cached.chatId ?? '', botToken, cached.meegoUrl);
-          return reason ? { ...e, reason, reasonAttempted: true } : { ...e, reasonAttempted: true };
-        } catch (err) {
-          console.warn(`[digests] patchVC: slip-reason failed for "${cached.name}":`, err);
-          return e;
-        }
-      }));
-      const inferenceChanged = updated.some((u, i) => {
-        const before = nextVersionChanges![i];
-        return u.reason !== before.reason || u.reasonAttempted !== before.reasonAttempted;
-      });
-      if (inferenceChanged) versionChangesChanged = true;
-      nextVersionChanges = updated;
-    }
-    if (versionChangesChanged) {
+    const { nextVersionChanges, changed: vcChanged } = await computeNextVersionChanges(cached, meegoUrl, botToken);
+    if (vcChanged) {
       deltas.set(fId, { versionChanges: nextVersionChanges });
       changed++;
     }
   }
   if (deltas.size > 0) {
     try { await patchFeaturesInCache(deltas); } catch (e) {
-      console.warn('[digests] patchVersionChangesInCache: patchFeaturesInCache failed:', e);
+      console.warn('[digests:vc] patchVersionChangesInCache: patchFeaturesInCache failed:', e);
     }
   }
-  console.log(`[digests] patchVersionChangesInCache: ${scanned} scanned, ${changed} updated`);
+  console.log(`[digests:vc] patchVersionChangesInCache: ${scanned} scanned, ${changed} updated`);
 }
 
 export async function evaluateChatRisk(
@@ -2957,11 +3042,11 @@ async function summariseAbReport(
   const def = getDefFn('hamlet.ab_results_summary');
   const tmpl = await getPromptFn('hamlet.ab_results_summary', def?.default ?? '');
   const modelName = await getModelFn('hamlet.ab_results_summary', def?.model ?? 'gemini-2.5-flash-lite');
-  // Cap report content so we don't blow Gemini's input budget on
-  // very long reports — first 30k chars typically covers the
-  // headline tables + key metrics section.
-  const truncated = content.length > 30_000 ? content.slice(0, 30_000) + '\n…[truncated]' : content;
-  const prompt = renderFn(tmpl, { featureName, abReportContent: truncated });
+  // Send the full doc — gemini-2.5-flash-lite has a 1M-token context
+  // and AB report sections (results tables, Next Steps) can sit
+  // anywhere. Truncating to a head window dropped end-of-doc content
+  // and made Gemini hallucinate "section not present".
+  const prompt = renderFn(tmpl, { featureName, abReportContent: content });
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
@@ -3011,18 +3096,9 @@ async function getFirstNextStep(
   const def = getDefFn('hamlet.first_next_step');
   const tmpl = await getPromptFn('hamlet.first_next_step', def?.default ?? '');
   const modelName = await getModelFn('hamlet.first_next_step', def?.model ?? 'gemini-2.5-flash-lite');
-  // Next Steps is almost always at the END of an AB report. If we have
-  // to truncate, keep the head (for context) + the last 60k (so the end
-  // section is preserved). Total cap 100k chars — comfortably under
-  // gemini-2.5-flash-lite's 1M-token context.
-  let truncated: string;
-  if (content.length <= 100_000) {
-    truncated = content;
-  } else {
-    truncated = content.slice(0, 40_000) + '\n…[middle truncated]…\n' + content.slice(-60_000);
-  }
-  const prompt = renderFn(tmpl, { featureName, abReportContent: truncated });
-  console.log(`[digests] AB-concluded: first_next_step "${featureName}" report=${content.length}c, sent=${truncated.length}c, tail=${JSON.stringify(content.slice(-400))}`);
+  // Send the full doc — gemini-2.5-flash-lite has a 1M-token context.
+  const prompt = renderFn(tmpl, { featureName, abReportContent: content });
+  console.log(`[digests] AB-concluded: first_next_step "${featureName}" report=${content.length}c, tail=${JSON.stringify(content.slice(-400))}`);
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
@@ -4483,181 +4559,23 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         let nextVersionChanges = cached.versionChanges;
         let versionChangesChanged = false;
         if (meegoUrl) {
-          // (i) Op-log scan: planned-version field changes over time.
-          try {
-            const existing = cached.versionChanges ?? [];
-            const sinceMs = existing.length > 0
-              ? Date.parse(existing[existing.length - 1].date + 'T00:00:00+08:00') || 0
-              : 0;
-            const fresh = await getAllVersionChanges(meegoUrl, sinceMs);
-            if (fresh.length > 0) {
-              const seen = new Set(existing.map(c => `${c.date}|${c.from}|${c.to}`));
-              const merged = [...existing];
-              for (const c of fresh) {
-                const k = `${c.date}|${c.from}|${c.to}`;
-                if (!seen.has(k)) { merged.push(c); seen.add(k); }
-              }
-              merged.sort((a, b) => a.date.localeCompare(b.date));
-              nextVersionChanges = merged;
-              versionChangesChanged = true;
-            }
-            versionScanned++;
-          } catch (e) {
-            console.warn(`[digests] version-change scan failed for ${cached.name}:`, e);
-          }
-
-          // (ii) Snapshot scan: actual launched > planned on either
-          // platform — catches slips where the planned field never
-          // moved in the op log. On first detection of a (planned →
-          // actual) pair, look up the date the launched-version field
-          // was last edited (the slip date) and cache the entry; on
-          // subsequent runs we recognise the same pair and skip the
-          // expensive date lookup.
-          try {
-            const mismatch = await detectVersionMismatch(meegoUrl);
-            if (mismatch) {
-              const list = nextVersionChanges ?? [];
-              const matchesPair = (c: { from: string; to: string }) =>
-                c.from === mismatch.planned && c.to === mismatch.actual;
-              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-              const matchingEntries = list.filter(matchesPair);
-              // Treat the cache as already-resolved only when there's
-              // exactly one matching entry AND its date isn't today
-              // (today-stamped entries are probably leftovers from the
-              // older synthesis path that didn't look up the op log).
-              // Multiple matching entries means earlier runs duplicated
-              // the pair across days — also a sign to refresh.
-              const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
-              if (!alreadyCached) {
-                const launchedFieldKey = mismatch.platform === 'ios'
-                  ? 'ios_actual_online_version'
-                  : 'android_actual_online_version';
-                let date: string | null = null;
-                try {
-                  date = await findLatestFieldEditDate(meegoUrl, launchedFieldKey);
-                } catch (e) {
-                  console.warn(`[digests] launched-field date lookup failed for ${cached.name}:`, e);
-                }
-                if (!date) {
-                  date = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-                }
-                // Drop any older entry for the same pair that might have
-                // a stale date (e.g. previously written as "today" before
-                // the op-log lookup was wired in).
-                const cleaned = list.filter(c => !matchesPair(c));
-                nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: mismatch.planned, to: mismatch.actual }]
-                  .sort((a, b) => a.date.localeCompare(b.date));
-                versionChangesChanged = true;
-              }
-            }
-          } catch (e) {
-            console.warn(`[digests] version-mismatch check failed for ${cached.name}:`, e);
-          }
-
-          // (iii) Server-launch slip: Server上线 node scheduled later
-          // than the field_cde888 "Server 计划上线时间" planned date.
-          // Like the version mismatch path, dedupe by (from, to) and
-          // refresh today-stamped or duplicated entries with the
-          // op-log date for the most recent edit to either side.
-          try {
-            const serverDelay = await detectServerLaunchDelay(meegoUrl);
-            if (serverDelay) {
-              const list = nextVersionChanges ?? [];
-              const matchesPair = (c: { from: string; to: string }) =>
-                c.from === serverDelay.planned && c.to === serverDelay.scheduled;
-              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
-              const matchingEntries = list.filter(matchesPair);
-              const alreadyCached = matchingEntries.length === 1 && matchingEntries[0].date !== today;
-              if (!alreadyCached) {
-                let date: string | null = null;
-                try {
-                  date = await findLatestFieldEditDate(meegoUrl, 'field_cde888');
-                } catch (e) {
-                  console.warn(`[digests] server-launch date lookup failed for ${cached.name}:`, e);
-                }
-                if (!date) date = today;
-                const cleaned = list.filter(c => !matchesPair(c));
-                nextVersionChanges = [...cleaned, { date, iso: new Date().toISOString(), from: serverDelay.planned, to: serverDelay.scheduled }]
-                  .sort((a, b) => a.date.localeCompare(b.date));
-                versionChangesChanged = true;
-              }
-            }
-          } catch (e) {
-            console.warn(`[digests] server-launch-delay check failed for ${cached.name}:`, e);
-          }
-
+          versionScanned++;
+          const result = await computeNextVersionChanges(cached, meegoUrl, botToken);
+          nextVersionChanges = result.nextVersionChanges;
+          versionChangesChanged = result.changed;
           if (nextVersionChanges && nextVersionChanges.length > 0) versionDelayed++;
-        }
-
-        // (iv) Slip-reason inference. Runs in two cases:
-        //   - A new slip was detected this run (versionChangesChanged).
-        //   - A cached slip exists that has neither `reason` nor
-        //     `reasonAttempted` — this catches entries written before
-        //     reason inference shipped, giving them one retroactive pass.
-        // The helper itself short-circuits when there's no chat AND no
-        // meegoUrl, so this is safe to gate generously.
-        if (!nextVersionChanges) nextVersionChanges = cached.versionChanges;
-        const needsRetroactive = (nextVersionChanges ?? []).some(
-          e => !e.reason && !e.reasonAttempted,
-        );
-        if ((versionChangesChanged || needsRetroactive) && nextVersionChanges && nextVersionChanges.length > 0 && (cached.chatId || cached.meegoUrl)) {
-          const prior = cached.versionChanges ?? [];
-          // Look up a cached entry by (date, from, to). Used to:
-          //   1. Preserve a previously-inferred `reason` when paths (ii)/(iii)
-          //      drop+recreate an entry on a same-day re-run (the recreated
-          //      entry has no reason field, but the slip itself is the same).
-          //   2. Skip Gemini for entries that already had a reason inferred,
-          //      so we never re-infer (and risk a different answer) once a
-          //      reason is locked in.
-          const findCached = (e: { date: string; from: string; to: string }) =>
-            prior.find(p => p.date === e.date && p.from === e.from && p.to === e.to);
-          const updated = await Promise.all(nextVersionChanges.map(async e => {
-            const cachedEntry = findCached(e);
-            // 1. Cached entry already has a reason → carry it forward verbatim.
-            //    Never re-infer (avoids the answer drifting between runs).
-            if (cachedEntry?.reason) {
-              return { ...e, reason: cachedEntry.reason, reasonAttempted: true };
-            }
-            // 2. Cached entry exists, no reason, but inference was already
-            //    attempted (Gemini said "unknown"). Don't keep re-asking.
-            if (cachedEntry?.reasonAttempted) {
-              return { ...e, reasonAttempted: true };
-            }
-            // 3. Cached entry without reason AND without reasonAttempted —
-            //    this is either a brand-new slip OR an entry that predates
-            //    the reason field. Either way, run Gemini once. Mark
-            //    reasonAttempted so we don't loop on "unknown" verdicts.
-            try {
-              const reason = await inferVersionSlipReason(cached.name, e.from, e.to, cached.chatId ?? '', botToken, cached.meegoUrl);
-              return reason
-                ? { ...e, reason, reasonAttempted: true }
-                : { ...e, reasonAttempted: true };
-            } catch (err) {
-              console.warn(`[digests] slip-reason inference failed for "${cached.name}":`, err);
-              // Don't mark attempted on transient errors — let the next
-              // refresh retry. Gemini hiccups shouldn't permanently
-              // disable inference for an entry.
-              return e;
-            }
-          }));
-          // If inference added a reason or attempted flag to any entry,
-          // mark versionChangesChanged so the delta gets persisted even
-          // when no new slip was detected this run (retroactive pass).
-          const inferenceChanged = updated.some((u, i) => {
-            const before = nextVersionChanges![i];
-            return u.reason !== before.reason || u.reasonAttempted !== before.reasonAttempted;
-          });
-          if (inferenceChanged) versionChangesChanged = true;
-          nextVersionChanges = updated;
         }
 
         const delta: Partial<import('./types').Feature> = {};
         if (versionChangesChanged) delta.versionChanges = nextVersionChanges;
 
-        // Features in AB Testing don't get a riskLevel in the cache
-        // (the UI Delayed badge keys off versionChanges directly), but
-        // we still want the digest card's RiskFinding to flip to
-        // red+Delayed so the daily message matches Hamlet.
+        // Features in AB Testing get riskLevel='green' (the UI Delayed
+        // badge keys off versionChanges directly, so a delayed AB
+        // feature still reads "Delayed" regardless of riskLevel; a
+        // non-delayed one reads "Low"). Chat-risk reasons are still
+        // preserved on the cache so the feature drawer's AI insight
+        // box can surface them — the badge is suppressed but the
+        // detail isn't lost.
         if (statusName === '实验中') {
           const hasDelayAb = (nextVersionChanges?.length ?? 0) > 0;
           if (hasDelayAb && finding) {
@@ -4665,13 +4583,10 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             finding.delay = { detail: `${latest.from} → ${latest.to}` };
             finding.level = 'red';
           }
-          // AB Testing defaults to Low risk in the cache. The UI's
-          // Delayed badge keys off versionChanges directly, so a
-          // delayed AB feature still reads "Delayed" regardless of
-          // riskLevel — and a non-delayed one now reads "Low" instead
-          // of having no badge at all.
           delta.riskLevel = 'green';
-          delta.riskNotes = undefined;
+          const abNotes: string[] = finding ? [...finding.reasons] : [];
+          if (finding?.delay) abNotes.unshift(finding.delay.detail);
+          delta.riskNotes = abNotes.length > 0 ? abNotes : undefined;
           trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
           continue;

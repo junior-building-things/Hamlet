@@ -2,15 +2,12 @@
  * Persistent feature-risk state for the daily digest.
  *
  * Stored as a single JSON file at `gs://tiktok-im-hamlet-state/digests/chat-risks.json`
- * (kept the original path for backwards compat). Holds two kinds of risk
- * state per feature:
- *   - chatRisk: Gemini-detected qualitative risk from the last N runs
- *   - delayChange: a Meego field-edit (version / planned launch date) that
- *     should keep the feature flagged "Delayed" for the next 2 runs after
- *     it was first detected
+ * (kept the original path for backwards compat). Holds chatRisk per feature
+ * (Gemini-detected qualitative risk from the last N runs) plus a small list
+ * of recent run timestamps for activity-log cutoffs.
  *
- * Plus a small list of recent run timestamps so we can compute "since the
- * last digest run" cutoffs for the activity-log scan.
+ * Version-slip / launch-date delays live on the feature cache as
+ * `Feature.versionChanges`, not here.
  */
 
 import { readJsonState, writeJsonState } from './gcs-state';
@@ -43,24 +40,10 @@ export interface PersistedChatRisk {
   raisedAtIso: string;
 }
 
-export interface PersistedDelayChange {
-  /** Display string like "version 44.4 → 44.5" or "planned launch 16 Apr → 17 Apr". */
-  detail: string;
-  /** ISO timestamp of when this delay was first detected. */
-  detectedAtIso: string;
-  /**
-   * Number of digest runs (including the current one) where the Delayed
-   * badge should still be shown. Decremented at the end of each run that
-   * shows it; entry is dropped when this hits 0.
-   */
-  runsLeftToShow: number;
-}
-
 export interface PersistedFeatureRisk {
   /** Feature display name (cached for log readability — not authoritative). */
   name: string;
   chatRisk?: PersistedChatRisk;
-  delayChange?: PersistedDelayChange;
   /** ISO timestamp of the most recent run that touched this entry. */
   lastSeenIso: string;
 }
@@ -359,8 +342,8 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   for (const [id, entry] of Object.entries(rawFeatures)) {
     if (!entry || typeof entry !== 'object') continue;
     const e = entry as Record<string, unknown>;
-    // New shape: has chatRisk or delayChange field
-    if (e.chatRisk !== undefined || e.delayChange !== undefined) {
+    // New shape: has chatRisk field
+    if (e.chatRisk !== undefined) {
       features[id] = e as unknown as PersistedFeatureRisk;
       continue;
     }

@@ -278,7 +278,7 @@ async function handleMessage(body: LarkEvent) {
             try {
               const prdContent = await readDocContent(feature.prd);
               if (prdContent && prdContent !== '(empty document)') {
-                data['PRD Content (excerpt)'] = prdContent.slice(0, 1500);
+                data['PRD Content'] = prdContent;
                 console.log('[webhook] Tier 4: read PRD content');
               }
             } catch { /* skip */ }
