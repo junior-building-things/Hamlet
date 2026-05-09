@@ -3,7 +3,7 @@ import { getAgentToken } from '@/lib/agents';
 import {
   sendTextMessage, searchAbReport,
   extractFigmaUrlFromPrd, searchLibraInChat, readDocContent,
-  joinFeatureChat, getDocMeta,
+  joinFeatureChat,
 } from '@/lib/lark';
 import { readFeatureCache } from '@/lib/feature-cache';
 import { callMeegoMcp } from '@/lib/digests';
@@ -296,29 +296,6 @@ async function handleMessage(body: LarkEvent) {
                 console.log('[webhook] Tier 5: searched chat for Libra');
               }
             } catch { /* skip */ }
-          }
-
-          // Tier 6: Lark Drive document metadata — when the user pastes a
-          // doc URL and asks about ownership / recency, the doc's actual
-          // owner + last-modifier aren't in the feature cache (those are
-          // Meego role members; document owner is a separate Lark Drive
-          // field). Look it up directly so Junior can answer "who owns
-          // this doc?" without conflating it with the feature PM.
-          //
-          // Gates: a Lark doc URL in the user's message AND infoType
-          // suggests a metadata question. Costs one Drive API call.
-          const docUrlInMsg = userText.match(/https?:\/\/[a-z0-9.-]*larkoffice\.com\/(?:docx|wiki)\/[A-Za-z0-9_-]+/i)?.[0];
-          if (docUrlInMsg && infoType && /owner|modif|edit|created|when|who/i.test(infoType)) {
-            try {
-              const docMeta = await getDocMeta(docUrlInMsg);
-              if (docMeta.owner)               data['Document Owner'] = docMeta.owner;
-              if (docMeta.lastModifier)        data['Document Last Modified By'] = docMeta.lastModifier;
-              if (docMeta.createTimeIso)       data['Document Created'] = docMeta.createTimeIso;
-              if (docMeta.latestModifyTimeIso) data['Document Last Modified'] = docMeta.latestModifyTimeIso;
-              console.log(`[webhook] Tier 6: fetched doc meta for ${docUrlInMsg} (owner=${docMeta.owner || '∅'})`);
-            } catch (e) {
-              console.warn('[webhook] Tier 6: doc meta lookup failed:', e);
-            }
           }
 
           featureContext = '\n\nHere is the data for feature "' + feature.name + '":\n' +
