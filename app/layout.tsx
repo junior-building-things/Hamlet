@@ -10,6 +10,7 @@ const newsreader = Newsreader({ variable: "--font-newsreader", subsets: ["latin"
 export const metadata: Metadata = {
   title: "Hamlet — PM Dashboard",
   description: "Product feature tracking dashboard powered by Meego",
+  icons: { icon: "/hamlet-icon.svg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
