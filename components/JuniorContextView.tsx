@@ -43,15 +43,12 @@ function describe(name: string): string {
   return '';
 }
 
-function GroupHeader({ label, count }: { label: string; count?: number }) {
+function GroupHeader({ label }: { label: string }) {
   return (
     <div className="flex items-baseline gap-2 px-1 pt-3 pb-1.5">
       <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
         {label}
       </div>
-      {count !== undefined && (
-        <div className="text-[10.5px] text-[var(--text-muted)]">· {count}</div>
-      )}
       <div className="flex-1 h-px bg-[var(--hairline)] ml-2" />
     </div>
   );
@@ -142,7 +139,7 @@ export function JuniorContextView() {
             />
 
             {/* Persona — system.md, glossary.md, preferences.md */}
-            <GroupHeader label="Persona" count={personaFiles.length} />
+            <GroupHeader label="Persona" />
             {personaFiles.length === 0 ? (
               <div className="text-center text-sm text-gray-500 py-4">
                 No persona files yet.
@@ -160,7 +157,7 @@ export function JuniorContextView() {
             )}
 
             {/* Skills — every other *.md file */}
-            <GroupHeader label="Skills" count={skillFiles.length} />
+            <GroupHeader label="Skills" />
             {skillFiles.length === 0 ? (
               <div className="text-center text-sm text-gray-500 py-4">
                 No skill files yet.
@@ -178,7 +175,7 @@ export function JuniorContextView() {
             )}
 
             {/* Tools — read-only Gemini function declarations from junior/lib/tools.ts */}
-            <GroupHeader label="Tools" count={tools.length} />
+            <GroupHeader label="Tools" />
             {tools.length === 0 ? (
               <div className="text-center text-sm text-gray-500 py-4">
                 Tools unavailable. Junior may be down.
