@@ -179,9 +179,6 @@ export function JuniorContextView() {
 
             {/* Tools — read-only Gemini function declarations from junior/lib/tools.ts */}
             <GroupHeader label="Tools" count={tools.length} />
-            <div className="text-[11.5px] text-[var(--text-muted)] px-1 mb-1">
-              Defined in <span className="font-mono">junior/lib/tools.ts</span>. Read-only — edit there to change.
-            </div>
             {tools.length === 0 ? (
               <div className="text-center text-sm text-gray-500 py-4">
                 Tools unavailable. Junior may be down.
