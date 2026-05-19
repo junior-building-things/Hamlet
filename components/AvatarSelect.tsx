@@ -17,7 +17,7 @@ function getMaxHeight(triggerEl: Element): number {
   return window.innerHeight - triggerEl.getBoundingClientRect().bottom - 8;
 }
 
-function useDropdown() {
+export function useDropdown() {
   const [open, setOpen]       = useState(false);
   const [maxHeight, setMaxHeight] = useState(300);
   const ref = useRef<HTMLDivElement>(null);

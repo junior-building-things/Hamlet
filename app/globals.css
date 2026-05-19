@@ -396,24 +396,7 @@ body {
 }
 .meta-select .ms-value { color: var(--text); }
 .meta-select .ms-default { color: var(--text-dim); font-style: normal; }
-
-/* Native <select> overlay so users can pick — invisible, sits on top */
-.meta-select select {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  width: 100%;
-  height: 100%;
-  cursor: inherit;
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  border: none;
-  font: inherit;
-  color: inherit;
-  padding: 0;
-  margin: 0;
-}
+.meta-select .ms-trigger { font: inherit; color: inherit; height: 100%; }
 
 .meta-row {
   display: flex;
