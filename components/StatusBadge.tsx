@@ -23,6 +23,7 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   'QA':               'yellow',
   'UAT':              'indigo',
   'AB Testing':       'lime',
+  'To be merged':     'amber',
   'Merged':           'teal',
   'Done':             'green',
 };

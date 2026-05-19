@@ -14,9 +14,9 @@ import { AV } from '@/lib/avatars';
 import { useViewedFeatures } from '@/lib/viewedFeatures';
 
 const STATUS_GROUP_ORDER: Record<string, number> = {
-  'AB Testing': 1, 'Merged': 2, 'QA Testing': 3, 'Development': 4,
-  'Tech Design': 5, 'PRD Walkthrough': 6, 'RD Allocation': 7,
-  'Dependency Check': 8, 'PRD/Design Prep': 9, 'Done': 10,
+  'AB Testing': 1, 'To be merged': 2, 'Merged': 3, 'QA Testing': 4, 'Development': 5,
+  'Tech Design': 6, 'PRD Walkthrough': 7, 'RD Allocation': 8,
+  'Dependency Check': 9, 'PRD/Design Prep': 10, 'Done': 11,
 };
 
 // Match ProjectView's GroupHeader visuals — same status-tone pill +

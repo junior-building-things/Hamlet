@@ -64,6 +64,7 @@ const OVERALL_STATUS_MAP: Record<string, string> = {
   '开发中':        'Development',
   '测试中':        'QA Testing',
   '实验中':        'AB Testing',
+  '待上车':        'To be merged',
   '已上车':        'Merged',
   '已完成':        'Done',
 };
