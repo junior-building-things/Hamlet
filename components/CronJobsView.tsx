@@ -221,7 +221,6 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
       });
       const data = await res.json() as { ok?: boolean; error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Update failed');
-      toast.success(`${job.name} → ${value}`);
       onChange();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Update failed');
