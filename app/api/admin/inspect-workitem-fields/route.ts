@@ -22,11 +22,13 @@ export async function GET(req: NextRequest) {
   if (!workItemId) return NextResponse.json({ error: 'missing workItemId' }, { status: 400 });
 
   try {
-    const raw = await callMeegoMcp('get_workitem_brief', {
+    const fieldsParam = req.nextUrl.searchParams.get('fields');
+    const args: Record<string, unknown> = {
       project_key: TIKTOK_PROJECT_KEY,
       work_item_id: workItemId,
-      fields: ['field_a4c558', 'field_2e7909', 'field_675419'],
-    });
+    };
+    if (fieldsParam) args.fields = fieldsParam.split(',');
+    const raw = await callMeegoMcp('get_workitem_brief', args);
     return NextResponse.json({ workItemId, raw });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
