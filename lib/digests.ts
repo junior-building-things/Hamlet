@@ -568,7 +568,7 @@ export async function fetchMeegoFeature(workItemId: string, name: string, projec
   try {
     raw = await callMeegoMcp('get_workitem_brief', {
       url: meegoUrl,
-      fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_a4c558', 'field_2e7909', 'start_time', 'updated_at'],
+      fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'business', 'field_2e7909', 'start_time', 'updated_at'],
     });
   } catch (e) {
     console.warn(`[digests] failed to fetch brief for ${name}:`, e);

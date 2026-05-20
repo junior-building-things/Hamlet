@@ -40,6 +40,17 @@ for (const group of STATUS_GROUPS) {
 NODE_TRANSLATIONS['依赖判断'] = 'Dependency Check';
 NODE_TRANSLATIONS['合规评估'] = 'Compliance Review';
 
+// Parent "Business Line" (业务线) Meego field. Option IDs → short display
+// labels. The field stores a single string ID; Meego doesn't return the
+// label inline. New IDs can be harvested via /api/admin/inspect-workitem-fields.
+export const BUSINESS_LINE_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: '5f105019a8b9a853da6476d1', label: 'Messaging' },
+  { id: '69d99f3260e983e43a0a4a80', label: 'Identity & Communities' },
+];
+const BUSINESS_LINE_LABEL: Record<string, string> = Object.fromEntries(
+  BUSINESS_LINE_OPTIONS.map(o => [o.id, o.label]),
+);
+
 // P0–P3 option IDs in Meego
 const PRIORITY_TO_MEEGO: Record<Priority, string> = {
   P0: '0',
@@ -545,11 +556,11 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 }> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     url: meegoUrl,
-    // field_675419 = Commit Status (Quarterly Cycle), field_a4c558 = DM
-    // Business Line, field_2e7909 = Social模块. The MCP only returns
-    // explicitly-requested keys in `work_item_fields`, so all three need
-    // to be in this list for the JSON path to find them.
-    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_675419', 'field_a4c558', 'field_2e7909', 'created_at', 'updated_at', 'field_0cec98', 'field_6909f6', 'effect_analyze_link_t'],
+    // field_675419 = Commit Status (Quarterly Cycle), business = parent
+    // Business Line (业务线), field_2e7909 = Social模块. The MCP only
+    // returns explicitly-requested keys in `work_item_fields`, so all
+    // three need to be in this list for the JSON path to find them.
+    fields: ['wiki', 'priority', 'field_due3fb', 'field_532e61', 'field_675419', 'business', 'field_2e7909', 'created_at', 'updated_at', 'field_0cec98', 'field_6909f6', 'effect_analyze_link_t'],
   });
 
   // Try parsing the brief as JSON first (current MCP format), then fall back
@@ -667,7 +678,8 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
         jsonQuarterlyCycle = pickDisplay(v);
       }
     }
-    jsonBusinessLine = getField('field_a4c558');
+    const businessId = getField('business');
+    jsonBusinessLine = BUSINESS_LINE_LABEL[businessId] ?? businessId;
     jsonSocialComponent = getField('field_2e7909');
 
     // updated_at can come back as a millisecond-string ("1714800000000")
@@ -755,7 +767,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       if (Array.isArray(parsed) && parsed.length > 0) quarterlyCycle = parsed[parsed.length - 1];
     } catch { /* keep raw value */ }
   }
-  const businessLine    = jsonBusinessLine    || parseWorkItemField(raw, 'DM Business Line');
+  const businessLine    = jsonBusinessLine    || parseWorkItemField(raw, '业务线');
   const socialComponent = jsonSocialComponent || parseWorkItemField(raw, 'Social模块');
 
   // Use JSON-extracted role owners if available, fall back to markdown parsing.
@@ -1098,7 +1110,7 @@ export async function createFeature(params: CreateFeatureParams): Promise<{ id: 
   if (params.quarterlyCycleOptionId)
     fields.push({ field_key: 'field_675419', field_value: JSON.stringify([{ option_id: params.quarterlyCycleOptionId }]) });
   if (params.businessLineOptionId)
-    fields.push({ field_key: 'field_a4c558', field_value: params.businessLineOptionId });
+    fields.push({ field_key: 'business', field_value: params.businessLineOptionId });
   if (params.socialComponentOptionId)
     fields.push({ field_key: 'field_2e7909', field_value: params.socialComponentOptionId });
   if (params.roles.length > 0)

@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
 import { PackageModal } from './PackageModal';
 import { AV } from '@/lib/avatars';
+import { BUSINESS_LINE_OPTIONS } from '@/lib/meego';
 
 interface Props {
   mode: 'add' | 'edit';
@@ -36,13 +37,7 @@ const QUARTERLY_CYCLES = [
   { id: '3y4d9_0oy', label: '2026-Q3' },
 ];
 
-const BUSINESS_LINES = [
-  { id: 'y7mcg3xr1',  label: 'Core experience' },
-  { id: '_hdtkvolb',  label: 'Business and Creator Messaging' },
-  { id: '2hj6rn3ao',  label: 'Social Messaging' },
-  { id: 'g3zl853ku',  label: 'DM Infra' },
-  { id: 'ugt0a2p06',  label: 'DM Standalone App' },
-];
+const BUSINESS_LINES = BUSINESS_LINE_OPTIONS;
 
 const SOCIAL_COMPONENTS = [
   { id: 'mz8vxxems',              label: 'Sticker & Avatar' },
@@ -230,7 +225,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
     name:            '',
     priority:        '1',           // P1 default
     quarterlyCycle:  '5350il55y',   // 2026-Q2 default
-    businessLine:    '2hj6rn3ao',   // Social Messaging default
+    businessLine:    '5f105019a8b9a853da6476d1',   // Messaging default
     socialComponent: 'mz8vxxems',   // Sticker & Typing Rec default
     pm:              '',
     techOwner:       '',
