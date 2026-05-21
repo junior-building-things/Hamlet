@@ -2035,6 +2035,81 @@ export async function duplicateDoc(docUrl: string, newName?: string): Promise<st
   return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;
 }
 
+// ─── Fill "User Interaction & Design" table ───────────────────────────────────
+
+export interface UserInteractionRow {
+  scenario?: string;
+  interactions?: string;
+  onlineVersion?: string;
+  expectedDesign?: string;
+}
+
+/**
+ * Fill the User Interaction & Design table in a PRD template. The
+ * template ships with 4 columns (Scenarios | Interactions | Online
+ * version | Expected design) and 4 empty data rows beneath the header.
+ *
+ * Each row's cell already contains one paragraph block; this helper
+ * updates that paragraph's text. Extra rows beyond the template's
+ * 4-row capacity are dropped — caller can warn the user.
+ *
+ * Returns the number of rows actually written.
+ */
+export async function fillUserInteractionDesignTable(
+  docId: string,
+  rows: UserInteractionRow[],
+  token: string,
+): Promise<{ written: number; dropped: number }> {
+  if (rows.length === 0) return { written: 0, dropped: 0 };
+  const blocks = await getDocBlocks(docId, token);
+  const byId = new Map(blocks.map(b => [b.block_id, b]));
+
+  // Find the heading
+  let headingIdx = -1;
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (HEADING_BLOCK_TYPES.has(b.block_type)
+        && blockText(b).toLowerCase().includes('user interaction')) {
+      headingIdx = i;
+      break;
+    }
+  }
+  if (headingIdx === -1) throw new Error('User Interaction & Design heading not found');
+
+  // Find the next table block
+  let tableBlock: LarkBlock | undefined;
+  for (let i = headingIdx + 1; i < blocks.length; i++) {
+    if (HEADING_BLOCK_TYPES.has(blocks[i].block_type)) break;
+    if (blocks[i].block_type === 31) { tableBlock = blocks[i]; break; }
+  }
+  if (!tableBlock?.children) throw new Error('User Interaction & Design table not found');
+
+  const NUM_COLS = 4;
+  const cellIds = tableBlock.children;
+  // First NUM_COLS = header row, skip
+  const dataRowCount = Math.floor((cellIds.length - NUM_COLS) / NUM_COLS);
+
+  const requests: UpdateRequest[] = [];
+  const written = Math.min(rows.length, dataRowCount);
+  for (let r = 0; r < written; r++) {
+    const row = rows[r];
+    const values = [row.scenario ?? '', row.interactions ?? '', row.onlineVersion ?? '', row.expectedDesign ?? ''];
+    for (let c = 0; c < NUM_COLS; c++) {
+      const cellId = cellIds[(r + 1) * NUM_COLS + c];
+      const cell = byId.get(cellId);
+      const paragraphId = cell?.children?.[0];
+      if (!paragraphId) continue;
+      requests.push({
+        block_id: paragraphId,
+        update_text_elements: { elements: [{ text_run: { content: values[c], text_element_style: {} } }] },
+      });
+    }
+  }
+
+  await batchUpdateBlocks(docId, requests, token);
+  return { written, dropped: Math.max(0, rows.length - written) };
+}
+
 // ─── Fill "What are we building" section ──────────────────────────────────────
 
 export async function fillWhatWeAreBuilding(

@@ -6,7 +6,9 @@ import {
   resolveDocIdFromUrl,
   updatePrdBasicInfo,
   fillWhatWeAreBuilding,
+  fillUserInteractionDesignTable,
   editDocSection,
+  type UserInteractionRow,
 } from '@/lib/lark';
 
 const SECRET = process.env.AGENT_RUN_SECRET;
@@ -26,10 +28,13 @@ interface SectionFill { heading: string; content: string }
  *   description?:  string,           // → "What are we building" paragraph
  *   meegoUrl?:     string,           // → PRD basic-info cell
  *   complianceUrl?: string,          // → PRD basic-info cell
+ *   userInteractionRows?: Array<{ scenario, interactions, onlineVersion?, expectedDesign? }>,
+ *                                    // → User Interaction & Design table
+ *                                    //   (template caps at 4 rows; extras dropped)
  *   sections?: Array<{ heading, content }>,   // generic editDocSection
  * }
  *
- * Response: { ok, url, docToken, transferred, fillErrors? }
+ * Response: { ok, url, docToken, transferred, fillErrors?, uiRowsDropped? }
  *
  * Order of operations: copy → fill → transfer. The bot retains edit
  * access after transfer (new owner can't revoke the app) but doing
@@ -47,6 +52,7 @@ export async function POST(req: NextRequest) {
       description?: string;
       meegoUrl?: string;
       complianceUrl?: string;
+      userInteractionRows?: UserInteractionRow[];
       sections?: SectionFill[];
     };
     const sourceUrl = String(body.sourceUrl ?? '');
@@ -71,6 +77,16 @@ export async function POST(req: NextRequest) {
         await fillWhatWeAreBuilding(docToken, body.description.trim(), botToken);
       } catch (e) {
         fillErrors.description = e instanceof Error ? e.message : String(e);
+      }
+    }
+
+    let uiRowsDropped = 0;
+    if (Array.isArray(body.userInteractionRows) && body.userInteractionRows.length > 0) {
+      try {
+        const result = await fillUserInteractionDesignTable(docToken, body.userInteractionRows, botToken);
+        uiRowsDropped = result.dropped;
+      } catch (e) {
+        fillErrors.userInteraction = e instanceof Error ? e.message : String(e);
       }
     }
 
@@ -102,6 +118,7 @@ export async function POST(req: NextRequest) {
       transferred,
       ...(transferError ? { transferError } : {}),
       ...(Object.keys(fillErrors).length ? { fillErrors } : {}),
+      ...(uiRowsDropped > 0 ? { uiRowsDropped } : {}),
     });
   } catch (e) {
     console.error('[admin/duplicate-prd] error:', e);
