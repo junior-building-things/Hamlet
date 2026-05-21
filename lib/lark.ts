@@ -436,7 +436,7 @@ export async function grantBotEditAccess(
  * Transfer ownership of a Lark doc from the bot to the PM.
  * Uses the docs:permission.member:transfer scope.
  */
-async function transferOwnership(fileToken: string, token: string): Promise<void> {
+export async function transferOwnership(fileToken: string, token: string): Promise<void> {
   const res = await fetch(
     `${LARK_BASE_URL}/open-apis/drive/v1/permissions/${fileToken}/members/transfer_owner?type=docx&need_notification=false`,
     {
