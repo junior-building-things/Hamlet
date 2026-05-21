@@ -14,7 +14,7 @@ import { AV } from '@/lib/avatars';
 import { useViewedFeatures } from '@/lib/viewedFeatures';
 
 const STATUS_GROUP_ORDER: Record<string, number> = {
-  'AB Testing': 1, 'To be merged': 2, 'Merged': 3, 'QA Testing': 4, 'Development': 5,
+  'AB Testing': 1, 'Merged': 2, 'To be merged': 3, 'QA Testing': 4, 'Development': 5,
   'Tech Design': 6, 'PRD Walkthrough': 7, 'RD Allocation': 8,
   'Dependency Check': 9, 'PRD/Design Prep': 10, 'Done': 11,
 };

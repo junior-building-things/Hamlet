@@ -172,7 +172,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
     // Higher index = more progressed. Done features go to the end since
     // they skip expensive lookups anyway.
     const STATUS_ORDER: Record<string, number> = {
-      'AB Testing': 1, 'To be merged': 2, 'Merged': 3, 'QA Testing': 4, 'Development': 5,
+      'AB Testing': 1, 'Merged': 2, 'To be merged': 3, 'QA Testing': 4, 'Development': 5,
       'Tech Design': 6, 'PRD Walkthrough': 7, 'RD Allocation': 8,
       'Dependency Check': 9, 'PRD/Design Prep': 10,
       'Done': 11,
@@ -519,7 +519,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
 
   const uniqueStatuses = useMemo(() => {
     const STATUS_DROPDOWN_ORDER = [
-      'AB Testing', 'To be merged', 'Merged', 'QA Testing', 'Development', 'Tech Design',
+      'AB Testing', 'Merged', 'To be merged', 'QA Testing', 'Development', 'Tech Design',
       'PRD Walkthrough', 'RD Allocation', 'Dependency Check',
       'Line Review', 'PRD/Design Prep', 'Done',
     ];
@@ -598,7 +598,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
     }
 
     const STATUS_GROUP_ORDER: Record<string, number> = {
-      'AB Testing': 1, 'To be merged': 2, 'Merged': 3, 'QA Testing': 4, 'Development': 5,
+      'AB Testing': 1, 'Merged': 2, 'To be merged': 3, 'QA Testing': 4, 'Development': 5,
       'Tech Design': 6, 'PRD Walkthrough': 7, 'RD Allocation': 8,
       'Dependency Check': 9, 'Line Review': 10, 'PRD/Design Prep': 11, 'Done': 12,
     };
