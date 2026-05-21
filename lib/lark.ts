@@ -295,7 +295,7 @@ const HEADING_BLOCK_TYPES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
 // ─── PRD basic info: fill Meego URL + Compliance URL ─────────────────────────
 
-async function updatePrdBasicInfo(
+export async function updatePrdBasicInfo(
   docId: string,
   fields: { meegoUrl?: string; complianceUrl?: string },
   token: string,
@@ -2037,7 +2037,7 @@ export async function duplicateDoc(docUrl: string, newName?: string): Promise<st
 
 // ─── Fill "What are we building" section ──────────────────────────────────────
 
-async function fillWhatWeAreBuilding(
+export async function fillWhatWeAreBuilding(
   docId: string,
   description: string,
   token: string,
