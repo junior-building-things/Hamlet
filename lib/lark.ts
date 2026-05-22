@@ -1447,13 +1447,19 @@ const CODE_LANGUAGE_ENUM: Record<string, number> = {
 };
 
 /**
- * A mixed-content block for `editDocSectionAsBlocks`. `paragraph` and
- * `bullet` content may contain backtick-quoted inline code spans (parsed
- * via parseMarkdownCodeRuns). `code` content is rendered as a Lark code
- * block (block_type=14) with optional language for syntax highlighting.
+ * A mixed-content block for `editDocSectionAsBlocks`. `paragraph`,
+ * `bullet`, and `heading*` content may contain backtick-quoted inline
+ * code spans (parsed via parseMarkdownCodeRuns). `code` content is
+ * rendered as a Lark code block (block_type=14) with optional language
+ * for syntax highlighting.
+ *
+ * `heading2|3|4` insert nested headings within a section — useful for
+ * breaking a long Expected-results section into 3.2.1 / 3.2.2 / etc.
+ * sub-sections. They render as plain Lark heading blocks at the page's
+ * top level (Lark doesn't nest headings by parent-child).
  */
 export interface SectionBlock {
-  kind: 'paragraph' | 'bullet' | 'code';
+  kind: 'paragraph' | 'bullet' | 'code' | 'heading2' | 'heading3' | 'heading4';
   content: string;
   language?: string;
 }
@@ -1517,8 +1523,9 @@ export async function editDocSectionAsBlocks(
     throw new Error(`Lark batch_delete error ${deleteData.code}: ${deleteData.msg ?? 'unknown'}`);
   }
 
-  // Build mixed children. paragraph/bullet support inline backtick code; code
-  // blocks are inserted as block_type=14 with optional language highlighting.
+  // Build mixed children. paragraph/bullet/heading support inline backtick
+  // code; code blocks are inserted as block_type=14 with optional language
+  // highlighting.
   const children = sectionBlocks.map(b => {
     if (b.kind === 'code') {
       const lang = b.language ? CODE_LANGUAGE_ENUM[b.language.toLowerCase()] ?? 1 : 1;
@@ -1532,6 +1539,15 @@ export async function editDocSectionAsBlocks(
     }
     if (b.kind === 'bullet') {
       return { block_type: 12, bullet: { elements: parseMarkdownCodeRuns(b.content) } };
+    }
+    if (b.kind === 'heading2') {
+      return { block_type: 4, heading2: { elements: parseMarkdownCodeRuns(b.content) } };
+    }
+    if (b.kind === 'heading3') {
+      return { block_type: 5, heading3: { elements: parseMarkdownCodeRuns(b.content) } };
+    }
+    if (b.kind === 'heading4') {
+      return { block_type: 6, heading4: { elements: parseMarkdownCodeRuns(b.content) } };
     }
     // paragraph
     return { block_type: 2, text: { elements: parseMarkdownCodeRuns(b.content) } };
