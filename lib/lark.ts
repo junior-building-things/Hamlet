@@ -1298,6 +1298,21 @@ export async function updateBulletByPrefix(
 }
 
 /**
+ * One cell in a row fill. Either a plain string (rendered as text with
+ * inline-code backtick parsing applied) or an object that renders as a
+ * @-mention of the bot (with optional leading text).
+ *
+ * Use `{ mentionBot: true }` to render a clickable @-mention of the bot
+ * (Junior). The displayed label comes from Lark's user data, not from
+ * any text supplied here. If you want "by @bot" pass
+ * `{ text: 'by ', mentionBot: true }` — the leading text renders as a
+ * text run before the mention element.
+ */
+export type TableCellFill =
+  | string
+  | { text?: string; mentionBot?: boolean };
+
+/**
  * Fill cells of a specific row in the first table found under a section
  * heading. `rowIndex` is 0-based and points at the actual row to fill
  * (skip the header row — typically rowIndex=1 for the first data row).
@@ -1314,7 +1329,7 @@ export async function fillTableRowUnderHeading(
   docUrl: string,
   sectionHeading: string,
   rowIndex: number,
-  cellContents: string[],
+  cellContents: TableCellFill[],
 ): Promise<void> {
   if (cellContents.length === 0) return;
 
@@ -1358,6 +1373,7 @@ export async function fillTableRowUnderHeading(
   const cellIds = tableBlock.children ?? [];
   const rowStart = rowIndex * colCount;
   const updates = [];
+  const botOpenId = getBotOpenId();
   for (let col = 0; col < Math.min(cellContents.length, colCount); col++) {
     const cellId = cellIds[rowStart + col];
     if (!cellId) continue;
@@ -1367,9 +1383,24 @@ export async function fillTableRowUnderHeading(
     if (!paraId) continue;
     const para = byId.get(paraId);
     if (!para || para.block_type !== 2) continue;
+
+    const fill = cellContents[col];
+    const elements: Array<
+      | { text_run: { content: string; text_element_style: Record<string, unknown> } }
+      | { mention_user: { user_id: string; text_element_style: Record<string, unknown> } }
+    > = [];
+    if (typeof fill === 'string') {
+      elements.push(...parseMarkdownCodeRuns(fill));
+    } else {
+      if (fill.text) elements.push(...parseMarkdownCodeRuns(fill.text));
+      if (fill.mentionBot && botOpenId) {
+        elements.push({ mention_user: { user_id: botOpenId, text_element_style: {} } });
+      }
+    }
+
     updates.push({
       block_id: paraId,
-      update_text_elements: { elements: parseMarkdownCodeRuns(cellContents[col]) },
+      update_text_elements: { elements },
     });
   }
   if (updates.length === 0) return;

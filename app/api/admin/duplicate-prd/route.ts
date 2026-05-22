@@ -14,6 +14,7 @@ import {
   fillTableRowUnderHeading,
   type UserInteractionRow,
   type SectionBlock,
+  type TableCellFill,
 } from '@/lib/lark';
 
 const SECRET = process.env.AGENT_RUN_SECRET;
@@ -40,7 +41,7 @@ interface SectionFill {
    * `rowIndex` to target a specific row (0-based; skip the header row,
    * typically rowIndex=1 for the first data row).
    */
-  tableRows?: Array<{ rowIndex: number; cells: string[] }>;
+  tableRows?: Array<{ rowIndex: number; cells: TableCellFill[] }>;
 }
 
 /**
@@ -81,7 +82,11 @@ interface SectionFill {
  *                                    //                  specific rows in the first table under
  *                                    //                  this section. rowIndex is 0-based; row 0
  *                                    //                  is usually the header so use rowIndex=1
- *                                    //                  for the first data row.
+ *                                    //                  for the first data row. Each cell is
+ *                                    //                  either a string (plain text, with
+ *                                    //                  backtick parsing) or { mentionBot: true,
+ *                                    //                  text? } to render a clickable @bot
+ *                                    //                  mention (optionally preceded by text).
  *                                    //
  *                                    //   `paragraph`/`bullet`/`tableRow` content supports
  *                                    //   markdown-style backtick code spans → inline_code styled.
