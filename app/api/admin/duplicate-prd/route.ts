@@ -10,6 +10,8 @@ import {
   editDocSection,
   editDocSectionAsBullets,
   editDocSectionAsBlocks,
+  updateBulletByPrefix,
+  fillTableRowUnderHeading,
   type UserInteractionRow,
   type SectionBlock,
 } from '@/lib/lark';
@@ -24,6 +26,21 @@ interface SectionFill {
   content?: string;
   bullets?: string[];
   blocks?: SectionBlock[];
+  /**
+   * Replace existing template bullets matched by their leading text. Keyed
+   * by prefix (the text before the colon, e.g. "Meego link", "PRD",
+   * "Figma"), value is what comes after `<prefix>: `. Use for filling
+   * link-placeholder bullets like the Background section's
+   * "Meego link: {To be filled}" / "PRD: {To be filled}" etc.
+   */
+  bulletUpdates?: Record<string, string>;
+  /**
+   * Fill rows of the first table found under this section. Each entry
+   * supplies the cell contents for one row, in column order. Use
+   * `rowIndex` to target a specific row (0-based; skip the header row,
+   * typically rowIndex=1 for the first data row).
+   */
+  tableRows?: Array<{ rowIndex: number; cells: string[] }>;
 }
 
 /**
@@ -39,7 +56,10 @@ interface SectionFill {
  *   userInteractionRows?: Array<{ scenario, interactions, onlineVersion?, expectedDesign? }>,
  *                                    // → User Interaction & Design table
  *                                    //   (template caps at 4 rows; extras dropped)
- *   sections?: Array<{ heading, content?, bullets?, blocks? }>,
+ *   sections?: Array<{
+ *     heading, content?, bullets?, blocks?,
+ *     bulletUpdates?, tableRows?,
+ *   }>,
  *                                    // generic per-section fill:
  *                                    //   - `content` → editDocSection (single paragraph replace)
  *                                    //   - `bullets` → editDocSectionAsBullets (delete placeholder
@@ -48,8 +68,23 @@ interface SectionFill {
  *                                    //                  { kind: 'paragraph' | 'bullet' | 'code',
  *                                    //                    content, language? } blocks)
  *                                    //   Priority: blocks > bullets > content.
- *                                    //   `paragraph`/`bullet` content supports markdown-style
- *                                    //   backtick code spans → inline_code styled runs.
+ *                                    //
+ *                                    //   Two structure-preserving patches that run after the
+ *                                    //   main section fill:
+ *                                    //   - `bulletUpdates: { "<prefix>": "<value>" }` →
+ *                                    //                  for each entry, find an existing bullet
+ *                                    //                  whose text starts with "<prefix>:" and
+ *                                    //                  rewrite it to "<prefix>: <value>" (prefix
+ *                                    //                  re-bolded). Use for filling link bullets
+ *                                    //                  like "Meego link: {To be filled}".
+ *                                    //   - `tableRows: [{ rowIndex, cells }]` → fill cells of
+ *                                    //                  specific rows in the first table under
+ *                                    //                  this section. rowIndex is 0-based; row 0
+ *                                    //                  is usually the header so use rowIndex=1
+ *                                    //                  for the first data row.
+ *                                    //
+ *                                    //   `paragraph`/`bullet`/`tableRow` content supports
+ *                                    //   markdown-style backtick code spans → inline_code styled.
  * }
  *
  * Response: { ok, url, docToken, transferred, fillErrors?, uiRowsDropped? }
@@ -121,6 +156,30 @@ export async function POST(req: NextRequest) {
           }
         } catch (e) {
           fillErrors[`section:${s.heading}`] = e instanceof Error ? e.message : String(e);
+        }
+
+        // bulletUpdates and tableRows are independent of content/bullets/blocks
+        // — they patch existing template structure (link bullets, table rows)
+        // rather than replacing it. Run them after the main section fill.
+        if (s.bulletUpdates) {
+          for (const [prefix, value] of Object.entries(s.bulletUpdates)) {
+            try {
+              await updateBulletByPrefix(newUrl, s.heading, prefix, value);
+            } catch (e) {
+              fillErrors[`section:${s.heading}:bullet:${prefix}`] =
+                e instanceof Error ? e.message : String(e);
+            }
+          }
+        }
+        if (Array.isArray(s.tableRows)) {
+          for (const row of s.tableRows) {
+            try {
+              await fillTableRowUnderHeading(newUrl, s.heading, row.rowIndex, row.cells);
+            } catch (e) {
+              fillErrors[`section:${s.heading}:tableRow:${row.rowIndex}`] =
+                e instanceof Error ? e.message : String(e);
+            }
+          }
         }
       }
     }

@@ -1239,6 +1239,144 @@ export async function resolveDocIdFromUrl(url: string): Promise<string> {
 }
 
 /**
+ * Update a single bullet block under a section heading by matching the
+ * bullet's leading text. Useful for filling templated "<label>: {To be
+ * filled}" link bullets while preserving the existing bold-prefix styling.
+ *
+ * Strategy: find the bullet whose text starts with `<prefix>:`, then
+ * rewrite its elements to `[bold(prefix), plain(": " + newValue)]`.
+ * Throws if no matching bullet is found.
+ */
+export async function updateBulletByPrefix(
+  docUrl: string,
+  sectionHeading: string,
+  prefix: string,
+  newValue: string,
+): Promise<void> {
+  const docId  = await resolveDocId(docUrl);
+  const token  = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+  const byId   = new Map(blocks.map(b => [b.block_id, b]));
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) throw new Error('Empty document');
+  const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
+
+  let foundHeading = false;
+  let targetId = '';
+  for (const block of topLevel) {
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      const ht = blockText(block).toLowerCase();
+      if (ht.includes(sectionHeading.toLowerCase())) {
+        foundHeading = true;
+      } else if (foundHeading) {
+        break;
+      }
+    } else if (foundHeading && block.block_type === 12) {
+      // bullet — check its leading text
+      const text = blockText(block);
+      if (text.toLowerCase().startsWith(prefix.toLowerCase() + ':')
+          || text.toLowerCase().startsWith(prefix.toLowerCase() + ' :')) {
+        targetId = block.block_id;
+        break;
+      }
+    }
+  }
+  if (!targetId) {
+    throw new Error(`Bullet starting with "${prefix}:" not found under "${sectionHeading}"`);
+  }
+
+  await batchUpdateBlocks(docId, [{
+    block_id: targetId,
+    update_text_elements: {
+      elements: [
+        { text_run: { content: prefix, text_element_style: { bold: true } } },
+        { text_run: { content: ': ' + newValue, text_element_style: {} } },
+      ],
+    },
+  }], token);
+}
+
+/**
+ * Fill cells of a specific row in the first table found under a section
+ * heading. `rowIndex` is 0-based and points at the actual row to fill
+ * (skip the header row — typically rowIndex=1 for the first data row).
+ *
+ * Each cell typically has one paragraph block as its first child; this
+ * helper updates that paragraph's text. Cells beyond the supplied
+ * content are left untouched; supplied content beyond the cell count
+ * is dropped.
+ *
+ * Throws if no table is found under the heading or if `rowIndex` is
+ * out of range.
+ */
+export async function fillTableRowUnderHeading(
+  docUrl: string,
+  sectionHeading: string,
+  rowIndex: number,
+  cellContents: string[],
+): Promise<void> {
+  if (cellContents.length === 0) return;
+
+  const docId  = await resolveDocId(docUrl);
+  const token  = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+  const byId   = new Map(blocks.map(b => [b.block_id, b]));
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) throw new Error('Empty document');
+  const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
+
+  // Find first table block after the matching heading.
+  let foundHeading = false;
+  let tableBlock: LarkBlock | undefined;
+  for (const block of topLevel) {
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      const ht = blockText(block).toLowerCase();
+      if (ht.includes(sectionHeading.toLowerCase())) {
+        foundHeading = true;
+      } else if (foundHeading) {
+        break;
+      }
+    } else if (foundHeading && block.table) {
+      tableBlock = block;
+      break;
+    }
+  }
+  if (!tableBlock) {
+    throw new Error(`No table found under "${sectionHeading}"`);
+  }
+
+  const tableProps = tableBlock.table as { property?: { row_size?: number; column_size?: number } };
+  const colCount = tableProps?.property?.column_size ?? 0;
+  const rowCount = tableProps?.property?.row_size ?? 0;
+  if (rowIndex < 0 || rowIndex >= rowCount) {
+    throw new Error(`rowIndex ${rowIndex} out of range (table has ${rowCount} rows)`);
+  }
+
+  // Table children are cells in row-major order (row 0 col 0, row 0 col 1, ...).
+  const cellIds = tableBlock.children ?? [];
+  const rowStart = rowIndex * colCount;
+  const updates = [];
+  for (let col = 0; col < Math.min(cellContents.length, colCount); col++) {
+    const cellId = cellIds[rowStart + col];
+    if (!cellId) continue;
+    const cell = byId.get(cellId);
+    // Find the paragraph block inside the cell — it's the first child.
+    const paraId = cell?.children?.[0];
+    if (!paraId) continue;
+    const para = byId.get(paraId);
+    if (!para || para.block_type !== 2) continue;
+    updates.push({
+      block_id: paraId,
+      update_text_elements: { elements: parseMarkdownCodeRuns(cellContents[col]) },
+    });
+  }
+  if (updates.length === 0) return;
+  await batchUpdateBlocks(docId, updates, token);
+}
+
+/**
  * Parse a string with markdown-style backtick code spans (e.g. `like this`)
  * into a list of Lark text_run elements where the backticked portions carry
  * `text_element_style.inline_code = true`. Backticks themselves are stripped.
