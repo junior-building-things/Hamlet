@@ -1239,6 +1239,40 @@ export async function resolveDocIdFromUrl(url: string): Promise<string> {
 }
 
 /**
+ * Parse a string with markdown-style backtick code spans (e.g. `like this`)
+ * into a list of Lark text_run elements where the backticked portions carry
+ * `text_element_style.inline_code = true`. Backticks themselves are stripped.
+ *
+ * The pairing rule is simple: split on backtick → even-indexed parts are
+ * plain, odd-indexed are code. Unmatched trailing backticks produce a final
+ * "code" segment best-effort; calling code is expected to keep backticks
+ * paired in the input.
+ *
+ * If the input has no backticks at all, returns a single plain text_run.
+ */
+function parseMarkdownCodeRuns(
+  content: string,
+): Array<{ text_run: { content: string; text_element_style: Record<string, unknown> } }> {
+  const runs: Array<{ text_run: { content: string; text_element_style: Record<string, unknown> } }> = [];
+  const parts = content.split('`');
+  for (let i = 0; i < parts.length; i++) {
+    const text = parts[i];
+    if (text === '') continue;
+    runs.push({
+      text_run: {
+        content: text,
+        text_element_style: i % 2 === 1 ? { inline_code: true } : {},
+      },
+    });
+  }
+  if (runs.length === 0) {
+    // Pure empty content — emit a single empty run so the block isn't malformed.
+    runs.push({ text_run: { content: '', text_element_style: {} } });
+  }
+  return runs;
+}
+
+/**
  * Edit a specific section (by heading) in a Lark doc by replacing its
  * first paragraph placeholder with a list of bullet items.
  *
@@ -1302,10 +1336,11 @@ export async function editDocSectionAsBullets(
     throw new Error(`Lark batch_delete error ${deleteData.code}: ${deleteData.msg ?? 'unknown'}`);
   }
 
-  // Insert N bullet blocks at the same position.
+  // Insert N bullet blocks at the same position. Backtick-quoted spans in
+  // each bullet are rendered as inline code (text_element_style.inline_code).
   const children = bullets.map(b => ({
     block_type: 12,
-    bullet: { elements: [{ text_run: { content: b, text_element_style: {} } }] },
+    bullet: { elements: parseMarkdownCodeRuns(b) },
   }));
   const createRes = await fetch(
     `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?document_revision_id=-1`,
@@ -1348,9 +1383,10 @@ export async function editDocSection(docUrl: string, sectionHeading: string, new
         break; // reached next heading
       }
     } else if (foundHeading && block.block_type === 2) {
+      // Backtick-quoted spans in newContent render as inline code.
       await batchUpdateBlocks(docId, [{
         block_id: block.block_id,
-        update_text_elements: { elements: [{ text_run: { content: newContent, text_element_style: {} } }] },
+        update_text_elements: { elements: parseMarkdownCodeRuns(newContent) },
       }], token);
       return;
     }
