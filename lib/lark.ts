@@ -1239,6 +1239,89 @@ export async function resolveDocIdFromUrl(url: string): Promise<string> {
 }
 
 /**
+ * Edit a specific section (by heading) in a Lark doc by replacing its
+ * first paragraph placeholder with a list of bullet items.
+ *
+ * Finds the heading by case-insensitive substring match, then locates
+ * the first body text paragraph (block_type=2) immediately after.
+ * That paragraph is deleted and N bullet blocks (block_type=12) are
+ * inserted in its place, preserving the surrounding template
+ * scaffolding (subsequent paragraphs, sub-headings, tables).
+ *
+ * Throws if the heading or its placeholder paragraph can't be located.
+ */
+export async function editDocSectionAsBullets(
+  docUrl: string,
+  sectionHeading: string,
+  bullets: string[],
+): Promise<void> {
+  if (bullets.length === 0) return;
+
+  const docId  = await resolveDocId(docUrl);
+  const token  = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+  const byId   = new Map(blocks.map(b => [b.block_id, b]));
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) throw new Error('Empty document');
+
+  const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
+
+  // Walk top-level blocks: find target heading, then first text paragraph after it.
+  let foundHeading = false;
+  let placeholderIdx = -1;
+  for (let i = 0; i < topLevel.length; i++) {
+    const block = topLevel[i];
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      const ht = blockText(block).toLowerCase();
+      if (ht.includes(sectionHeading.toLowerCase())) {
+        foundHeading = true;
+      } else if (foundHeading) {
+        break; // next heading reached without finding a paragraph
+      }
+    } else if (foundHeading && block.block_type === 2) {
+      placeholderIdx = i;
+      break;
+    }
+  }
+  if (placeholderIdx < 0) {
+    throw new Error(`Section "${sectionHeading}" not found in document`);
+  }
+
+  // Delete the single placeholder paragraph from the page's children list.
+  const deleteRes = await fetch(
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children/batch_delete?document_revision_id=-1`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start_index: placeholderIdx, end_index: placeholderIdx + 1 }),
+    },
+  );
+  const deleteData = await parseJson(deleteRes, 'batch_delete') as { code: number; msg?: string };
+  if (deleteData.code !== 0) {
+    throw new Error(`Lark batch_delete error ${deleteData.code}: ${deleteData.msg ?? 'unknown'}`);
+  }
+
+  // Insert N bullet blocks at the same position.
+  const children = bullets.map(b => ({
+    block_type: 12,
+    bullet: { elements: [{ text_run: { content: b, text_element_style: {} } }] },
+  }));
+  const createRes = await fetch(
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?document_revision_id=-1`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ children, index: placeholderIdx }),
+    },
+  );
+  const createData = await parseJson(createRes, 'create_blocks') as { code: number; msg?: string };
+  if (createData.code !== 0) {
+    throw new Error(`Lark create blocks error ${createData.code}: ${createData.msg ?? 'unknown'}`);
+  }
+}
+
+/**
  * Edit a specific section (by heading) in a Lark doc, replacing its first
  * paragraph content with new text.
  */

@@ -8,6 +8,7 @@ import {
   fillWhatWeAreBuilding,
   fillUserInteractionDesignTable,
   editDocSection,
+  editDocSectionAsBullets,
   type UserInteractionRow,
 } from '@/lib/lark';
 
@@ -16,7 +17,7 @@ const SECRET = process.env.AGENT_RUN_SECRET;
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-interface SectionFill { heading: string; content: string }
+interface SectionFill { heading: string; content?: string; bullets?: string[] }
 
 /**
  * Duplicate a Lark PRD doc, optionally pre-fill structured fields, and
@@ -31,7 +32,12 @@ interface SectionFill { heading: string; content: string }
  *   userInteractionRows?: Array<{ scenario, interactions, onlineVersion?, expectedDesign? }>,
  *                                    // → User Interaction & Design table
  *                                    //   (template caps at 4 rows; extras dropped)
- *   sections?: Array<{ heading, content }>,   // generic editDocSection
+ *   sections?: Array<{ heading, content?, bullets? }>,
+ *                                    // generic per-section fill:
+ *                                    //   - `content` → editDocSection (single paragraph replace)
+ *                                    //   - `bullets` → editDocSectionAsBullets (delete placeholder
+ *                                    //                  paragraph + insert N bullet blocks)
+ *                                    //   If both are present, bullets wins.
  * }
  *
  * Response: { ok, url, docToken, transferred, fillErrors?, uiRowsDropped? }
@@ -92,9 +98,13 @@ export async function POST(req: NextRequest) {
 
     if (Array.isArray(body.sections)) {
       for (const s of body.sections) {
-        if (!s?.heading || !s?.content) continue;
+        if (!s?.heading) continue;
         try {
-          await editDocSection(newUrl, s.heading, s.content);
+          if (Array.isArray(s.bullets) && s.bullets.length > 0) {
+            await editDocSectionAsBullets(newUrl, s.heading, s.bullets);
+          } else if (s.content) {
+            await editDocSection(newUrl, s.heading, s.content);
+          }
         } catch (e) {
           fillErrors[`section:${s.heading}`] = e instanceof Error ? e.message : String(e);
         }
