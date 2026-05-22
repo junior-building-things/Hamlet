@@ -1273,6 +1273,147 @@ function parseMarkdownCodeRuns(
 }
 
 /**
+ * Lark docx code-block `style.language` enum. Only the languages we
+ * actually use are wired up — the full set is large; add as needed.
+ * Source: Lark Open Docs / docx-v1 code block data structure.
+ */
+const CODE_LANGUAGE_ENUM: Record<string, number> = {
+  plain: 1, plaintext: 1, text: 1,
+  bash: 7, sh: 7, shell: 60,
+  csharp: 8, 'c#': 8,
+  cpp: 9, 'c++': 9,
+  c: 10,
+  css: 12,
+  go: 22, golang: 22,
+  html: 24,
+  json: 28,
+  java: 29,
+  javascript: 30, js: 30,
+  kotlin: 32, kt: 32,
+  lua: 36,
+  markdown: 39, md: 39,
+  'objective-c': 41, objc: 41,
+  php: 43,
+  python: 49, py: 49,
+  r: 50,
+  ruby: 52, rb: 52,
+  rust: 53, rs: 53,
+  sql: 56,
+  scala: 57,
+  swift: 62,
+  typescript: 64, ts: 64,
+  xml: 67,
+  yaml: 68, yml: 68,
+  diff: 70,
+  graphql: 72,
+};
+
+/**
+ * A mixed-content block for `editDocSectionAsBlocks`. `paragraph` and
+ * `bullet` content may contain backtick-quoted inline code spans (parsed
+ * via parseMarkdownCodeRuns). `code` content is rendered as a Lark code
+ * block (block_type=14) with optional language for syntax highlighting.
+ */
+export interface SectionBlock {
+  kind: 'paragraph' | 'bullet' | 'code';
+  content: string;
+  language?: string;
+}
+
+/**
+ * Edit a specific section (by heading) in a Lark doc by replacing the
+ * placeholder paragraph after the heading with a mixed list of blocks
+ * (paragraphs, bullets, code blocks). Surrounding template scaffolding
+ * is preserved.
+ *
+ * Throws if the heading or its placeholder paragraph can't be located.
+ */
+export async function editDocSectionAsBlocks(
+  docUrl: string,
+  sectionHeading: string,
+  sectionBlocks: SectionBlock[],
+): Promise<void> {
+  if (sectionBlocks.length === 0) return;
+
+  const docId  = await resolveDocId(docUrl);
+  const token  = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+  const byId   = new Map(blocks.map(b => [b.block_id, b]));
+
+  const pageBlock = blocks.find(b => b.block_type === 1);
+  if (!pageBlock?.children) throw new Error('Empty document');
+
+  const topLevel = pageBlock.children.map(id => byId.get(id)).filter((b): b is LarkBlock => !!b);
+
+  let foundHeading = false;
+  let placeholderIdx = -1;
+  for (let i = 0; i < topLevel.length; i++) {
+    const block = topLevel[i];
+    if (HEADING_BLOCK_TYPES.has(block.block_type)) {
+      const ht = blockText(block).toLowerCase();
+      if (ht.includes(sectionHeading.toLowerCase())) {
+        foundHeading = true;
+      } else if (foundHeading) {
+        break;
+      }
+    } else if (foundHeading && block.block_type === 2) {
+      placeholderIdx = i;
+      break;
+    }
+  }
+  if (placeholderIdx < 0) {
+    throw new Error(`Section "${sectionHeading}" not found in document`);
+  }
+
+  // Delete the placeholder paragraph from the page's children.
+  const deleteRes = await fetch(
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children/batch_delete?document_revision_id=-1`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start_index: placeholderIdx, end_index: placeholderIdx + 1 }),
+    },
+  );
+  const deleteData = await parseJson(deleteRes, 'batch_delete') as { code: number; msg?: string };
+  if (deleteData.code !== 0) {
+    throw new Error(`Lark batch_delete error ${deleteData.code}: ${deleteData.msg ?? 'unknown'}`);
+  }
+
+  // Build mixed children. paragraph/bullet support inline backtick code; code
+  // blocks are inserted as block_type=14 with optional language highlighting.
+  const children = sectionBlocks.map(b => {
+    if (b.kind === 'code') {
+      const lang = b.language ? CODE_LANGUAGE_ENUM[b.language.toLowerCase()] ?? 1 : 1;
+      return {
+        block_type: 14,
+        code: {
+          elements: [{ text_run: { content: b.content, text_element_style: {} } }],
+          style: { language: lang, wrap: false },
+        },
+      };
+    }
+    if (b.kind === 'bullet') {
+      return { block_type: 12, bullet: { elements: parseMarkdownCodeRuns(b.content) } };
+    }
+    // paragraph
+    return { block_type: 2, text: { elements: parseMarkdownCodeRuns(b.content) } };
+  });
+
+  const createRes = await fetch(
+    `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${pageBlock.block_id}/children?document_revision_id=-1`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ children, index: placeholderIdx }),
+    },
+  );
+  const createData = await parseJson(createRes, 'create_blocks') as { code: number; msg?: string };
+  if (createData.code !== 0) {
+    throw new Error(`Lark create blocks error ${createData.code}: ${createData.msg ?? 'unknown'}`);
+  }
+}
+
+/**
  * Edit a specific section (by heading) in a Lark doc by replacing its
  * first paragraph placeholder with a list of bullet items.
  *

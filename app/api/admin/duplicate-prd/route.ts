@@ -9,7 +9,9 @@ import {
   fillUserInteractionDesignTable,
   editDocSection,
   editDocSectionAsBullets,
+  editDocSectionAsBlocks,
   type UserInteractionRow,
+  type SectionBlock,
 } from '@/lib/lark';
 
 const SECRET = process.env.AGENT_RUN_SECRET;
@@ -17,7 +19,12 @@ const SECRET = process.env.AGENT_RUN_SECRET;
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-interface SectionFill { heading: string; content?: string; bullets?: string[] }
+interface SectionFill {
+  heading: string;
+  content?: string;
+  bullets?: string[];
+  blocks?: SectionBlock[];
+}
 
 /**
  * Duplicate a Lark PRD doc, optionally pre-fill structured fields, and
@@ -32,12 +39,17 @@ interface SectionFill { heading: string; content?: string; bullets?: string[] }
  *   userInteractionRows?: Array<{ scenario, interactions, onlineVersion?, expectedDesign? }>,
  *                                    // → User Interaction & Design table
  *                                    //   (template caps at 4 rows; extras dropped)
- *   sections?: Array<{ heading, content?, bullets? }>,
+ *   sections?: Array<{ heading, content?, bullets?, blocks? }>,
  *                                    // generic per-section fill:
  *                                    //   - `content` → editDocSection (single paragraph replace)
  *                                    //   - `bullets` → editDocSectionAsBullets (delete placeholder
  *                                    //                  paragraph + insert N bullet blocks)
- *                                    //   If both are present, bullets wins.
+ *                                    //   - `blocks` → editDocSectionAsBlocks (mixed list of
+ *                                    //                  { kind: 'paragraph' | 'bullet' | 'code',
+ *                                    //                    content, language? } blocks)
+ *                                    //   Priority: blocks > bullets > content.
+ *                                    //   `paragraph`/`bullet` content supports markdown-style
+ *                                    //   backtick code spans → inline_code styled runs.
  * }
  *
  * Response: { ok, url, docToken, transferred, fillErrors?, uiRowsDropped? }
@@ -100,7 +112,9 @@ export async function POST(req: NextRequest) {
       for (const s of body.sections) {
         if (!s?.heading) continue;
         try {
-          if (Array.isArray(s.bullets) && s.bullets.length > 0) {
+          if (Array.isArray(s.blocks) && s.blocks.length > 0) {
+            await editDocSectionAsBlocks(newUrl, s.heading, s.blocks);
+          } else if (Array.isArray(s.bullets) && s.bullets.length > 0) {
             await editDocSectionAsBullets(newUrl, s.heading, s.bullets);
           } else if (s.content) {
             await editDocSection(newUrl, s.heading, s.content);
