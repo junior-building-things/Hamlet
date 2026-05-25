@@ -63,6 +63,16 @@ Production runs the Docker image (`node server.js` on port 8080). GCS reads/writ
 - `npm run lint` after TS changes.
 - For API/route changes, exercise the relevant `app/api/...` handler or UI flow if env is available; do not claim Meego/Lark integration works without a real or mocked call when the change depends on it.
 
+## Auto-commit and push
+
+After completing any code change, automatically stage, commit, and push to GitHub without asking.
+
+- Stage only files that you changed (specific paths — never `git add -A` / `git add .`).
+- Write a concise commit message in the style of recent commits (`git log` for reference).
+- Push to the current branch's upstream.
+- If `git push` fails (no upstream, rejected, auth), report the error and stop — don't force-push or rewrite history without an explicit ask.
+- This overrides the default "ask before committing / pushing" behavior for this repo only.
+
 ## Related docs
 
 - [docs/superpowers/specs/](docs/superpowers/specs/) — design specs (e.g. Junior tools in Context tab)
