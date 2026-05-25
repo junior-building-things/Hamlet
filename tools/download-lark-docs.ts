@@ -179,10 +179,11 @@ async function searchMyDocs(
   return [...byToken.values()];
 }
 
-// type → export spec
+// type → export spec. Lark's export_tasks accepts md for docx/doc (matches
+// the "Download as Markdown" menu option) and xlsx for sheet/bitable.
 const EXPORTABLE: Record<string, { type: string; ext: string }> = {
-  docx:    { type: 'docx',    ext: 'docx' },
-  doc:     { type: 'doc',     ext: 'docx' },
+  docx:    { type: 'docx',    ext: 'md' },
+  doc:     { type: 'doc',     ext: 'md' },
   sheet:   { type: 'sheet',   ext: 'xlsx' },
   bitable: { type: 'bitable', ext: 'xlsx' },
 };
