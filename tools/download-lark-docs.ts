@@ -1,5 +1,10 @@
 /**
- * Download every Lark doc you own to a local folder.
+ * Download every Lark doc you own as markdown.
+ *
+ * Lark's export API only supports docx/pdf/xlsx/csv/base/pptx, so we
+ * export docx into memory and convert to markdown locally with markitdown
+ * (installed in tools/.venv-markitdown). The .docx is never written to
+ * disk — only the .md.
  *
  * Env (required):
  *   LARK_APP_ID
@@ -15,6 +20,11 @@
  *   QUERY_KEYS     (csv list of strings to search; default = a–z + 0–9.
  *                  suite/docs-api/search/object requires a non-empty key,
  *                  so we run several searches and union by docs_token.)
+ *   LIMIT          (int; cap the number of docs to download. Useful for probes.)
+ *
+ * Setup (one-off):
+ *   python3.10+ -m venv tools/.venv-markitdown
+ *   tools/.venv-markitdown/bin/pip install 'markitdown[docx]'
  *
  * A `.env.local` in repo root is auto-loaded if present.
  *
@@ -22,9 +32,12 @@
  *   npx tsx tools/download-lark-docs.ts
  */
 
-import { writeFile, mkdir, readFile } from 'node:fs/promises';
+import { writeFile, mkdir, readFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 
 // ── minimal .env.local loader / writer ───────────────────────────────────
 const ENV_PATH = resolve(process.cwd(), '.env.local');
@@ -158,6 +171,7 @@ async function searchMyDocs(
         throw new Error(`suite docs search (key=${JSON.stringify(key)}): code=${j.code} msg=${j.msg}`);
       }
       const ents = j.data?.docs_entities ?? [];
+      const sizeBefore = byToken.size;
       for (const e of ents) {
         if (byToken.has(e.docs_token)) continue;
         byToken.set(e.docs_token, {
@@ -169,24 +183,32 @@ async function searchMyDocs(
           owner_id: e.owner_id ?? '',
         });
       }
+      const added = byToken.size - sizeBefore;
       total = j.data?.total ?? 0;
       offset += ents.length;
-      console.log(`  [search] key=${JSON.stringify(key)} +${ents.length} (total reported=${total}, unique so far=${byToken.size})`);
+      console.log(`  [search] key=${JSON.stringify(key)} +${ents.length} (+${added} unique, total reported=${total}, unique so far=${byToken.size})`);
       if (!j.data?.has_more) break;
       if (ents.length === 0) break;
-    } while (offset < total && offset < 2000);
+      // Lark's legacy search returns duplicates once it runs out of fresh
+      // results; bail before hitting the offset cap (~200) where it errors.
+      if (added === 0) break;
+      if (offset >= 200) break;
+    } while (offset < total && offset < 200);
   }
   return [...byToken.values()];
 }
 
-// type → export spec. Lark's export_tasks accepts md for docx/doc (matches
-// the "Download as Markdown" menu option) and xlsx for sheet/bitable.
+// type → Lark export spec. The API doesn't expose markdown directly; we
+// export docx and convert via markitdown locally (see convertToMarkdown).
+// sheet/bitable still go out as xlsx — markdown doesn't fit them.
 const EXPORTABLE: Record<string, { type: string; ext: string }> = {
-  docx:    { type: 'docx',    ext: 'md' },
-  doc:     { type: 'doc',     ext: 'md' },
+  docx:    { type: 'docx',    ext: 'docx' },
+  doc:     { type: 'doc',     ext: 'docx' },
   sheet:   { type: 'sheet',   ext: 'xlsx' },
   bitable: { type: 'bitable', ext: 'xlsx' },
 };
+
+const MARKITDOWN_BIN = resolve(process.cwd(), 'tools/.venv-markitdown/bin/markitdown');
 
 async function exportFile(
   token: string, file: DriveFile, ext: string, type: string,
@@ -223,7 +245,7 @@ async function exportFile(
       break;
     }
     if (status !== undefined && status >= 2) {
-      throw new Error(`export failed: status=${status} ${pj.data?.result?.job_error_msg ?? ''}`);
+      throw new Error(`export failed: status=${status} body=${JSON.stringify(pj).slice(0, 400)}`);
     }
   }
   if (!exportToken) throw new Error('export poll timed out after 60s');
@@ -240,6 +262,31 @@ async function exportFile(
 
 function safeName(s: string): string {
   return s.replace(/[\\/:*?"<>| -]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120) || 'untitled';
+}
+
+/**
+ * Convert a .docx buffer to markdown using the markitdown CLI from the
+ * tools/.venv-markitdown venv. Writes the docx to a temp file (markitdown
+ * needs a path argument) and removes it after.
+ */
+async function docxToMarkdown(docx: Buffer): Promise<string> {
+  const tmp = resolve(tmpdir(), `lark-${randomBytes(8).toString('hex')}.docx`);
+  await writeFile(tmp, docx);
+  try {
+    return await new Promise<string>((res, rej) => {
+      const child = spawn(MARKITDOWN_BIN, [tmp]);
+      let out = '', err = '';
+      child.stdout.on('data', b => { out += b.toString('utf8'); });
+      child.stderr.on('data', b => { err += b.toString('utf8'); });
+      child.on('error', rej);
+      child.on('close', code => {
+        if (code === 0) res(out);
+        else rej(new Error(`markitdown exit=${code}: ${err.trim().slice(0, 300)}`));
+      });
+    });
+  } finally {
+    await unlink(tmp).catch(() => {});
+  }
 }
 
 // ── main ──────────────────────────────────────────────────────────────────
@@ -270,8 +317,14 @@ async function main() {
   const all = await searchMyDocs(access, me, queryKeys);
   console.log(`[info] ${all.length} unique docs found`);
 
-  const wanted = all.filter(f => wantedSet.has(f.type) && EXPORTABLE[f.type]);
+  let wanted = all.filter(f => wantedSet.has(f.type) && EXPORTABLE[f.type]);
   console.log(`[info] ${wanted.length} exportable, types=${wantedTypes.join(',')}`);
+
+  const limit = Number(process.env.LIMIT ?? '0');
+  if (limit > 0 && wanted.length > limit) {
+    console.log(`[info] LIMIT=${limit} — capping to first ${limit}`);
+    wanted = wanted.slice(0, limit);
+  }
 
   if (!wanted.length) return;
 
@@ -279,12 +332,21 @@ async function main() {
   let ok = 0, fail = 0;
   for (const f of wanted) {
     const spec = EXPORTABLE[f.type];
-    const fname = `${safeName(f.name)}__${f.token}.${spec.ext}`;
+    // docx/doc → markdown via markitdown; sheet/bitable → save xlsx as-is.
+    const isDocx = spec.ext === 'docx';
+    const outExt = isDocx ? 'md' : spec.ext;
+    const fname = `${safeName(f.name)}__${f.token}.${outExt}`;
     const target = resolve(DOWNLOAD_DIR, fname);
     try {
       const buf = await exportFile(access, f, spec.ext, spec.type);
-      await writeFile(target, buf);
-      console.log(`  [ok]   ${fname} (${buf.length} bytes)`);
+      if (isDocx) {
+        const md = await docxToMarkdown(buf);
+        await writeFile(target, md, 'utf8');
+        console.log(`  [ok]   ${fname} (${Buffer.byteLength(md, 'utf8')} bytes md, from ${buf.length} bytes docx)`);
+      } else {
+        await writeFile(target, buf);
+        console.log(`  [ok]   ${fname} (${buf.length} bytes)`);
+      }
       ok++;
     } catch (e) {
       console.error(`  [fail] ${f.name} [${f.token}] (${f.type}): ${(e as Error).message}`);
