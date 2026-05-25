@@ -261,8 +261,14 @@ async function exportFile(
 }
 
 function safeName(s: string): string {
-  return s.replace(/[\\/:*?"<>| -]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120) || 'untitled';
+  // kebab-case: lowercase, alphanumerics + hyphens only.
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120) || 'untitled';
 }
+
 
 /**
  * Convert a .docx buffer to markdown using the markitdown CLI from the
