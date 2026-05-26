@@ -32,6 +32,8 @@
  *                  so we run several searches and union by docs_token.)
  *   GEMINI_MODEL   (default "gemini-3.1-flash-lite")
  *   LIMIT          (int; cap the number of docs to download. Useful for probes.)
+ *   FORCE          (1 = re-render every doc even if `__<token>.md` exists.
+ *                   Default behaviour: skip docs already on disk.)
  *
  * A `.env.local` in repo root is auto-loaded if present.
  *
@@ -39,7 +41,7 @@
  *   npx tsx tools/download-lark-docs.ts
  */
 
-import { writeFile, mkdir, readFile } from 'node:fs/promises';
+import { writeFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -465,9 +467,30 @@ async function main() {
   await mkdir(DOWNLOAD_DIR, { recursive: true });
   for (const c of CATEGORIES) await mkdir(resolve(DOWNLOAD_DIR, c), { recursive: true });
 
-  let ok = 0, fail = 0;
+  // Build a set of doc tokens we already have on disk. Filenames end in
+  // `__<token>.md` so we can recover the token without parsing the body.
+  // Re-runs (daily cron, manual) skip docs whose token is already present.
+  const existingTokens = new Set<string>();
+  for (const c of CATEGORIES) {
+    let names: string[] = [];
+    try { names = await readdir(resolve(DOWNLOAD_DIR, c)); } catch { /* dir absent: skip */ }
+    for (const n of names) {
+      const m = n.match(/__([A-Za-z0-9]+)\.md$/);
+      if (m) existingTokens.add(m[1]);
+    }
+  }
+  if (existingTokens.size) {
+    console.log(`[info] ${existingTokens.size} docs already on disk — will skip those`);
+  }
+  const force = process.env.FORCE === '1';
+
+  let ok = 0, fail = 0, skipped = 0;
   const byCategory: Record<string, number> = {};
   for (const f of wanted) {
+    if (!force && existingTokens.has(f.token)) {
+      skipped++;
+      continue;
+    }
     const fname = `${safeName(f.name)}__${f.token}.md`;
     try {
       const md = await fetchDocAsMarkdown(access, f.token, f.name);
@@ -483,8 +506,8 @@ async function main() {
     }
   }
   const summary = CATEGORIES.map(c => `${c}=${byCategory[c] ?? 0}`).join(', ');
-  console.log(`\n[done] ${ok} ok, ${fail} failed -> ${DOWNLOAD_DIR}`);
-  console.log(`[by category] ${summary}`);
+  console.log(`\n[done] ${ok} ok, ${skipped} skipped (already on disk), ${fail} failed -> ${DOWNLOAD_DIR}`);
+  console.log(`[by category, new only] ${summary}`);
 }
 
 main().catch(e => { console.error('[fatal]', e); process.exit(1); });
