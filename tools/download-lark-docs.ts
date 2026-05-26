@@ -1,10 +1,18 @@
 /**
- * Download every Lark doc you own as markdown.
+ * Download every Lark doc you own as markdown, categorized into subfolders.
  *
- * Lark's export API only supports docx/pdf/xlsx/csv/base/pptx, so we
- * export docx into memory and convert to markdown locally with markitdown
- * (installed in tools/.venv-markitdown). The .docx is never written to
- * disk — only the .md.
+ * Reads each doc's block tree via /open-apis/docx/v1/documents/{id}/blocks
+ * (requires docx:document:readonly — already in the user OAuth grant) and
+ * renders markdown directly. We avoid the /drive/v1/export_tasks API because
+ * it silently fails (job_status=2, empty body) on ~50% of docs for reasons
+ * Lark doesn't document — usually docs with newer block types the exporter
+ * doesn't grok. The block walk handles everything readable, no markitdown
+ * dependency, no exporter round-trip.
+ *
+ * After rendering, Gemini Flash classifies the doc into one of:
+ *   PRDs, AB Reports, Tech Designs, UATs, Research Exploration,
+ *   Weekly Meetings, Miscellaneous
+ * and the file lands in <DOWNLOAD_DIR>/<category>/<name>__<token>.md.
  *
  * Env (required):
  *   LARK_APP_ID
@@ -12,6 +20,8 @@
  *   LARK_USER_REFRESH_TOKEN   — from /api/auth/refresh-token after logging into Hamlet.
  *                              Auto-rotates on every run; .env.local is
  *                              updated in place.
+ *   GOOGLE_AI_API_KEY         — Gemini key for classification. Omit to dump
+ *                              everything into Miscellaneous/.
  *
  * Env (optional):
  *   LARK_BASE_URL  (default https://open.larkoffice.com)
@@ -20,11 +30,8 @@
  *   QUERY_KEYS     (csv list of strings to search; default = a–z + 0–9.
  *                  suite/docs-api/search/object requires a non-empty key,
  *                  so we run several searches and union by docs_token.)
+ *   GEMINI_MODEL   (default "gemini-3.1-flash-lite")
  *   LIMIT          (int; cap the number of docs to download. Useful for probes.)
- *
- * Setup (one-off):
- *   python3.10+ -m venv tools/.venv-markitdown
- *   tools/.venv-markitdown/bin/pip install 'markitdown[docx]'
  *
  * A `.env.local` in repo root is auto-loaded if present.
  *
@@ -32,12 +39,10 @@
  *   npx tsx tools/download-lark-docs.ts
  */
 
-import { writeFile, mkdir, readFile, unlink } from 'node:fs/promises';
+import { writeFile, mkdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // ── minimal .env.local loader / writer ───────────────────────────────────
 const ENV_PATH = resolve(process.cwd(), '.env.local');
@@ -198,66 +203,160 @@ async function searchMyDocs(
   return [...byToken.values()];
 }
 
-// type → Lark export spec. The API doesn't expose markdown directly; we
-// export docx and convert via markitdown locally (see convertToMarkdown).
-// sheet/bitable still go out as xlsx — markdown doesn't fit them.
-const EXPORTABLE: Record<string, { type: string; ext: string }> = {
-  docx:    { type: 'docx',    ext: 'docx' },
-  doc:     { type: 'doc',     ext: 'docx' },
-  sheet:   { type: 'sheet',   ext: 'xlsx' },
-  bitable: { type: 'bitable', ext: 'xlsx' },
-};
+// Doc types we know how to fetch as block trees. sheet / bitable have no
+// blocks API in the same shape, so we skip them.
+const SUPPORTED_DOC_TYPES = new Set(['docx', 'doc']);
 
-const MARKITDOWN_BIN = resolve(process.cwd(), 'tools/.venv-markitdown/bin/markitdown');
-
-async function exportFile(
-  token: string, file: DriveFile, ext: string, type: string,
-): Promise<Buffer> {
-  // 1) create export task
-  const c = await fetch(`${BASE}/open-apis/drive/v1/export_tasks`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file_extension: ext, token: file.token, type }),
-  });
-  const cj = await c.json() as { code: number; msg?: string; data?: { ticket?: string } };
-  if (cj.code !== 0 || !cj.data?.ticket) {
-    throw new Error(`export create: code=${cj.code} msg=${cj.msg}`);
+// ── block-tree fetch + markdown rendering ────────────────────────────────
+interface RenderBlock {
+  block_id: string;
+  block_type: number;
+  children?: string[];
+  table_cell?: { row_index?: number; col_index?: number };
+  table?: { cells?: string[]; property?: { row_size?: number; column_size?: number } };
+  image?: { token?: string };
+  [key: string]: unknown;
+}
+interface ElementsContainer { elements?: { text_run?: { content?: string }; equation?: { content?: string } }[] }
+const TEXT_KEYS = [
+  'text','heading1','heading2','heading3','heading4','heading5',
+  'heading6','heading7','heading8','heading9',
+  'bullet','ordered','code','quote','todo','callout',
+];
+function blockText(b: RenderBlock): string {
+  for (const k of TEXT_KEYS) {
+    const c = b[k] as ElementsContainer | undefined;
+    if (c?.elements?.length) {
+      return c.elements.map(e => e.text_run?.content ?? e.equation?.content ?? '').join('');
+    }
   }
-  const ticket = cj.data.ticket;
+  return '';
+}
 
-  // 2) poll
-  let exportToken: string | undefined;
-  for (let i = 0; i < 60; i++) {
-    await new Promise(res => setTimeout(res, 1000));
-    const p = await fetch(
-      `${BASE}/open-apis/drive/v1/export_tasks/${ticket}?token=${file.token}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    const pj = await p.json() as {
-      code: number; msg?: string;
-      data?: { result?: { job_status?: number; file_token?: string; job_error_msg?: string } };
-    };
-    if (pj.code !== 0) throw new Error(`export poll: code=${pj.code} msg=${pj.msg}`);
-    const status = pj.data?.result?.job_status;
-    // 0 = success, 1 = in_progress, >=2 = failure
-    if (status === 0 && pj.data?.result?.file_token) {
-      exportToken = pj.data.result.file_token;
+async function fetchAllBlocks(token: string, docToken: string): Promise<RenderBlock[]> {
+  const all: RenderBlock[] = [];
+  let pageToken: string | undefined;
+  for (let safety = 0; safety < 30; safety++) {
+    const url = new URL(`${BASE}/open-apis/docx/v1/documents/${docToken}/blocks`);
+    url.searchParams.set('page_size', '500');
+    url.searchParams.set('document_revision_id', '-1');
+    if (pageToken) url.searchParams.set('page_token', pageToken);
+    // Per-page retry on rate-limit (99991400)
+    let pageData: { code: number; msg?: string; data?: { items?: RenderBlock[]; has_more?: boolean; page_token?: string } } | undefined;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      pageData = await r.json();
+      if (pageData?.code === 99991400) {
+        await new Promise(rr => setTimeout(rr, 500 * (attempt + 1) * (attempt + 1)));
+        continue;
+      }
       break;
     }
-    if (status !== undefined && status >= 2) {
-      throw new Error(`export failed: status=${status} body=${JSON.stringify(pj).slice(0, 400)}`);
+    if (!pageData || pageData.code !== 0) {
+      throw new Error(`get_blocks: code=${pageData?.code} msg=${pageData?.msg}`);
+    }
+    all.push(...(pageData.data?.items ?? []));
+    if (!pageData.data?.has_more || !pageData.data.page_token) break;
+    pageToken = pageData.data.page_token;
+  }
+  return all;
+}
+
+function renderBlocksAsMarkdown(blocks: RenderBlock[], title: string): string {
+  const byId = new Map(blocks.map(b => [b.block_id, b]));
+  const root = blocks.find(b => b.block_type === 1) ?? blocks[0];
+  const out: string[] = [`# ${title}`, ''];
+  const rendered = new Set<string>();
+
+  function gather(b: RenderBlock): string {
+    if (rendered.has(b.block_id)) return '';
+    rendered.add(b.block_id);
+    const parts: string[] = [];
+    const own = blockText(b).trim();
+    if (own) parts.push(own);
+    for (const id of b.children ?? []) {
+      const c = byId.get(id);
+      if (c) parts.push(gather(c));
+    }
+    return parts.filter(Boolean).join(' ');
+  }
+
+  function emit(b: RenderBlock, depth = 0) {
+    if (rendered.has(b.block_id)) return;
+    rendered.add(b.block_id);
+    const t = b.block_type;
+    const txt = blockText(b).trim();
+    let line = '';
+    if (t === 1) {
+      // page root, walk children
+    } else if (t >= 3 && t <= 11) {
+      line = `${'#'.repeat(Math.min(6, t - 2))} ${txt}`;
+    } else if (t === 2) {
+      line = txt;
+    } else if (t === 12) {
+      line = `${'  '.repeat(depth)}- ${txt}`;
+    } else if (t === 13) {
+      line = `${'  '.repeat(depth)}1. ${txt}`;
+    } else if (t === 14) {
+      line = '```\n' + txt + '\n```';
+    } else if (t === 15 || t === 34) {
+      line = `> ${txt}`;
+    } else if (t === 22) {
+      line = '---';
+    } else if (t === 19) {
+      line = `> [!callout]\n> ${txt}`;
+    } else if (t === 27) {
+      line = `[image: ${b.image?.token ?? '?'}]`;
+    } else if (t === 31) {
+      // table: cell ids live in table.table.cells (row-major); positions
+      // come from index + column_size. Per-cell row_index/col_index fields
+      // are usually empty.
+      const meta = b.table ?? {};
+      const cellIds = meta.cells ?? b.children ?? [];
+      const cols = Math.max(1, meta.property?.column_size ?? 1);
+      const rowsCount = meta.property?.row_size ?? Math.ceil(cellIds.length / cols);
+      if (cellIds.length) {
+        const grid: string[][] = Array.from({ length: rowsCount }, () => Array(cols).fill(''));
+        cellIds.forEach((id, i) => {
+          const c = byId.get(id);
+          if (!c) return;
+          rendered.add(c.block_id);
+          const r = Math.floor(i / cols);
+          const co = i % cols;
+          const cellText = (c.children ?? [])
+            .map(cid => byId.get(cid))
+            .filter((x): x is RenderBlock => !!x)
+            .map(x => gather(x))
+            .filter(Boolean).join(' ');
+          if (r < rowsCount && co < cols) {
+            grid[r][co] = cellText.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+          }
+        });
+        const rows: string[] = [];
+        for (let r = 0; r < rowsCount; r++) {
+          rows.push(`| ${grid[r].join(' | ')} |`);
+          if (r === 0) rows.push(`| ${grid[r].map(() => '---').join(' | ')} |`);
+        }
+        line = rows.join('\n');
+      }
+      if (line) out.push(line, '');
+      return;
+    } else if (txt) {
+      line = txt;
+    }
+    if (line) out.push(line, '');
+    for (const id of b.children ?? []) {
+      const child = byId.get(id);
+      if (child) emit(child, (t === 12 || t === 13) ? depth + 1 : depth);
     }
   }
-  if (!exportToken) throw new Error('export poll timed out after 60s');
+  emit(root);
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
 
-  // 3) download
-  const dl = await fetch(
-    `${BASE}/open-apis/drive/v1/export_tasks/file/${exportToken}/download`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!dl.ok) throw new Error(`download HTTP ${dl.status} ${dl.statusText}`);
-  const ab = await dl.arrayBuffer();
-  return Buffer.from(ab);
+async function fetchDocAsMarkdown(token: string, docToken: string, title: string): Promise<string> {
+  const blocks = await fetchAllBlocks(token, docToken);
+  return renderBlocksAsMarkdown(blocks, title);
 }
 
 function safeName(s: string): string {
@@ -269,30 +368,59 @@ function safeName(s: string): string {
     .slice(0, 120) || 'untitled';
 }
 
+const CATEGORIES = [
+  'PRDs',
+  'AB Reports',
+  'Tech Designs',
+  'UATs',
+  'Research Exploration',
+  'Weekly Meetings',
+  'Miscellaneous',
+] as const;
+type Category = typeof CATEGORIES[number];
 
 /**
- * Convert a .docx buffer to markdown using the markitdown CLI from the
- * tools/.venv-markitdown venv. Writes the docx to a temp file (markitdown
- * needs a path argument) and removes it after.
+ * Ask Gemini which folder this doc belongs in. Returns 'Miscellaneous' on any
+ * parse/quota error so a single bad classification doesn't sink the whole run.
  */
-async function docxToMarkdown(docx: Buffer): Promise<string> {
-  const tmp = resolve(tmpdir(), `lark-${randomBytes(8).toString('hex')}.docx`);
-  await writeFile(tmp, docx);
-  try {
-    return await new Promise<string>((res, rej) => {
-      const child = spawn(MARKITDOWN_BIN, [tmp]);
-      let out = '', err = '';
-      child.stdout.on('data', b => { out += b.toString('utf8'); });
-      child.stderr.on('data', b => { err += b.toString('utf8'); });
-      child.on('error', rej);
-      child.on('close', code => {
-        if (code === 0) res(out);
-        else rej(new Error(`markitdown exit=${code}: ${err.trim().slice(0, 300)}`));
-      });
-    });
-  } finally {
-    await unlink(tmp).catch(() => {});
+async function classifyDoc(title: string, md: string): Promise<Category> {
+  const key = process.env.GOOGLE_AI_API_KEY;
+  if (!key) return 'Miscellaneous';
+  const modelName = process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite';
+  const ai = new GoogleGenerativeAI(key);
+  const model = ai.getGenerativeModel({ model: modelName });
+  const prompt = `Categorize this Lark document into EXACTLY ONE of these folders. Respond with ONLY the folder name from the list, nothing else.
+
+Folders:
+- PRDs — product requirements docs ("[PRD]", feature specs, designer/PM handoffs)
+- AB Reports — A/B test analysis, experiment results, AB report write-ups
+- Tech Designs — engineering / architecture / system design docs
+- UATs — UAT plans, QA test plans, acceptance test write-ups
+- Research Exploration — user research, exploration, opportunity sizing, market study
+- Weekly Meetings — status updates, meeting notes, weekly syncs, OKRs
+- Miscellaneous — anything else (admin, HR, travel, personal notes)
+
+Title: ${title}
+
+Content (first 6000 chars):
+${md.slice(0, 6000)}
+
+Folder name:`;
+  let lastErr: Error | undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await model.generateContent(prompt);
+      const raw = result.response.text().trim();
+      const first = raw.split('\n')[0].trim().replace(/^["'`*\-\s]+|["'`*\-\s]+$/g, '');
+      const match = CATEGORIES.find(c => c.toLowerCase() === first.toLowerCase());
+      return match ?? 'Miscellaneous';
+    } catch (e) {
+      lastErr = e as Error;
+      if (attempt === 0) await new Promise(r => setTimeout(r, 1500));
+    }
   }
+  console.warn(`  [classify-warn] ${title.slice(0, 60)}: ${lastErr?.message?.slice(0, 200)}`);
+  return 'Miscellaneous';
 }
 
 // ── main ──────────────────────────────────────────────────────────────────
@@ -323,8 +451,8 @@ async function main() {
   const all = await searchMyDocs(access, me, queryKeys);
   console.log(`[info] ${all.length} unique docs found`);
 
-  let wanted = all.filter(f => wantedSet.has(f.type) && EXPORTABLE[f.type]);
-  console.log(`[info] ${wanted.length} exportable, types=${wantedTypes.join(',')}`);
+  let wanted = all.filter(f => wantedSet.has(f.type) && SUPPORTED_DOC_TYPES.has(f.type));
+  console.log(`[info] ${wanted.length} fetchable, types=${wantedTypes.join(',')}`);
 
   const limit = Number(process.env.LIMIT ?? '0');
   if (limit > 0 && wanted.length > limit) {
@@ -335,31 +463,28 @@ async function main() {
   if (!wanted.length) return;
 
   await mkdir(DOWNLOAD_DIR, { recursive: true });
+  for (const c of CATEGORIES) await mkdir(resolve(DOWNLOAD_DIR, c), { recursive: true });
+
   let ok = 0, fail = 0;
+  const byCategory: Record<string, number> = {};
   for (const f of wanted) {
-    const spec = EXPORTABLE[f.type];
-    // docx/doc → markdown via markitdown; sheet/bitable → save xlsx as-is.
-    const isDocx = spec.ext === 'docx';
-    const outExt = isDocx ? 'md' : spec.ext;
-    const fname = `${safeName(f.name)}__${f.token}.${outExt}`;
-    const target = resolve(DOWNLOAD_DIR, fname);
+    const fname = `${safeName(f.name)}__${f.token}.md`;
     try {
-      const buf = await exportFile(access, f, spec.ext, spec.type);
-      if (isDocx) {
-        const md = await docxToMarkdown(buf);
-        await writeFile(target, md, 'utf8');
-        console.log(`  [ok]   ${fname} (${Buffer.byteLength(md, 'utf8')} bytes md, from ${buf.length} bytes docx)`);
-      } else {
-        await writeFile(target, buf);
-        console.log(`  [ok]   ${fname} (${buf.length} bytes)`);
-      }
+      const md = await fetchDocAsMarkdown(access, f.token, f.name);
+      const category = await classifyDoc(f.name, md);
+      const target = resolve(DOWNLOAD_DIR, category, fname);
+      await writeFile(target, md, 'utf8');
+      byCategory[category] = (byCategory[category] ?? 0) + 1;
+      console.log(`  [ok]   ${category}/${fname} (${Buffer.byteLength(md, 'utf8')} bytes)`);
       ok++;
     } catch (e) {
       console.error(`  [fail] ${f.name} [${f.token}] (${f.type}): ${(e as Error).message}`);
       fail++;
     }
   }
+  const summary = CATEGORIES.map(c => `${c}=${byCategory[c] ?? 0}`).join(', ');
   console.log(`\n[done] ${ok} ok, ${fail} failed -> ${DOWNLOAD_DIR}`);
+  console.log(`[by category] ${summary}`);
 }
 
 main().catch(e => { console.error('[fatal]', e); process.exit(1); });
