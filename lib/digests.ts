@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from './llm';
 import { Feature } from './types';
 import {
   readChatMessages,
@@ -1641,10 +1641,8 @@ export async function inferVersionSlipReason(
   });
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim().replace(/^["']|["']$/g, '').replace(/[.!?]+\s*$/, '');
+    const raw = (await generateText(prompt, { model: modelName, label: 'slip-reason' }))
+      .trim().replace(/^["']|["']$/g, '').replace(/[.!?]+\s*$/, '');
     if (!raw || raw.toLowerCase() === 'unknown') {
       console.log(`[digests] slip-reason "${featureName}" ${fromVersion}→${toVersion}: (none inferred)`);
       return null;
@@ -2006,10 +2004,7 @@ export async function evaluateChatRisk(
   });
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
+    const raw = (await generateText(prompt, { model: modelName, label: promptId })).trim();
     // Strip optional ```json fences if Gemini ignored the instruction
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
     const parsed = JSON.parse(cleaned) as { level?: string; summary?: string };
@@ -2251,10 +2246,8 @@ Did any of the later messages actually answer or directly address the original q
 
 Reply with ONLY "yes" or "no", no other text.`;
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim().toLowerCase();
+    const raw = (await generateText(prompt, { model: 'gemini-2.5-flash-lite', label: 'answer-check' }))
+      .trim().toLowerCase();
     const answered = raw.startsWith('y');
     console.log(`[digests] Gemini answer-check (${contextLabel}): ${answered ? 'answered' : 'unanswered'} (raw=${JSON.stringify(raw).slice(0, 60)})`);
     return answered;
@@ -2525,10 +2518,8 @@ Decide one of three labels:
 
 Reply with ONLY one word: "not_a_question", "addressed", or "outstanding". No other text.`;
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim().toLowerCase();
+    const raw = (await generateText(prompt, { model: 'gemini-2.5-flash-lite', label: 'outstanding-check' }))
+      .trim().toLowerCase();
     // Only "outstanding" flags the message; both "not_a_question" and
     // "addressed" mean we should skip it.
     const outstanding = raw.startsWith('outstanding');
@@ -3158,10 +3149,7 @@ async function summariseAbReport(
   // and made Gemini hallucinate "section not present".
   const prompt = renderFn(tmpl, { featureName, abReportContent: content });
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
+    const raw = (await generateText(prompt, { model: modelName, label: 'ab-results-summary' })).trim();
     return raw || '_(Gemini returned empty — fill in)_';
   } catch (e) {
     console.warn(`[digests] AB-concluded: Gemini summary failed for "${featureName}":`, e);
@@ -3210,10 +3198,7 @@ async function getFirstNextStep(
   const prompt = renderFn(tmpl, { featureName, abReportContent: content });
   console.log(`[digests] AB-concluded: first_next_step "${featureName}" report=${content.length}c, tail=${JSON.stringify(content.slice(-400))}`);
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
+    const raw = (await generateText(prompt, { model: modelName, label: 'first-next-step' })).trim();
     console.log(`[digests] AB-concluded: first_next_step for "${featureName}": ${JSON.stringify(raw).slice(0, 300)}`);
     if (!raw || raw === '(none)') return '';
     return raw;
@@ -3985,8 +3970,6 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             const { renderPrompt, getPromptDef } = await import('./prompt-registry');
             const def = getPromptDef('hamlet.prd_change_summary');
             const modelName = await getPromptModel('hamlet.prd_change_summary', def?.model ?? 'gemini-3.1-flash-lite-preview');
-            const prdGenAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '');
-            const model = prdGenAI.getGenerativeModel({ model: modelName });
             const tmpl = await getPrompt('hamlet.prd_change_summary', def?.default ?? '');
             // No char-cap: gemini-3.1-flash-lite-preview handles ~1M
             // tokens, and a 4k head-window was missing edits below the
@@ -3995,8 +3978,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
               prevText,
               currentText,
             });
-            const result = await model.generateContent(prompt);
-            summary = result.response.text()?.trim() ?? 'PRD content updated';
+            summary = (await generateText(prompt, { model: modelName, label: 'prd-change-summary' }))?.trim() || 'PRD content updated';
             console.log(`[digests] PRD changed for "${f.name}": ${summary}`);
           } catch (e) {
             console.warn(`[digests] Gemini PRD diff failed for "${f.name}":`, e);

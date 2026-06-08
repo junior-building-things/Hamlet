@@ -20,12 +20,19 @@ interface CachedToken {
 let cachedToken: CachedToken | null = null;
 
 /**
- * Fetch a service-account access token from the GCE / Cloud Run metadata
- * server. Cached until ~60s before expiry.
+ * Mint a GCS access token. On Cloud Run (K_SERVICE set) we use the
+ * metadata server. Off Cloud Run — e.g. the local LaunchAgent digest
+ * runner — there is no metadata server, so we fall back to the local
+ * gcloud Application Default Credentials (`gcloud auth
+ * application-default print-access-token`). Run
+ * `gcloud auth application-default login` once to set those up.
  */
 async function getMetadataToken(): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
     return cachedToken.token;
+  }
+  if (!process.env.K_SERVICE) {
+    return getLocalAdcToken();
   }
   const res = await fetch(METADATA_TOKEN_URL, { headers: { 'Metadata-Flavor': 'Google' } });
   if (!res.ok) {
@@ -38,6 +45,32 @@ async function getMetadataToken(): Promise<string> {
     expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
   };
   return cachedToken.token;
+}
+
+/**
+ * Local-dev token via gcloud Application Default Credentials. Shells out
+ * to `gcloud auth application-default print-access-token`; gcloud must be
+ * on PATH and `gcloud auth application-default login` must have been run.
+ * Tokens are ~1h-lived; cache for 50min.
+ */
+async function getLocalAdcToken(): Promise<string> {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const run = promisify(execFile);
+  let stdout: string;
+  try {
+    ({ stdout } = await run('gcloud', ['auth', 'application-default', 'print-access-token'], { timeout: 30_000 }));
+  } catch (e) {
+    throw new Error(
+      'local GCS auth failed: could not get a token from gcloud. Run ' +
+      '`gcloud auth application-default login` and ensure gcloud is on PATH. ' +
+      `(${e instanceof Error ? e.message : String(e)})`,
+    );
+  }
+  const token = stdout.trim();
+  if (!token) throw new Error('local GCS auth: gcloud returned an empty token');
+  cachedToken = { token, expiresAt: Date.now() + 50 * 60 * 1000 };
+  return token;
 }
 
 /**

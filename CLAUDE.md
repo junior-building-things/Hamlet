@@ -7,8 +7,7 @@ Hamlet is a Next.js web app for TikTok PMs to track features, sync with Meego, c
 ## Stack
 
 - **Next.js 16** (App Router), React 19, TypeScript, Tailwind 4
-- **Gemini** via `@google/generative-ai` (`GOOGLE_AI_API_KEY`)
-- **Anthropic SDK** (`@anthropic-ai/sdk`) for Claude calls
+- **LLM calls** go through [lib/llm.ts](lib/llm.ts) `generateText()`. Default provider is **Gemini** via `@google/generative-ai` (`GOOGLE_AI_API_KEY`). When `LLM_PROVIDER=claude` (set ONLY by the local digest runner, never on Cloud Run) it shells out to the local `claude` CLI (`claude -p`, `CLAUDE_MODEL`) using the user's Claude Max login. `@anthropic-ai/sdk` is a dependency but currently unused.
 - **Lark** Open APIs (`LARK_APP_ID`, `LARK_APP_SECRET`, `LARK_BOT_OPEN_ID`)
 - **Meego** work items (`MEEGO_USER_TOKEN`, `MEEGO_PROJECT_KEY`)
 - **GCS** JSON state at `gs://tiktok-im-hamlet-state` (no `@google-cloud/storage` — REST + metadata token in [lib/gcs-state.ts](lib/gcs-state.ts))
@@ -44,7 +43,7 @@ When adding prompts: register in [lib/prompt-registry.ts](lib/prompt-registry.ts
 ## State and sync
 
 - Feature list and detail: Meego sync → GCS cache ([lib/feature-cache.ts](lib/feature-cache.ts), [app/api/meego/sync/route.ts](app/api/meego/sync/route.ts)).
-- Digests / risk: [lib/digests.ts](lib/digests.ts), cron triggers under [app/api/digests/](app/api/digests/) and [app/api/crons/](app/api/crons/).
+- Digests / risk: [lib/digests.ts](lib/digests.ts), cron triggers under [app/api/digests/](app/api/digests/) and [app/api/crons/](app/api/crons/). The batch (non-interactive) digest pipeline can also run locally via [tools/run-digests-local.ts](tools/run-digests-local.ts) — a LaunchAgent ([tools/launchd/](tools/launchd/)) that sets `LLM_PROVIDER=claude` and calls the same `runDailyDigests` / `runDigestSection` functions, so LLM steps use the Claude CLI (off Cloud Run, GCS auth falls back to gcloud ADC). Real-time paths (chat, agent webhooks, Let-Jr-Reply, junior-brief, rewrite) stay on Gemini.
 - Junior context files: `gs://tiktok-im-hamlet-state/junior/context/<name>.md`.
 - Auth: Lark OAuth + session cookie ([lib/session.ts](lib/session.ts), [app/api/auth/](app/api/auth/)). Access limited to configured users.
 
