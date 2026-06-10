@@ -25,7 +25,7 @@
  *   GOOGLE_AI_API_KEY         — must be present: several digest functions
  *                              guard on it before the LLM call, even though
  *                              inference now goes through Claude.
- *   CLAUDE_MODEL              — optional; defaults to claude-haiku-4-5.
+ *   CLAUDE_MODEL              — optional; defaults to claude-sonnet-4-6.
  *
  * GCS: reads features.json / writes DigestState via Application Default
  * Credentials when off Cloud Run — run `gcloud auth application-default
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
 
   const { runDailyDigests, runDigestSection } = await import('../lib/digests');
   const ts = () => new Date().toISOString();
-  console.log(`[run-digests-local] ${ts()} starting mode=${mode} provider=claude model=${process.env.CLAUDE_MODEL ?? 'claude-haiku-4-5-20251001'}`);
+  console.log(`[run-digests-local] ${ts()} starting mode=${mode} provider=claude model=${process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6'}`);
 
   if (mode === 'refresh' || mode === 'all') {
     console.log(`[run-digests-local] ${ts()} refresh: Meego pull + transition detection + queue`);
