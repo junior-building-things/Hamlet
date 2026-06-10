@@ -17,9 +17,13 @@
  * Env (required):
  *   LARK_APP_ID
  *   LARK_APP_SECRET
- *   LARK_USER_REFRESH_TOKEN   — from /api/auth/refresh-token after logging into Hamlet.
- *                              Auto-rotates on every run; .env.local is
- *                              updated in place.
+ *   LARK_USER_REFRESH_TOKEN   — bootstrap seed (from /api/auth/refresh-token
+ *                              after logging into Hamlet). The live token is
+ *                              stored in GCS state.larkUserRefreshToken,
+ *                              shared with the digest pipeline; rotations are
+ *                              written back to GCS (+ mirrored to .env.local).
+ *                              GCS access off Cloud Run needs gcloud ADC
+ *                              (`gcloud auth application-default login`).
  *   GOOGLE_AI_API_KEY         — Gemini key for classification. Omit to dump
  *                              everything into Miscellaneous/.
  *
@@ -45,6 +49,7 @@ import { writeFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { loadDigestState, saveDigestState } from '../lib/digest-state';
 
 // ── minimal .env.local loader / writer ───────────────────────────────────
 const ENV_PATH = resolve(process.cwd(), '.env.local');
@@ -93,7 +98,6 @@ interface DriveFile {
 let BASE = '';
 let APP_ID = '';
 let APP_SECRET = '';
-let REFRESH = '';
 
 async function getAppToken(): Promise<string> {
   const r = await fetch(`${BASE}/open-apis/auth/v3/app_access_token/internal`, {
@@ -108,7 +112,7 @@ async function getAppToken(): Promise<string> {
   return j.app_access_token;
 }
 
-async function refreshUserToken(): Promise<{ access: string; me: string; rotated: string }> {
+async function refreshUserToken(token: string): Promise<{ access: string; me: string; rotated: string }> {
   const app = await getAppToken();
   const r = await fetch(`${BASE}/open-apis/authen/v1/refresh_access_token`, {
     method: 'POST',
@@ -116,7 +120,7 @@ async function refreshUserToken(): Promise<{ access: string; me: string; rotated
     body: JSON.stringify({
       app_access_token: app,
       grant_type: 'refresh_token',
-      refresh_token: REFRESH,
+      refresh_token: token,
     }),
   });
   const j = await r.json() as {
@@ -431,7 +435,6 @@ async function main() {
   BASE = process.env.LARK_BASE_URL ?? 'https://open.larkoffice.com';
   APP_ID = mustEnv('LARK_APP_ID');
   APP_SECRET = mustEnv('LARK_APP_SECRET');
-  REFRESH = mustEnv('LARK_USER_REFRESH_TOKEN');
 
   const DOWNLOAD_DIR = process.env.DOWNLOAD_DIR ?? '/Users/bytedance/Documents/Work/Documents';
   const wantedTypes = (process.env.FILE_TYPES ?? 'docx,doc')
@@ -441,12 +444,42 @@ async function main() {
     ?? 'a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z,0,1,2,3,4,5,6,7,8,9'
   ).split(',').map(s => s.trim()).filter(Boolean);
 
-  console.log(`[info] refreshing user token...`);
-  const { access, me, rotated } = await refreshUserToken();
+  // User refresh token: GCS state.larkUserRefreshToken is the single
+  // source of truth, shared with the digest pipeline; .env.local's
+  // LARK_USER_REFRESH_TOKEN is the bootstrap seed. The Lark token is
+  // single-use and rotates per refresh, so sharing ONE store across both
+  // local jobs (which run at different times) avoids them invalidating
+  // each other. Rotations are written back to GCS (+ mirrored to
+  // .env.local). Needs gcloud ADC for GCS off Cloud Run.
+  const envSeed = process.env.LARK_USER_REFRESH_TOKEN ?? '';
+  const state = await loadDigestState();
+  const gcsToken = state.larkUserRefreshToken ?? '';
+  if (!gcsToken && !envSeed) {
+    console.error('[fatal] no Lark user refresh token in GCS state or LARK_USER_REFRESH_TOKEN');
+    process.exit(1);
+  }
+
+  console.log(`[info] refreshing user token (source=${gcsToken ? 'gcs' : 'env'})...`);
+  let token: { access: string; me: string; rotated: string };
+  try {
+    token = await refreshUserToken(gcsToken || envSeed);
+  } catch (e) {
+    // The GCS token may be dead (rotated out from under us). Heal from the
+    // .env.local bootstrap seed if it's different.
+    if (gcsToken && envSeed && envSeed !== gcsToken) {
+      console.warn(`[info] GCS token refresh failed (${e instanceof Error ? e.message : e}); retrying with .env.local seed`);
+      token = await refreshUserToken(envSeed);
+    } else {
+      throw e;
+    }
+  }
+  const { access, me, rotated } = token;
   console.log(`[info] user token ok (open_id=${me || 'unknown'})`);
-  if (rotated && rotated !== REFRESH) {
+  if (rotated) {
+    state.larkUserRefreshToken = rotated;
+    await saveDigestState(state);
     await persistRefreshToken(rotated);
-    console.log(`[info] refresh token rotated; .env.local updated`);
+    console.log(`[info] refresh token rotated; GCS state + .env.local updated`);
   }
 
   console.log(`[info] searching My Drive (${queryKeys.length} queries, owner=${me})...`);

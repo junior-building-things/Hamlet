@@ -1650,7 +1650,7 @@ export async function inferVersionSlipReason(
     console.log(`[digests] slip-reason "${featureName}" ${fromVersion}→${toVersion}: ${raw}`);
     return raw;
   } catch (e) {
-    console.warn(`[digests] slip-reason Gemini failed for "${featureName}":`, e);
+    console.warn(`[digests] slip-reason LLM failed for "${featureName}":`, e);
     return null;
   }
 }
@@ -1975,7 +1975,7 @@ export async function evaluateChatRisk(
     // 7-day window — carry it forward unchanged.
     if (prior) {
       console.log(
-        `[digests] Gemini risk for "${featureName}" (no recent chat or comments, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
+        `[digests] LLM risk for "${featureName}" (no recent chat or comments, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
       );
       return { level: prior.level, summary: prior.summary };
     }
@@ -2015,13 +2015,13 @@ export async function evaluateChatRisk(
     const summary = (parsed.summary ?? '').trim();
     const priorTag = prior ? `, prior=${prior.level}` : '';
     console.log(
-      `[digests] Gemini risk for "${featureName}" (${messages.length} msgs/7d, ${commentsFormatted ? 'with' : 'no'} Meego comments${priorTag}): ${JSON.stringify({ level, summary })}`,
+      `[digests] LLM risk for "${featureName}" (${messages.length} msgs/7d, ${commentsFormatted ? 'with' : 'no'} Meego comments${priorTag}): ${JSON.stringify({ level, summary })}`,
     );
     if (level === 'none') return { level, summary: '' };
     return { level, summary };
   } catch (e) {
     console.warn(`[digests] Gemini chat risk eval failed for ${featureName}:`, e);
-    // Gemini failed — fall back to carrying the prior risk if any.
+    // LLM failed — fall back to carrying the prior risk if any.
     return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
   }
 }
@@ -2249,10 +2249,10 @@ Reply with ONLY "yes" or "no", no other text.`;
     const raw = (await generateText(prompt, { model: 'gemini-2.5-flash-lite', label: 'answer-check' }))
       .trim().toLowerCase();
     const answered = raw.startsWith('y');
-    console.log(`[digests] Gemini answer-check (${contextLabel}): ${answered ? 'answered' : 'unanswered'} (raw=${JSON.stringify(raw).slice(0, 60)})`);
+    console.log(`[digests] LLM answer-check (${contextLabel}): ${answered ? 'answered' : 'unanswered'} (raw=${JSON.stringify(raw).slice(0, 60)})`);
     return answered;
   } catch (e) {
-    console.warn(`[digests] Gemini answer-check failed (${contextLabel}), defaulting to "answered":`, e);
+    console.warn(`[digests] LLM answer-check failed (${contextLabel}), defaulting to "answered":`, e);
     return true;
   }
 }
@@ -2527,10 +2527,10 @@ Reply with ONLY one word: "not_a_question", "addressed", or "outstanding". No ot
       : raw.startsWith('addressed') ? 'addressed'
       : raw.startsWith('outstanding') ? 'outstanding'
       : `unknown(${raw.slice(0, 30)})`;
-    console.log(`[digests] Gemini outstanding-check (${contextLabel}): ${verdict}`);
+    console.log(`[digests] LLM outstanding-check (${contextLabel}): ${verdict}`);
     return outstanding;
   } catch (e) {
-    console.warn(`[digests] Gemini outstanding-check failed (${contextLabel}), defaulting to "outstanding":`, e);
+    console.warn(`[digests] LLM outstanding-check failed (${contextLabel}), defaulting to "outstanding":`, e);
     return true;
   }
 }
@@ -3137,7 +3137,7 @@ async function summariseAbReport(
   if (!content) return '_(AB report is empty — fill in)_';
 
   const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) return '_(Gemini not configured — fill in)_';
+  if (!apiKey) return '_(model not configured — fill in)_';
   const { getPrompt: getPromptFn, getPromptModel: getModelFn } = await import('./prompts');
   const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
   const def = getDefFn('hamlet.ab_results_summary');
@@ -3150,10 +3150,10 @@ async function summariseAbReport(
   const prompt = renderFn(tmpl, { featureName, abReportContent: content });
   try {
     const raw = (await generateText(prompt, { model: modelName, label: 'ab-results-summary' })).trim();
-    return raw || '_(Gemini returned empty — fill in)_';
+    return raw || '_(model returned empty — fill in)_';
   } catch (e) {
-    console.warn(`[digests] AB-concluded: Gemini summary failed for "${featureName}":`, e);
-    return '_(Gemini summary failed — fill in)_';
+    console.warn(`[digests] AB-concluded: LLM summary failed for "${featureName}":`, e);
+    return '_(model summary failed — fill in)_';
   }
 }
 
@@ -3203,7 +3203,7 @@ async function getFirstNextStep(
     if (!raw || raw === '(none)') return '';
     return raw;
   } catch (e) {
-    console.warn(`[digests] AB-concluded: Gemini next-step extraction failed for "${featureName}":`, e);
+    console.warn(`[digests] AB-concluded: LLM next-step extraction failed for "${featureName}":`, e);
     return '';
   }
 }
@@ -3661,36 +3661,6 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     console.warn('[digests] failed to get Lark bot token:', e);
   }
 
-  // ── Libra field probe (TEMPORARY) ───────────────────────────────────────────
-  // Search for a known Libra URL across every MCP response for feature 6740389019.
-  // Known URL: https://libra-sg.tiktok-row.net/libra/flight/71926724/report/main
-  try {
-    const probeUrl = `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/6740389019`;
-    const NEEDLE = 'libra';
-    const tools: Array<{ name: string; args: Record<string, unknown> }> = [
-      { name: 'get_workitem_brief', args: { url: probeUrl } },
-      { name: 'get_node_detail', args: { url: probeUrl } },
-      { name: 'get_workitem_op_record', args: { url: probeUrl } },
-      { name: 'list_workitem_comments', args: { url: probeUrl } },
-      { name: 'list_deliverables', args: { url: probeUrl } },
-    ];
-    for (const tool of tools) {
-      try {
-        const raw = await callMeegoMcp(tool.name, tool.args);
-        if (raw.toLowerCase().includes(NEEDLE)) {
-          const idx = raw.toLowerCase().indexOf(NEEDLE);
-          console.log(`[digests] Libra probe FOUND in ${tool.name} at idx=${idx}: ...${raw.slice(Math.max(0, idx - 100), idx + 200)}...`);
-        } else {
-          console.log(`[digests] Libra probe: NOT in ${tool.name} (${raw.length} chars)`);
-        }
-      } catch (e) {
-        console.warn(`[digests] Libra probe ${tool.name} failed:`, e);
-      }
-    }
-  } catch (e) {
-    console.warn('[digests] Libra probe failed:', e);
-  }
-  // ── end probe ─────────────────────────────────────────────────────────────
 
   // Step 0b: Refresh (or reuse) Junior's chat list. This drives both the
   // discovery augmentation in Step 1 and the Q&A scan in Step 6.
@@ -3981,7 +3951,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             summary = (await generateText(prompt, { model: modelName, label: 'prd-change-summary' }))?.trim() || 'PRD content updated';
             console.log(`[digests] PRD changed for "${f.name}": ${summary}`);
           } catch (e) {
-            console.warn(`[digests] Gemini PRD diff failed for "${f.name}":`, e);
+            console.warn(`[digests] LLM PRD diff failed for "${f.name}":`, e);
           }
           // Skip trivial wording-only edits: don't append to the PRD change
           // log and don't include in the daily digest card. Snapshot still
