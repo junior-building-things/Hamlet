@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LaunchAgent: run the Hamlet digest pipeline locally each weekday.
+  Runs `all` (refresh + send) once at 09:30 local. The Mac must be awake
+  at that time (launchd coalesces if it was asleep).
+
+  To mirror production's twice-daily refresh (08:00/18:00) + 10:00 digests
+  split instead, run two LaunchAgents: one calling the wrapper with
+  "refresh" on the 08:00/18:00 schedule and one calling it with "digests"
+  at 10:00. See the wrapper's MODE argument.
+
+  Install:
+    mkdir -p "$HOME/Library/Application Support/hamlet-digests"
+    cp tools/launchd/run-hamlet-digests.sh "$HOME/Library/Application Support/hamlet-digests/run.sh"
+    chmod +x "$HOME/Library/Application Support/hamlet-digests/run.sh"
+    cp tools/launchd/com.bytedance.hamlet-digests.plist "$HOME/Library/LaunchAgents/"
+    launchctl load "$HOME/Library/LaunchAgents/com.bytedance.hamlet-digests.plist"
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bytedance.hamlet-digests</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/bytedance/Library/Application Support/hamlet-digests/run.sh</string>
+    <string>all</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+  <key>StandardOutPath</key>
+  <string>/Users/bytedance/Library/Logs/hamlet-digests.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/bytedance/Library/Logs/hamlet-digests.log</string>
+</dict>
+</plist>
