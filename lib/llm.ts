@@ -15,8 +15,7 @@
  * raw response text back, then does its own trimming/parsing.
  *
  * In claude mode the resolved Gemini model name is ignored; the model is
- * CLAUDE_MODEL (default a fast Haiku tier — these are simple
- * classification/summary tasks).
+ * CLAUDE_MODEL (default claude-sonnet-4-6).
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -57,7 +56,7 @@ async function generateViaGemini(prompt: string, opts: GenerateTextOpts): Promis
 let claudeQueue: Promise<unknown> = Promise.resolve();
 
 function claudeModel(): string {
-  return process.env.CLAUDE_MODEL ?? 'claude-haiku-4-5-20251001';
+  return process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6';
 }
 
 function generateViaClaude(prompt: string, opts: GenerateTextOpts): Promise<string> {
