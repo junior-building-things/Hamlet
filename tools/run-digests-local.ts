@@ -10,12 +10,18 @@
  * model provider differs.
  *
  * Modes (argv[2]):
+ *   all      — ONE full pass: pull Meego once, detect transitions/PRD
+ *              changes, and send every section's card. Equals the legacy
+ *              unified daily digest (`runDailyDigests({ mode: 'full' })`).
+ *              Default. Much faster on a single box than refresh+digests,
+ *              which would re-run the heavy scan once per scan-based
+ *              section.
  *   refresh  — Meego pull + transition detection + queue cards + write
  *              snapshots + slip-reason inference (mirrors the
  *              `refresh-feature-cache` cron). No cards are sent.
  *   digests  — drain queues + run scans + send cards (mirrors the
- *              per-section `digest-*` crons).
- *   all      — refresh, then digests. Default.
+ *              per-section `digest-*` crons). Use with `refresh` for a
+ *              split schedule.
  *
  * Env (loaded from .env.local in repo root, same as download-lark-docs):
  *   MEEGO_USER_TOKEN          — Meego MCP access (for the refresh pull).
@@ -78,12 +84,19 @@ async function main(): Promise<void> {
   const ts = () => new Date().toISOString();
   console.log(`[run-digests-local] ${ts()} starting mode=${mode} provider=claude model=${process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6'}`);
 
-  if (mode === 'refresh' || mode === 'all') {
+  if (mode === 'all') {
+    // One full pass: pull Meego once, detect, send all sections. Avoids
+    // the 3× heavy-scan repeat you get from refresh + per-section drains.
+    console.log(`[run-digests-local] ${ts()} full: Meego pull + detect + send all sections`);
+    await runDailyDigests({ mode: 'full' });
+  }
+
+  if (mode === 'refresh') {
     console.log(`[run-digests-local] ${ts()} refresh: Meego pull + transition detection + queue`);
     await runDailyDigests({ mode: 'refresh' });
   }
 
-  if (mode === 'digests' || mode === 'all') {
+  if (mode === 'digests') {
     for (const id of SECTIONS) {
       try {
         console.log(`[run-digests-local] ${ts()} section ${id} …`);

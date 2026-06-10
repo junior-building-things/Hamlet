@@ -50,22 +50,41 @@ async function generateViaGemini(prompt: string, opts: GenerateTextOpts): Promis
 }
 
 // ── claude CLI path ────────────────────────────────────────────────────────
-// Serialize claude invocations: the batch pipeline issues these in
-// per-feature loops, and one-at-a-time keeps us well under the Max
-// 5-hour-window rate limits while spawning at most one process at a time.
-let claudeQueue: Promise<unknown> = Promise.resolve();
+// Bound the number of concurrent `claude -p` processes. The batch pipeline
+// issues these in per-feature loops; a small pool cuts wall-time while
+// staying well under the Max 5-hour-window rate limits. Tune via
+// CLAUDE_CONCURRENCY.
+const CLAUDE_MAX_CONCURRENCY = Math.max(1, Number(process.env.CLAUDE_CONCURRENCY ?? 3));
+let claudeActive = 0;
+const claudeWaiters: Array<() => void> = [];
+
+function acquireClaudeSlot(): Promise<void> {
+  if (claudeActive < CLAUDE_MAX_CONCURRENCY) {
+    claudeActive++;
+    return Promise.resolve();
+  }
+  // Wait to be handed a live slot by releaseClaudeSlot (claudeActive is
+  // not decremented in that case — the slot transfers directly).
+  return new Promise<void>(resolve => claudeWaiters.push(resolve));
+}
+
+function releaseClaudeSlot(): void {
+  const next = claudeWaiters.shift();
+  if (next) next();
+  else claudeActive--;
+}
 
 function claudeModel(): string {
   return process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6';
 }
 
-function generateViaClaude(prompt: string, opts: GenerateTextOpts): Promise<string> {
-  const run = () => spawnClaude(prompt, opts);
-  // Chain onto the queue so only one CLI runs at a time, regardless of
-  // whether the previous call resolved or rejected.
-  const result = claudeQueue.then(run, run);
-  claudeQueue = result.catch(() => undefined);
-  return result;
+async function generateViaClaude(prompt: string, opts: GenerateTextOpts): Promise<string> {
+  await acquireClaudeSlot();
+  try {
+    return await spawnClaude(prompt, opts);
+  } finally {
+    releaseClaudeSlot();
+  }
 }
 
 function spawnClaude(prompt: string, opts: GenerateTextOpts): Promise<string> {
