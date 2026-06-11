@@ -35,6 +35,16 @@ export interface CronJobDef {
   /** Where the message lands, in plain English. */
   target: string;
   kind: CronKind;
+  /**
+   * When true, this job's real execution happens on the owner's Mac via
+   * a LaunchAgent (tools/run-digests-local.ts), NOT on Cloud Run. Its
+   * Cloud Scheduler job (if any) stays PAUSED to avoid double-runs, so
+   * the Cron Jobs tab must NOT read pause/last-run from Cloud Scheduler
+   * for these — it reads state.cronPaused / state.cronLastRun instead,
+   * and "Trigger once" writes a state.cronTriggerRequests entry the Mac's
+   * trigger-watch agent consumes. See app/api/crons/route.ts.
+   */
+  runsLocally?: boolean;
   /** For kind='cloud_scheduler': the GCP scheduler job id. */
   cloudSchedulerJobId?: string;
   /** For kind='cloud_scheduler': the Cloud Run service this fires (display). */
@@ -76,11 +86,12 @@ export const CRON_REGISTRY: CronJobDef[] = [
       'Pulls Meego state for every PM-owned feature, detects status transitions + PRD changes, ' +
       'updates the GCS feature cache and writes feature-snapshots.json. Queues per-section cards ' +
       'into DigestState. Sends NO cards itself — the per-section crons below send.',
-    schedule: '0 0,10 * * *',
-    scheduleTime: '8am/6pm SGT',
-    scheduleFrequency: 'Daily',
+    schedule: '30 9 * * 1-5',
+    scheduleTime: '9:30am SGT',
+    scheduleFrequency: 'Weekdays',
     target: 'GCS cache + DigestState queues',
     kind: 'cloud_scheduler',
+    runsLocally: true,
     cloudSchedulerJobId: REFRESH_FEATURE_CACHE,
     cloudSchedulerService: 'hamlet',
     destinations: [{ kind: 'hamlet', label: 'Hamlet' }],
@@ -92,11 +103,12 @@ export const CRON_REGISTRY: CronJobDef[] = [
     description:
       'Legacy bundled run kept for manual triggers. Sub-sections now have their own crons; ' +
       'this fires the unified pipeline (data fetch + every card) end-to-end.',
-    schedule: '0 14 * * 1-5',
-    scheduleTime: '10am SGT',
+    schedule: '30 9 * * 1-5',
+    scheduleTime: '9:30am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat (oc_d1f9b0ad…)',
     kind: 'cloud_scheduler',
+    runsLocally: true,
     cloudSchedulerJobId: HAMLET_DAILY,
     cloudSchedulerService: 'hamlet',
     destinations: [{ kind: 'team_thomas', label: 'Team Thomas' }],
@@ -128,11 +140,12 @@ export const CRON_REGISTRY: CronJobDef[] = [
     description:
       'For each in-flight feature, runs a Gemini risk evaluation over the last 24h of chat + ' +
       'Meego comments and surfaces anything flagged 🔴 / 🟡 in a single aggregate card.',
-    schedule: '0 14 * * 1-5',
-    scheduleTime: '10am SGT',
+    schedule: '30 9 * * 1-5',
+    scheduleTime: '9:30am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
+    runsLocally: true,
     cloudSchedulerJobId: 'digest-risk',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'risk',
@@ -145,11 +158,12 @@ export const CRON_REGISTRY: CronJobDef[] = [
     description:
       'Sends the queue of PRD changes detected by the refresh job (Gemini-summarised diffs ' +
       'appended to each PRD\'s Change Log section).',
-    schedule: '0 14 * * 1-5',
-    scheduleTime: '10am SGT',
+    schedule: '30 9 * * 1-5',
+    scheduleTime: '9:30am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
+    runsLocally: true,
     cloudSchedulerJobId: 'digest-prd-changes',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'prd_changes',
@@ -165,11 +179,12 @@ export const CRON_REGISTRY: CronJobDef[] = [
     description:
       'Scans chat @-mentions of the owner + open PRD comment threads for questions Thomas hasn\'t ' +
       'addressed yet. Asks Gemini to gate "is this actually a question?" and surfaces only the real ones.',
-    schedule: '0 14 * * 1-5',
-    scheduleTime: '10am SGT',
+    schedule: '30 9 * * 1-5',
+    scheduleTime: '9:30am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
+    runsLocally: true,
     cloudSchedulerJobId: 'digest-unanswered',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'unanswered',
@@ -185,11 +200,12 @@ export const CRON_REGISTRY: CronJobDef[] = [
     description:
       'Sends the queue of features whose Meego status transitioned to 实验中 (AB Testing) ' +
       'since the last refresh. One aggregate card with per-feature Send-to-PM-Group + Edit buttons.',
-    schedule: '0 14 * * 1-5',
-    scheduleTime: '10am SGT',
+    schedule: '30 9 * * 1-5',
+    scheduleTime: '9:30am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
+    runsLocally: true,
     cloudSchedulerJobId: 'digest-ab-open',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'ab_open',
@@ -205,11 +221,12 @@ export const CRON_REGISTRY: CronJobDef[] = [
     description:
       'For each feature chat where an "AB Brief" calendar invite has landed, drafts an AB-concluded ' +
       'card via Gemini (results summary + Next Steps from the AB report) for review + Send-to-PM-Group.',
-    schedule: '0 14 * * 1-5',
-    scheduleTime: '10am SGT',
+    schedule: '30 9 * * 1-5',
+    scheduleTime: '9:30am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
+    runsLocally: true,
     cloudSchedulerJobId: 'digest-ab-concluded',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'ab_concluded',
@@ -225,11 +242,12 @@ export const CRON_REGISTRY: CronJobDef[] = [
     description:
       'Sends the queue of features whose Meego status just transitioned to 待线内评审 ' +
       '(Line Review). One feature card per transition, sent to the feature\'s group chat.',
-    schedule: '0 14 * * 1-5',
-    scheduleTime: '10am SGT',
+    schedule: '30 9 * * 1-5',
+    scheduleTime: '9:30am SGT',
     scheduleFrequency: 'Weekdays',
     target: 'Per-feature group chat',
     kind: 'cloud_scheduler',
+    runsLocally: true,
     cloudSchedulerJobId: 'digest-line-review',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'line_review',
@@ -240,3 +258,13 @@ export const CRON_REGISTRY: CronJobDef[] = [
 export function getCronById(id: string): CronJobDef | undefined {
   return CRON_REGISTRY.find(c => c.id === id);
 }
+
+/** Ids of all jobs whose real execution is the local LaunchAgent pass. */
+export const LOCAL_CRON_IDS: string[] = CRON_REGISTRY.filter(c => c.runsLocally).map(c => c.id);
+
+/**
+ * The two "master" local crons. Pausing either one stops the whole local
+ * pass (the local `all` run is monolithic: refresh + send in one go). The
+ * per-section `digest.*` ids only gate their own card via cronPaused.
+ */
+export const LOCAL_MASTER_CRON_IDS: string[] = [HAMLET_DAILY, REFRESH_FEATURE_CACHE];

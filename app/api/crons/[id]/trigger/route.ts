@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCronById } from '@/lib/cron-registry';
 import { runSchedulerJob, getSchedulerJob } from '@/lib/cloud-scheduler';
 import { markCronStarted, markCronEnded } from '@/lib/cron-runs';
+import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 600;
@@ -28,6 +29,29 @@ export async function POST(
   const { id } = await params;
   const def = getCronById(id);
   if (!def) return NextResponse.json({ error: 'unknown cron' }, { status: 404 });
+
+  // runsLocally jobs execute on the owner's Mac — Cloud Run can't dispatch
+  // them. Record a trigger request in GCS; the Mac's trigger-watch
+  // LaunchAgent (run-digests-local.ts watch-trigger) polls for it and runs
+  // the local pass, then clears the flag + writes the heartbeat.
+  if (def.runsLocally) {
+    try {
+      const state = await loadDigestState();
+      state.cronTriggerRequests = {
+        ...(state.cronTriggerRequests ?? {}),
+        [def.id]: new Date().toISOString(),
+      };
+      await saveDigestState(state);
+      // Surface a "working" marker immediately so the sidebar reflects the ask.
+      await markCronStarted(def.id, 'manual');
+      return NextResponse.json({
+        ok: true,
+        note: 'Requested — your Mac will run the digest on its next trigger check (≤10 min).',
+      });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'request failed' }, { status: 500 });
+    }
+  }
 
   if (def.kind !== 'cloud_scheduler' || !def.cloudSchedulerJobId) {
     return NextResponse.json({ error: 'unsupported kind' }, { status: 400 });

@@ -20,6 +20,7 @@ interface CronJob {
   scheduleFrequency: string;
   target: string;
   kind: CronKind;
+  runsLocally?: boolean;
   cloudSchedulerJobId?: string;
   cloudSchedulerService?: string;
   sectionKey?: string;
@@ -201,6 +202,7 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
       const res = await fetch(`/api/crons/${job.id}/trigger`, { method: 'POST' });
       const data = await res.json() as { ok?: boolean; status?: number; note?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Trigger failed');
+      if (data.note) toast.success(data.note);
       onChange();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Trigger failed');
@@ -209,7 +211,9 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
     }
   }
 
-  const editable = job.kind === 'cloud_scheduler';
+  // Local jobs run from a LaunchAgent plist, not Cloud Scheduler — their
+  // schedule isn't editable here (the PUT route rejects it).
+  const editable = job.kind === 'cloud_scheduler' && !job.runsLocally;
 
   async function updateSchedule(field: 'scheduleTime' | 'scheduleFrequency', value: string) {
     setBusy(true);
@@ -259,22 +263,30 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
 
       {/* Meta row: send time + frequency + last-run note */}
       <div className="meta-row">
-        <MetaSelect
-          label="Send time"
-          value={job.scheduleTime}
-          options={TIME_OPTIONS}
-          disabled={!editable || busy}
-          title={editable ? 'Change send time' : `Inherits from ${job.parentCronId}`}
-          onChange={v => updateSchedule('scheduleTime', v)}
-        />
-        <MetaSelect
-          label="Frequency"
-          value={job.scheduleFrequency}
-          options={FREQUENCY_OPTIONS}
-          disabled={!editable || busy}
-          title={editable ? 'Change frequency' : `Inherits from ${job.parentCronId}`}
-          onChange={v => updateSchedule('scheduleFrequency', v)}
-        />
+        {job.runsLocally ? (
+          <span className="meta-note" title="Runs on the owner's Mac via a LaunchAgent — schedule set in the plist">
+            ⌘ Runs locally · {job.scheduleFrequency} · {job.scheduleTime}
+          </span>
+        ) : (
+          <>
+            <MetaSelect
+              label="Send time"
+              value={job.scheduleTime}
+              options={TIME_OPTIONS}
+              disabled={!editable || busy}
+              title={editable ? 'Change send time' : `Inherits from ${job.parentCronId}`}
+              onChange={v => updateSchedule('scheduleTime', v)}
+            />
+            <MetaSelect
+              label="Frequency"
+              value={job.scheduleFrequency}
+              options={FREQUENCY_OPTIONS}
+              disabled={!editable || busy}
+              title={editable ? 'Change frequency' : `Inherits from ${job.parentCronId}`}
+              onChange={v => updateSchedule('scheduleFrequency', v)}
+            />
+          </>
+        )}
         <span className="meta-note">Last run: {formatRelativeTime(job.lastAttemptTime)}</span>
       </div>
     </div>

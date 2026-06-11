@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LaunchAgent: poll for manual digest-trigger requests from the Hamlet
+  Cron Jobs tab and run a local pass when one is queued.
+
+  The Cloud Run UI can't reach this Mac, so "Trigger once" on a local
+  (runsLocally) cron writes a request flag into GCS DigestState. This
+  agent runs `run.sh watch-trigger` every 10 min: it exits immediately
+  when there's nothing queued (cheap — one GCS read), and runs the full
+  digest pass when a request is pending, then clears the flag.
+
+  10 min = the max delay between clicking "Trigger once" and the run
+  starting. Lower the StartInterval for a snappier button.
+
+  Install:
+    cp tools/launchd/com.bytedance.hamlet-digests-trigger.plist "$HOME/Library/LaunchAgents/"
+    launchctl load "$HOME/Library/LaunchAgents/com.bytedance.hamlet-digests-trigger.plist"
+  (Reuses the same run.sh as com.bytedance.hamlet-digests.)
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bytedance.hamlet-digests-trigger</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/bytedance/Library/Application Support/hamlet-digests/run.sh</string>
+    <string>watch-trigger</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>600</integer>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/bytedance/Library/Logs/hamlet-digests-trigger.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/bytedance/Library/Logs/hamlet-digests-trigger.log</string>
+</dict>
+</plist>

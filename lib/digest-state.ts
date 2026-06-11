@@ -261,6 +261,25 @@ export interface DigestStateFile {
   cronPaused?: string[];
 
   /**
+   * Per-cron heartbeat: id → ISO timestamp of the last COMPLETED local
+   * run, written by tools/run-digests-local.ts after each pass. The Cron
+   * Jobs tab reads this as "Last run" for `runsLocally` jobs, whose Cloud
+   * Scheduler jobs are paused and so never advance lastAttemptTime.
+   * Distinct from cronRuns, which tracks in-flight runs and is cleared on
+   * completion.
+   */
+  cronLastRun?: Record<string, string>;
+
+  /**
+   * Manual-trigger requests for `runsLocally` jobs: id → requestedAt ISO.
+   * The Cron Jobs tab's "Trigger once" button writes here; the local
+   * trigger-watch LaunchAgent (run-digests-local.ts watch-trigger) polls
+   * GCS, runs the pass, and clears the entries. This is the bridge that
+   * lets the Cloud Run UI kick a run on the owner's Mac.
+   */
+  cronTriggerRequests?: Record<string, string>;
+
+  /**
    * Pending Line Review (PRD Ready ✅) cards queued by the
    * `refresh-feature-cache` job. Consumed + cleared by the
    * `digest-line-review` cron. Each entry produces one feature card
@@ -408,6 +427,12 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const cronRuns = (obj.cronRuns && typeof obj.cronRuns === 'object')
     ? (obj.cronRuns as DigestStateFile['cronRuns'])
     : undefined;
+  const cronLastRun = (obj.cronLastRun && typeof obj.cronLastRun === 'object')
+    ? (obj.cronLastRun as DigestStateFile['cronLastRun'])
+    : undefined;
+  const cronTriggerRequests = (obj.cronTriggerRequests && typeof obj.cronTriggerRequests === 'object')
+    ? (obj.cronTriggerRequests as DigestStateFile['cronTriggerRequests'])
+    : undefined;
   const pendingLineReviewCards = Array.isArray(obj.pendingLineReviewCards)
     ? (obj.pendingLineReviewCards as DigestStateFile['pendingLineReviewCards'])
     : undefined;
@@ -437,6 +462,8 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     postFeatureMap,
     cronPaused,
     cronRuns,
+    cronLastRun,
+    cronTriggerRequests,
     pendingLineReviewCards,
     pendingAbOpenCards,
     pendingPrdChanges,

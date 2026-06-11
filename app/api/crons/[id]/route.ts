@@ -27,6 +27,12 @@ export async function PUT(
 
     // Schedule update path.
     if (body.scheduleTime !== undefined || body.scheduleFrequency !== undefined) {
+      if (def.runsLocally) {
+        return NextResponse.json(
+          { error: 'This job runs on your Mac — its schedule lives in the LaunchAgent plist, not Cloud Scheduler. Edit tools/launchd/com.bytedance.hamlet-digests.plist.' },
+          { status: 400 },
+        );
+      }
       if (def.kind !== 'cloud_scheduler' || !def.cloudSchedulerJobId) {
         return NextResponse.json({ error: 'schedule edit only supported on cloud_scheduler jobs' }, { status: 400 });
       }

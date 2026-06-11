@@ -8,7 +8,7 @@
 # e.g. ~/Library/Application Support/hamlet-digests/run.sh
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/google-cloud-sdk/bin"
-cd /Users/bytedance/Documents/Work/Coding/Hamlet
+cd /Users/bytedance/Documents/Work/Coding/pm-automation/hamlet
 MODE="${1:-all}"
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') hamlet-digests ($MODE) starting ==="
 exec npx --yes tsx tools/run-digests-local.ts "$MODE"
