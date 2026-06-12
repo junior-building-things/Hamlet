@@ -264,7 +264,7 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
       {/* Meta row: send time + frequency + last-run note */}
       <div className="meta-row">
         {job.runsLocally ? (
-          <span className="meta-note" title="Runs on the owner's Mac via a LaunchAgent — schedule set in the plist">
+          <span className="meta-note" style={{ marginLeft: 0 }} title="Runs on the owner's Mac via a LaunchAgent — schedule set in the plist">
             ⌘ Runs locally · {job.scheduleFrequency} · {job.scheduleTime}
           </span>
         ) : (
