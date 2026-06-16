@@ -3209,6 +3209,36 @@ async function getFirstNextStep(
 }
 
 /**
+ * Wrap every signed percentage delta (e.g. +2.23%, -10.7%, −1.5%) in
+ * markdown bold. Applied to the A/B Results summary so the metric change
+ * numbers stand out. The summary prompt emits no bold of its own, so this
+ * is the single source of bolding (no risk of double-wrapping).
+ */
+function boldMetricDeltas(text: string): string {
+  return text.replace(/([+\-−]\d+(?:\.\d+)?\s?%)/g, '**$1**');
+}
+
+/**
+ * Split a line containing markdown **bold** spans into rich-text post
+ * inline segments. Used so the percentage deltas bolded for the lark_md
+ * card also render bold in the Send-to-PM-Group post (which is structured
+ * segments, not markdown).
+ */
+function larkMdBoldToSegments(line: string): Array<{ tag: 'text'; text: string; style?: string[] }> {
+  const segs: Array<{ tag: 'text'; text: string; style?: string[] }> = [];
+  const re = /\*\*(.+?)\*\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > last) segs.push({ tag: 'text', text: line.slice(last, m.index) });
+    segs.push({ tag: 'text', text: m[1], style: ['bold'] });
+    last = re.lastIndex;
+  }
+  if (last < line.length) segs.push({ tag: 'text', text: line.slice(last) });
+  return segs.length > 0 ? segs : [{ tag: 'text', text: line }];
+}
+
+/**
  * Build the per-feature card section + Send-button payload for one
  * AB-concluded transition. Mirrors buildAbOpenSection but swaps:
  *   - Title tag: [✅ AB concluded] instead of [📲 AB open]
@@ -3246,6 +3276,8 @@ export async function buildAbConcludedSection(
     summariseAbReport(feature.name, abReportUrl, userAccessToken),
     getFirstNextStep(feature.name, abReportUrl, userAccessToken),
   ]);
+  // Bold the signed % deltas in the A/B Results so the metric changes pop.
+  const abResultsBold = boldMetricDeltas(abResults);
 
   const refs: Array<{ label: string; url: string }> = [];
   if (abReportUrl) refs.push({ label: 'AB Report', url: abReportUrl });
@@ -3259,7 +3291,7 @@ export async function buildAbConcludedSection(
     `**${headlineName} [✅ AB concluded]**`,
     `**Background**: ${background}`,
     `**A/B Results**:`,
-    abResults,
+    abResultsBold,
     nextStep ? `**Next Steps**:\n- ${nextStep}` : '',
     refs.length > 0
       ? `**Reference**: ${refs.map(r => `[${r.label}](${r.url})`).join(' | ')}`
@@ -3277,10 +3309,10 @@ export async function buildAbConcludedSection(
     ],
     [{ tag: 'text', text: 'A/B Results:', style: ['bold'] }],
   ];
-  for (const line of abResults.split('\n')) {
+  for (const line of abResultsBold.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    postParagraphs.push([{ tag: 'text', text: trimmed }]);
+    postParagraphs.push(larkMdBoldToSegments(trimmed));
   }
   if (nextStep) {
     postParagraphs.push([{ tag: 'text', text: 'Next Steps:', style: ['bold'] }]);
