@@ -3362,13 +3362,13 @@ export async function buildAbConcludedSection(
     { tag: 'text', text: 'cc' },
     { tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID },
   ];
-  // Resolve POC emails → open_ids for the @-mentions. The bot's
-  // app token can only resolve users it has direct contact-read
-  // scope for (typically the installer + bot members of chats it's
-  // in). The user access token (Thomas's personal scope) sees the
-  // full org contact directory, so prefer it when available and
-  // fall back to bot token.
-  const tokenForResolve = userAccessToken || botToken;
+  // Resolve POC emails → open_ids for the @-mentions. This MUST use the
+  // bot (tenant) token: contact/v3/users/batch_get_id rejects user access
+  // tokens outright (99991668 "user access token not support"). The bot
+  // only returns ids for users inside the app's contact data scope, so org
+  // members outside it resolve empty — widen the app's contact scope in
+  // the Lark admin console to tag arbitrary POCs.
+  const tokenForResolve = botToken;
   if (tokenForResolve) {
     const POC_ROLE_KEYS = ['Tech_Owner', 'Server', 'Android', 'iOS', 'QA', 'DA'];
     const pocEmails: string[] = [];
