@@ -3,6 +3,7 @@ import { Feature } from './types';
 import {
   readChatMessages,
   resolveOpenIds,
+  resolveOpenIdsByUserSearch,
   sendInteractiveCardToChat,
   sendFeatureCard,
   joinFeatureChat,
@@ -3362,39 +3363,45 @@ export async function buildAbConcludedSection(
     { tag: 'text', text: 'cc' },
     { tag: 'at', user_id: AB_OPEN_MENTION_OPEN_ID },
   ];
-  // Resolve POC emails → open_ids for the @-mentions. This MUST use the
-  // bot (tenant) token: contact/v3/users/batch_get_id rejects user access
-  // tokens outright (99991668 "user access token not support"). The bot
-  // only returns ids for users inside the app's contact data scope, so org
-  // members outside it resolve empty — widen the app's contact scope in
-  // the Lark admin console to tag arbitrary POCs.
-  const tokenForResolve = botToken;
-  if (tokenForResolve) {
-    const POC_ROLE_KEYS = ['Tech_Owner', 'Server', 'Android', 'iOS', 'QA', 'DA'];
-    const pocEmails: string[] = [];
-    for (const roleKey of POC_ROLE_KEYS) {
-      for (const memberName of feature.roles[roleKey] ?? []) {
-        const email = feature.roleEmails[memberName];
-        if (email && !pocEmails.includes(email)) pocEmails.push(email);
-      }
+  // Resolve POC emails → open_ids for the @-mentions. Prefer the PM's
+  // USER token via search/v1/user: it respects the PM's full org directory
+  // visibility (the same path Junior uses to @-mention arbitrary people),
+  // querying by full email for an exact match. The tenant token's
+  // batch_get_id is gated by the app's contact data scope and returns
+  // empty for org members outside it — so it's only a fallback (used when
+  // there's no user token, or for emails the user search missed).
+  const POC_ROLE_KEYS = ['Tech_Owner', 'Server', 'Android', 'iOS', 'QA', 'DA'];
+  const pocEmails: string[] = [];
+  for (const roleKey of POC_ROLE_KEYS) {
+    for (const memberName of feature.roles[roleKey] ?? []) {
+      const email = feature.roleEmails[memberName];
+      if (email && !pocEmails.includes(email)) pocEmails.push(email);
     }
-    if (pocEmails.length > 0) {
-      try {
-        const map = await resolveOpenIds(pocEmails, tokenForResolve);
-        const seen = new Set<string>([AB_OPEN_MENTION_OPEN_ID]);
-        let added = 0;
-        for (const email of pocEmails) {
-          const openId = map[email];
-          if (openId && !seen.has(openId)) {
-            seen.add(openId);
-            ccInlines.push({ tag: 'at', user_id: openId });
-            added++;
-          }
-        }
-        console.log(`[digests] AB-concluded cc "${feature.name}": ${added}/${pocEmails.length} POC mentions resolved`);
-      } catch (e) {
-        console.warn(`[digests] AB-concluded POC open_id resolve failed for "${feature.name}":`, e);
+  }
+  if (pocEmails.length > 0) {
+    try {
+      let map: Record<string, string> = {};
+      if (userAccessToken) {
+        map = await resolveOpenIdsByUserSearch(pocEmails, userAccessToken);
       }
+      const missing = pocEmails.filter(e => !map[e]);
+      if (missing.length > 0 && botToken) {
+        const fallback = await resolveOpenIds(missing, botToken);
+        map = { ...map, ...fallback };
+      }
+      const seen = new Set<string>([AB_OPEN_MENTION_OPEN_ID]);
+      let added = 0;
+      for (const email of pocEmails) {
+        const openId = map[email];
+        if (openId && !seen.has(openId)) {
+          seen.add(openId);
+          ccInlines.push({ tag: 'at', user_id: openId });
+          added++;
+        }
+      }
+      console.log(`[digests] AB-concluded cc "${feature.name}": ${added}/${pocEmails.length} POC mentions resolved`);
+    } catch (e) {
+      console.warn(`[digests] AB-concluded POC open_id resolve failed for "${feature.name}":`, e);
     }
   }
   postParagraphs.push(ccInlines);

@@ -3715,6 +3715,42 @@ export async function addBotToChat(chatId: string, userAccessToken?: string): Pr
 /**
  * Resolve emails to Lark open_ids for @mentions.
  */
+/**
+ * Resolve emails → open_ids using a PM USER access token via search/v1/user.
+ *
+ * Unlike contact/v3/users/batch_get_id (tenant token, gated by the app's
+ * contact data scope — which returns empty for org members outside the
+ * app's availability range), this respects the searching user's full org
+ * directory visibility. It's the same path that lets Junior @-mention
+ * arbitrary people. Querying by the FULL email returns an exact single
+ * match, sidestepping the name-collision ambiguity a name query has
+ * (e.g. three different "曹钰"). Returns only confidently-resolved entries;
+ * callers should fall back to the tenant resolveOpenIds for any misses.
+ */
+export async function resolveOpenIdsByUserSearch(
+  emails: string[], userToken: string,
+): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  for (const email of emails) {
+    try {
+      const res = await fetch(
+        `${LARK_BASE_URL}/open-apis/search/v1/user?query=${encodeURIComponent(email)}&page_size=5`,
+        { headers: { Authorization: `Bearer ${userToken}` } },
+      );
+      const d = await res.json() as {
+        code: number; msg?: string;
+        data?: { users?: Array<{ open_id?: string; name?: string }> };
+      };
+      const users = d.data?.users ?? [];
+      if (d.code === 0 && users[0]?.open_id) result[email] = users[0].open_id;
+      console.log(`[lark] userSearch email=${email} code=${d.code} matches=${users.length} -> ${result[email] ?? '(none)'}`);
+    } catch (e) {
+      console.warn(`[lark] resolveOpenIdsByUserSearch threw for ${email}:`, e);
+    }
+  }
+  return result;
+}
+
 export async function resolveOpenIds(
   emails: string[], token: string,
 ): Promise<Record<string, string>> {
