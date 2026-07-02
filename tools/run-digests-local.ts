@@ -41,7 +41,7 @@
  *   GOOGLE_AI_API_KEY         — must be present: several digest functions
  *                              guard on it before the LLM call, even though
  *                              inference now goes through Claude.
- *   CLAUDE_MODEL              — optional; defaults to claude-sonnet-4-6.
+ *   CLAUDE_MODEL              — optional; defaults to claude-sonnet-5.
  *
  * GCS: reads features.json / writes DigestState via Application Default
  * Credentials when off Cloud Run — run `gcloud auth application-default
@@ -171,7 +171,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log(`[run-digests-local] ${ts()} starting mode=${mode} provider=claude model=${process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6'}`);
+  console.log(`[run-digests-local] ${ts()} starting mode=${mode} provider=claude model=${process.env.CLAUDE_MODEL ?? 'claude-sonnet-5'}`);
 
   // Master off-switch: pausing either master cron in the Crons tab stops
   // the whole local pass. Per-section pauses are honoured inside

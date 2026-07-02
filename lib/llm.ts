@@ -15,7 +15,7 @@
  * raw response text back, then does its own trimming/parsing.
  *
  * In claude mode the resolved Gemini model name is ignored; the model is
- * CLAUDE_MODEL (default claude-sonnet-4-6).
+ * CLAUDE_MODEL (default claude-sonnet-5).
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -75,7 +75,7 @@ function releaseClaudeSlot(): void {
 }
 
 function claudeModel(): string {
-  return process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6';
+  return process.env.CLAUDE_MODEL ?? 'claude-sonnet-5';
 }
 
 async function generateViaClaude(prompt: string, opts: GenerateTextOpts): Promise<string> {
