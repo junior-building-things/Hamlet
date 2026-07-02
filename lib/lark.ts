@@ -60,6 +60,32 @@ export function getBotOpenId(): string {
   return process.env.LARK_BOT_OPEN_ID ?? '';
 }
 
+/**
+ * Resolve the bot's open_id at runtime: use LARK_BOT_OPEN_ID if set,
+ * otherwise fetch it from bot/v3/info (cached for the process). The local
+ * digest runner's .env.local doesn't carry LARK_BOT_OPEN_ID, so without
+ * this the bot @-mention in doc cells (e.g. the PRD Change Log "by"
+ * column) silently falls back to plain text. Prefer this over
+ * getBotOpenId() anywhere a real mention must render.
+ */
+let cachedBotOpenId = '';
+export async function resolveBotOpenId(token?: string): Promise<string> {
+  if (process.env.LARK_BOT_OPEN_ID) return process.env.LARK_BOT_OPEN_ID;
+  if (cachedBotOpenId) return cachedBotOpenId;
+  try {
+    const t = token ?? await getAccessToken();
+    const res = await fetch(`${LARK_BASE_URL}/open-apis/bot/v3/info`, {
+      headers: { Authorization: `Bearer ${t}` },
+    });
+    const d = await res.json() as { code: number; bot?: { open_id?: string } };
+    if (d.code === 0 && d.bot?.open_id) { cachedBotOpenId = d.bot.open_id; return cachedBotOpenId; }
+    console.warn(`[lark] resolveBotOpenId: bot/v3/info code=${d.code}`);
+  } catch (e) {
+    console.warn('[lark] resolveBotOpenId failed:', e);
+  }
+  return '';
+}
+
 // ─── Root folder cache ────────────────────────────────────────────────────────
 
 let cachedRootFolder    = '';
@@ -408,7 +434,7 @@ export async function grantBotEditAccess(
   prdUrl: string,
   userAccessToken: string,
 ): Promise<boolean> {
-  const botOpenId = getBotOpenId();
+  const botOpenId = await resolveBotOpenId();
   if (!botOpenId) return false;
   try {
     const fileToken = await resolveDocId(prdUrl);
@@ -1373,7 +1399,7 @@ export async function fillTableRowUnderHeading(
   const cellIds = tableBlock.children ?? [];
   const rowStart = rowIndex * colCount;
   const updates = [];
-  const botOpenId = getBotOpenId();
+  const botOpenId = await resolveBotOpenId(token);
   for (let col = 0; col < Math.min(cellContents.length, colCount); col++) {
     const cellId = cellIds[rowStart + col];
     if (!cellId) continue;
@@ -1868,7 +1894,7 @@ export async function appendPrdChangeLog(
       console.log(`[lark] inserted row: ${newCells.length} new cells (expected ${colCount})`);
 
       // Step 3: Fill cells — col0=date, col1=description, col2=by (as @mention)
-      const botOpenId = getBotOpenId();
+      const botOpenId = await resolveBotOpenId(token);
       const cells: Array<{ text: string; mention?: string }> = [
         { text: entry.date },
         { text: entry.detail },
