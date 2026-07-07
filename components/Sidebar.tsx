@@ -1,12 +1,12 @@
 'use client';
 import {
   LayoutList, MessageSquare, CheckSquare, Users, Plus, LogOut,
-  MessageSquareCode, Database, Clock, Sparkles,
+  MessageSquareCode, Database, Clock, Sparkles, Wand2,
 } from 'lucide-react';
 import { useEffect } from 'react';
 import { JuniorStatusCard } from './JuniorStatusCard';
 
-export type SidebarView = 'project' | 'chat' | 'todos' | 'roles' | 'prompts' | 'context' | 'crons';
+export type SidebarView = 'project' | 'vibe' | 'chat' | 'todos' | 'roles' | 'prompts' | 'context' | 'crons';
 
 interface Props {
   activeView: SidebarView;
@@ -43,6 +43,7 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user, featu
 
   const workspace: NavEntry[] = [
     { id: 'project', icon: <LayoutList className="w-3.5 h-3.5" />,    label: 'Ongoing Features', count: featureCount },
+    { id: 'vibe',    icon: <Wand2 className="w-3.5 h-3.5" />,         label: 'Vibe-Coding Projects' },
     { id: 'todos',   icon: <CheckSquare className="w-3.5 h-3.5" />,   label: 'To Dos', count: todoCount },
     { id: 'chat',    icon: <MessageSquare className="w-3.5 h-3.5" />, label: 'Chat' },
     { id: 'roles',   icon: <Users className="w-3.5 h-3.5" />,         label: 'R&R' },

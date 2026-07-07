@@ -9,6 +9,7 @@ import { RolesView } from '@/components/RolesView';
 import { PromptsView } from '@/components/PromptsView';
 import { JuniorContextView } from '@/components/JuniorContextView';
 import { CronJobsView } from '@/components/CronJobsView';
+import { VibeCodingView } from '@/components/VibeCodingView';
 import { SyncProvider } from '@/components/SyncContext';
 import { GlobalActions } from '@/components/GlobalActions';
 import { FeatureModal } from '@/components/FeatureModal';
@@ -33,6 +34,7 @@ export default function Home() {
   const [activeView,    setActiveView]    = useState<SidebarView>(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
+      if (path === '/vibe') return 'vibe';
       if (path === '/todos') return 'todos';
       if (path === '/chat') return 'chat';
       if (path === '/roles') return 'roles';
@@ -50,7 +52,7 @@ export default function Home() {
   const [user,          setUser]          = useState<{ name: string; avatarUrl: string } | undefined>();
 
   // Sync URL when view changes
-  const viewToPath: Record<SidebarView, string> = { project: '/projects', todos: '/todos', chat: '/chat', roles: '/roles', prompts: '/prompts', context: '/context', crons: '/crons' };
+  const viewToPath: Record<SidebarView, string> = { project: '/projects', vibe: '/vibe', todos: '/todos', chat: '/chat', roles: '/roles', prompts: '/prompts', context: '/context', crons: '/crons' };
   function handleViewChange(view: SidebarView) {
     setActiveView(view);
     window.history.pushState(null, '', viewToPath[view]);
@@ -60,7 +62,8 @@ export default function Home() {
   useEffect(() => {
     function onPopState() {
       const path = window.location.pathname;
-      if (path === '/todos') setActiveView('todos');
+      if (path === '/vibe') setActiveView('vibe');
+      else if (path === '/todos') setActiveView('todos');
       else if (path === '/chat') setActiveView('chat');
       else if (path === '/roles') setActiveView('roles');
       else if (path === '/prompts') setActiveView('prompts');
@@ -189,6 +192,9 @@ export default function Home() {
               onDrawerOpened={() => setOpenDrawerForId(null)}
             />
           </div>
+          {activeView === 'vibe' && (
+            <VibeCodingView user={user} />
+          )}
           {activeView === 'chat' && (
             <ChatView onFeatureCreated={f => setFeatures(prev => [f, ...prev])} />
           )}
