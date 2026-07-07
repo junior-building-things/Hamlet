@@ -1,36 +1,78 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, Trash2, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import type { Feature } from '@/lib/types';
 import { PriorityBadge } from './PriorityBadge';
-import { VersionBadge } from './VersionBadge';
+import { LinkIcons } from './LinkIcons';
 
 interface VibeProject {
   id: string;
   feature: string;
   version: string;
   priority: string;
-  links: string[];
+  prd?: string;
+  figmaUrl?: string;
+  complianceUrl?: string;
+  libraUrl?: string;
+  abReportUrl?: string;
+  meegoUrl?: string;
   team: string;
   createdAt: string;
 }
 
 const PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const;
+// LinkIcons reports edits by link key; map those to VibeProject fields.
+const LINK_KEY_TO_FIELD: Record<string, keyof VibeProject> = {
+  meego: 'meegoUrl', prd: 'prd', compliance: 'complianceUrl',
+  figma: 'figmaUrl', libra: 'libraUrl', ab: 'abReportUrl',
+};
 
-function hostOf(url: string): string {
-  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+// Mirror the Ongoing Features grid: one grid per header/row, same tracks.
+const GRID = 'minmax(150px,1.6fr) 90px 84px minmax(150px,1.3fr) 130px 34px';
+
+// ─── Inline editable text cell (click to edit, Enter/blur saves, Esc cancels) ──
+function EditableCell({ value, placeholder, onSave }: {
+  value: string; placeholder?: string; onSave: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select(); } }, [editing]);
+
+  function begin() { setDraft(value); setEditing(true); }
+  function commit() {
+    setEditing(false);
+    const t = draft.trim();
+    if (t !== value) onSave(t);
+  }
+  if (editing) {
+    return (
+      <input
+        ref={ref}
+        className="editable-cell w-full min-w-0 bg-transparent border-none outline-none text-[12.5px]"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { setDraft(value); setEditing(false); }
+        }}
+        placeholder={placeholder}
+      />
+    );
+  }
+  return (
+    <div className="editable-cell w-full min-w-0 text-[12.5px] truncate" onClick={begin}>
+      <span className={value ? 'text-[var(--text)]' : 'text-[var(--text-dim)]'}>{value || placeholder}</span>
+    </div>
+  );
 }
 
 export function VibeCodingView({ user }: { user?: { name: string } }) {
   const [projects, setProjects] = useState<VibeProject[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-
-  // Add-form fields
-  const [feature, setFeature] = useState('');
-  const [version, setVersion] = useState('');
-  const [priority, setPriority] = useState<string>('P2');
-  const [links, setLinks] = useState('');
+  const [adding, setAdding] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -44,134 +86,135 @@ export function VibeCodingView({ user }: { user?: { name: string } }) {
       setLoading(false);
     }
   }, []);
-
   useEffect(() => { void refresh(); }, [refresh]);
 
-  async function addProject() {
-    if (!feature.trim()) { toast.error('Feature is required'); return; }
-    setBusy(true);
+  // Optimistic field update + PATCH.
+  const updateField = useCallback(async (id: string, field: keyof VibeProject, value: string) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
     try {
       const res = await fetch('/api/vibe-projects', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feature, version, priority, links }),
+        body: JSON.stringify({ id, [field]: value }),
       });
-      const data = await res.json() as { projects?: VibeProject[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Failed to add');
-      setProjects(data.projects ?? []);
-      setFeature(''); setVersion(''); setPriority('P2'); setLinks('');
-      toast.success('Project added');
+      if (!res.ok) throw new Error((await res.json())?.error ?? 'Save failed');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Save failed');
+      void refresh(); // reconcile on failure
+    }
+  }, [refresh]);
+
+  async function addRow() {
+    setAdding(true);
+    try {
+      const res = await fetch('/api/vibe-projects', { method: 'POST' });
+      const data = await res.json() as { project?: VibeProject; error?: string };
+      if (!res.ok || !data.project) throw new Error(data.error ?? 'Failed to add');
+      setProjects(prev => [...prev, data.project!]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add');
     } finally {
-      setBusy(false);
+      setAdding(false);
     }
   }
 
-  async function removeProject(id: string) {
-    setBusy(true);
+  async function removeRow(id: string) {
+    const snapshot = projects;
+    setProjects(prev => prev.filter(p => p.id !== id));
     try {
       const res = await fetch(`/api/vibe-projects?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-      const data = await res.json() as { projects?: VibeProject[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Failed to delete');
-      setProjects(data.projects ?? []);
+      if (!res.ok) throw new Error((await res.json())?.error ?? 'Delete failed');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to delete');
-    } finally {
-      setBusy(false);
+      toast.error(e instanceof Error ? e.message : 'Delete failed');
+      setProjects(snapshot); // roll back
     }
   }
-
-  const inputCls = 'bg-[var(--bg-elev-2)] border border-[var(--hairline)] rounded-[var(--r-sm)] px-2.5 py-1.5 text-[12.5px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--hairline-strong)]';
 
   return (
     <div className="h-full overflow-y-auto px-6 py-5">
-      <div className="max-w-[860px] mx-auto">
+      <div className="max-w-[980px] mx-auto">
         {/* Header */}
-        <div className="mb-1">
+        <div className="mb-3">
           <h1 className="text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">Vibe-Coding Projects</h1>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5 leading-[1.5]">
-            Side projects you&apos;re building without a Meego item — tracked here so they don&apos;t get lost.
+            Side projects you&apos;re building without a Meego item — add rows and fill them in inline.
           </p>
         </div>
 
-        {/* Add form */}
-        <div className="meta-card mt-4 !p-3.5">
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_110px] gap-2.5">
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[var(--text-dim)]">Feature</span>
-              <input className={inputCls} value={feature} onChange={e => setFeature(e.target.value)}
-                placeholder="What are you building?" onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void addProject(); }} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[var(--text-dim)]">Version</span>
-              <input className={inputCls} value={version} onChange={e => setVersion(e.target.value)} placeholder="e.g. 45.8" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[var(--text-dim)]">Priority</span>
-              <select className={inputCls} value={priority} onChange={e => setPriority(e.target.value)}>
-                {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </label>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2.5 mt-2.5 items-end">
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[var(--text-dim)]">Links</span>
-              <input className={inputCls} value={links} onChange={e => setLinks(e.target.value)}
-                placeholder="Paste URLs, separated by space or comma" />
-            </label>
-            <div className="flex items-center gap-2.5 pb-px">
-              <span className="flex flex-col gap-1">
-                <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[var(--text-dim)]">Team</span>
-                <span className="meta-tag" title="Only you — vibe projects are private">{user?.name ?? 'Me'}</span>
-              </span>
-              <button onClick={() => void addProject()} disabled={busy} className="hm-btn hm-btn-primary ml-auto">
-                {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                Add
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* List */}
-        <div className="mt-5 flex flex-col gap-2">
-          {loading ? (
-            <div className="flex items-center gap-2 text-[12px] text-[var(--text-muted)] py-6 justify-center">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="text-[12px] text-[var(--text-dim)] py-8 text-center border border-dashed border-[var(--hairline)] rounded-[var(--r-md)]">
-              No vibe-coding projects yet. Add one above.
-            </div>
-          ) : projects.map(p => (
-            <div key={p.id} className="meta-card !p-3 flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-medium text-[var(--text)]">{p.feature}</span>
-                  {p.priority && <PriorityBadge priority={p.priority as 'P0' | 'P1' | 'P2' | 'P3'} />}
-                  {p.version && <VersionBadge version={p.version} />}
-                  <span className="meta-tag">{p.team}</span>
-                </div>
-                {p.links.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap mt-2">
-                    {p.links.map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] transition-colors max-w-[220px]">
-                        <LinkIcon className="w-2.5 h-2.5 shrink-0" />
-                        <span className="truncate">{hostOf(url)}</span>
-                        <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-60" />
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <button onClick={() => void removeProject(p.id)} disabled={busy}
-                title="Delete" className="hm-btn !px-1.5 shrink-0 text-[var(--text-dim)] hover:text-[var(--text)]">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+        {/* Column header (matches the Ongoing Features table) */}
+        <div className="hidden sm:grid py-2.5 sticky top-0 bg-[var(--bg-elev-1)] border-b border-[var(--hairline)] z-10"
+          style={{ gridTemplateColumns: GRID, columnGap: '0.75rem' }}>
+          {['Feature', 'Version', 'Priority', 'Links', 'Team', ''].map((l, i) => (
+            <span key={i} className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-dim)] pl-1">{l}</span>
           ))}
         </div>
+
+        {/* Rows */}
+        {loading ? (
+          <div className="flex items-center gap-2 text-[12px] text-[var(--text-muted)] py-8 justify-center">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            {projects.length === 0 && (
+              <div className="text-[12px] text-[var(--text-dim)] py-6 text-center">No projects yet — add your first row below.</div>
+            )}
+            {projects.map(p => (
+              <div key={p.id}
+                className="grid items-center py-2 border-b border-[var(--hairline)] hover:bg-[var(--hairline)]/40 transition-colors"
+                style={{ gridTemplateColumns: GRID, columnGap: '0.75rem' }}>
+                {/* Feature */}
+                <div className="pl-1 min-w-0">
+                  <EditableCell value={p.feature} placeholder="Untitled project" onSave={v => updateField(p.id, 'feature', v)} />
+                </div>
+                {/* Version */}
+                <div className="pl-1 min-w-0">
+                  <EditableCell value={p.version} placeholder="—" onSave={v => updateField(p.id, 'version', v)} />
+                </div>
+                {/* Priority */}
+                <div className="pl-1">
+                  <div className="relative inline-flex">
+                    <PriorityBadge priority={(PRIORITIES.includes(p.priority as typeof PRIORITIES[number]) ? p.priority : 'P2') as 'P0' | 'P1' | 'P2' | 'P3'} />
+                    <select
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      value={PRIORITIES.includes(p.priority as typeof PRIORITIES[number]) ? p.priority : 'P2'}
+                      onChange={e => updateField(p.id, 'priority', e.target.value)}
+                      title="Change priority"
+                    >
+                      {PRIORITIES.map(pr => <option key={pr} value={pr}>{pr}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {/* Links — reuse the Ongoing Features LinkIcons (icons + add affordance) */}
+                <div className="pl-1 min-w-0">
+                  <LinkIcons
+                    feature={p as unknown as Feature}
+                    onLinkUpdate={(key, url) => {
+                      const field = LINK_KEY_TO_FIELD[key];
+                      if (field) void updateField(p.id, field, url);
+                    }}
+                  />
+                </div>
+                {/* Team (fixed to you) */}
+                <div className="pl-1 min-w-0">
+                  <span className="meta-tag" title="Only you — vibe projects are private">{p.team || user?.name || 'Me'}</span>
+                </div>
+                {/* Delete */}
+                <button onClick={() => void removeRow(p.id)} title="Delete row"
+                  className="grid place-items-center w-6 h-6 rounded text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--hairline)] transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+
+            {/* Add row */}
+            <button onClick={() => void addRow()} disabled={adding}
+              className="flex items-center gap-2 mt-2.5 px-2 py-2 text-[12.5px] text-[var(--text-muted)] hover:text-[var(--text)] w-fit rounded-[var(--r-sm)] hover:bg-[var(--hairline)] transition-colors disabled:opacity-50">
+              {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Add row
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
