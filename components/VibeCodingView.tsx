@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import type { Feature } from '@/lib/types';
 import { PriorityBadge } from './PriorityBadge';
 import { LinkIcons } from './LinkIcons';
+import { UserAvatar } from './AvatarSelect';
 
 interface VibeProject {
   id: string;
@@ -69,7 +70,7 @@ function EditableCell({ value, placeholder, onSave }: {
   );
 }
 
-export function VibeCodingView({ user }: { user?: { name: string } }) {
+export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: string } }) {
   const [projects, setProjects] = useState<VibeProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -131,16 +132,17 @@ export function VibeCodingView({ user }: { user?: { name: string } }) {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-6 py-5">
-      <div className="max-w-[980px] mx-auto">
-        {/* Header */}
-        <div className="mb-3">
-          <h1 className="text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">Vibe-Coding Projects</h1>
-          <p className="text-[12px] text-[var(--text-muted)] mt-0.5 leading-[1.5]">
-            Side projects you&apos;re building without a Meego item — add rows and fill them in inline.
-          </p>
-        </div>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Header bar (matches the Ongoing Features header) */}
+      <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
+        <h1 className="text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">Vibe-Coding Projects</h1>
+        <p className="text-[12px] text-[var(--text-muted)] mt-0.5 leading-[1.5]">
+          Side projects you&apos;re building without a Meego item — add rows and fill them in inline.
+        </p>
+      </div>
 
+      {/* Scrollable table */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-16">
         {/* Column header (matches the Ongoing Features table) */}
         <div className="hidden sm:grid py-2.5 sticky top-0 bg-[var(--bg-elev-1)] border-b border-[var(--hairline)] z-10"
           style={{ gridTemplateColumns: GRID, columnGap: '0.75rem' }}>
@@ -151,13 +153,13 @@ export function VibeCodingView({ user }: { user?: { name: string } }) {
 
         {/* Rows */}
         {loading ? (
-          <div className="flex items-center gap-2 text-[12px] text-[var(--text-muted)] py-8 justify-center">
+          <div className="flex items-center gap-2 text-[12px] text-[var(--text-muted)] py-8">
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
           </div>
         ) : (
           <div className="flex flex-col">
             {projects.length === 0 && (
-              <div className="text-[12px] text-[var(--text-dim)] py-6 text-center">No projects yet — add your first row below.</div>
+              <div className="text-[12px] text-[var(--text-dim)] py-6">No projects yet — add your first row below.</div>
             )}
             {projects.map(p => (
               <div key={p.id}
@@ -195,9 +197,12 @@ export function VibeCodingView({ user }: { user?: { name: string } }) {
                     }}
                   />
                 </div>
-                {/* Team (fixed to you) */}
-                <div className="pl-1 min-w-0">
-                  <span className="meta-tag" title="Only you — vibe projects are private">{p.team || user?.name || 'Me'}</span>
+                {/* Team (fixed to you) — same avatar design as Ongoing Features */}
+                <div className="pl-1 min-w-0 flex items-center">
+                  <div className="rounded-full inline-block" title="Only you — vibe projects are private"
+                    style={{ outline: '2px solid var(--card)', outlineOffset: '-1px' }}>
+                    <UserAvatar name={p.team || user?.name || 'Me'} url={user?.avatarUrl} size={6} />
+                  </div>
                 </div>
                 {/* Delete */}
                 <button onClick={() => void removeRow(p.id)} title="Delete row"
