@@ -784,7 +784,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
           Sync/theme buttons render via the page-level <GlobalActions />
           floating in the top-right corner. */}
       <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
-        <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Ongoing Features</div>
+        <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Product Features</div>
         <div className="text-[12px] text-[var(--text-muted)] mt-0.5">An overview of your projects</div>
       </div>
 

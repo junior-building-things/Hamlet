@@ -29,19 +29,21 @@ const LINK_KEY_TO_FIELD: Record<string, keyof VibeProject> = {
   figma: 'figmaUrl', libra: 'libraUrl', ab: 'abReportUrl',
 };
 
-// Mirror the Ongoing Features grid: one grid per header/row, same tracks.
-const GRID = 'minmax(150px,1.6fr) 90px 84px minmax(150px,1.3fr) 130px 34px';
+// Fixed/capped column tracks (only the trailing spacer flexes) so columns
+// pack tight on the left like the Product Features table — no growing gaps.
+// Feature, Version, Priority, Links, Team, spacer(flex), Delete.
+const GRID = 'minmax(220px,400px) 70px 60px 150px 60px minmax(40px,1fr) 36px';
 
 // ─── Inline editable text cell (click to edit, Enter/blur saves, Esc cancels) ──
 function EditableCell({ value, placeholder, onSave }: {
   value: string; placeholder?: string; onSave: (v: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
   useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select(); } }, [editing]);
 
-  function begin() { setDraft(value); setEditing(true); }
   function commit() {
     setEditing(false);
     const t = draft.trim();
@@ -64,7 +66,7 @@ function EditableCell({ value, placeholder, onSave }: {
     );
   }
   return (
-    <div className="editable-cell w-full min-w-0 text-[12.5px] truncate" onClick={begin}>
+    <div className="editable-cell w-full min-w-0 text-[12.5px] truncate" onClick={() => setEditing(true)}>
       <span className={value ? 'text-[var(--text)]' : 'text-[var(--text-dim)]'}>{value || placeholder}</span>
     </div>
   );
@@ -131,35 +133,34 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
     }
   }
 
+  const priorityOf = (p: VibeProject) =>
+    (PRIORITIES.includes(p.priority as typeof PRIORITIES[number]) ? p.priority : 'P2') as 'P0' | 'P1' | 'P2' | 'P3';
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Header bar (matches the Ongoing Features header) */}
+      {/* Page header — matches Product Features. */}
       <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
-        <h1 className="text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">Vibe Projects</h1>
-        <p className="text-[12px] text-[var(--text-muted)] mt-0.5 leading-[1.5]">
-          Projects without a dedicated Meego
-        </p>
+        <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Vibe Projects</div>
+        <div className="text-[12px] text-[var(--text-muted)] mt-0.5">Projects without a dedicated Meego</div>
       </div>
 
-      {/* Scrollable table */}
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-16">
-        {/* Column header (matches the Ongoing Features table) */}
+        {/* Column header */}
         <div className="hidden sm:grid py-2.5 sticky top-0 bg-[var(--bg-elev-1)] border-b border-[var(--hairline)] z-10"
           style={{ gridTemplateColumns: GRID, columnGap: '0.75rem' }}>
-          {['Feature', 'Version', 'Priority', 'Links', 'Team', ''].map((l, i) => (
+          {['Feature', 'Version', 'Priority', 'Links', 'Team', '', ''].map((l, i) => (
             <span key={i} className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-dim)] pl-1">{l}</span>
           ))}
         </div>
 
-        {/* Rows */}
         {loading ? (
-          <div className="flex items-center gap-2 text-[12px] text-[var(--text-muted)] py-8">
+          <div className="flex items-center gap-2 text-[12px] text-[var(--text-muted)] py-8 justify-center">
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
           </div>
         ) : (
-          <div className="flex flex-col">
+          <>
             {projects.length === 0 && (
-              <div className="text-[12px] text-[var(--text-dim)] py-6">No projects yet — add your first row below.</div>
+              <div className="text-[12px] text-[var(--text-dim)] py-6 pl-1">No projects yet — add your first row below.</div>
             )}
             {projects.map(p => (
               <div key={p.id}
@@ -176,10 +177,10 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
                 {/* Priority */}
                 <div className="pl-1">
                   <div className="relative inline-flex">
-                    <PriorityBadge priority={(PRIORITIES.includes(p.priority as typeof PRIORITIES[number]) ? p.priority : 'P2') as 'P0' | 'P1' | 'P2' | 'P3'} />
+                    <PriorityBadge priority={priorityOf(p)} />
                     <select
                       className="absolute inset-0 opacity-0 cursor-pointer"
-                      value={PRIORITIES.includes(p.priority as typeof PRIORITIES[number]) ? p.priority : 'P2'}
+                      value={priorityOf(p)}
                       onChange={e => updateField(p.id, 'priority', e.target.value)}
                       title="Change priority"
                     >
@@ -187,7 +188,7 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
                     </select>
                   </div>
                 </div>
-                {/* Links — reuse the Ongoing Features LinkIcons (icons + add affordance) */}
+                {/* Links — reuse the Product Features LinkIcons (icons + add affordance) */}
                 <div className="pl-1 min-w-0">
                   <LinkIcons
                     feature={p as unknown as Feature}
@@ -197,13 +198,12 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
                     }}
                   />
                 </div>
-                {/* Team (fixed to you) — same avatar design as Ongoing Features */}
-                <div className="pl-1 min-w-0 flex items-center">
-                  <div className="rounded-full inline-block" title="Only you — vibe projects are private"
-                    style={{ outline: '2px solid var(--card)', outlineOffset: '-1px' }}>
-                    <UserAvatar name={p.team || user?.name || 'Me'} url={user?.avatarUrl} size={6} />
-                  </div>
+                {/* Team — single avatar (only you) */}
+                <div className="pl-1">
+                  <UserAvatar name={p.team || user?.name || 'Me'} url={user?.avatarUrl} size={5} />
                 </div>
+                {/* Spacer */}
+                <div />
                 {/* Delete */}
                 <button onClick={() => void removeRow(p.id)} title="Delete row"
                   className="grid place-items-center w-6 h-6 rounded text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--hairline)] transition-colors">
@@ -214,11 +214,11 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
 
             {/* Add row */}
             <button onClick={() => void addRow()} disabled={adding}
-              className="flex items-center gap-2 mt-2.5 px-2 py-2 text-[12.5px] text-[var(--text-muted)] hover:text-[var(--text)] w-fit rounded-[var(--r-sm)] hover:bg-[var(--hairline)] transition-colors disabled:opacity-50">
+              className="flex items-center gap-2 mt-3 px-2 py-2 text-[12.5px] text-[var(--text-muted)] hover:text-[var(--text)] w-fit rounded-[var(--r-sm)] hover:bg-[var(--hairline)] transition-colors disabled:opacity-50">
               {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
               Add row
             </button>
-          </div>
+          </>
         )}
       </div>
     </div>

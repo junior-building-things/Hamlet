@@ -193,7 +193,9 @@ export default function Home() {
             />
           </div>
           {activeView === 'vibe' && (
-            <VibeCodingView user={user} />
+            <div className="h-full">
+              <VibeCodingView user={user} />
+            </div>
           )}
           {activeView === 'chat' && (
             <ChatView onFeatureCreated={f => setFeatures(prev => [f, ...prev])} />
