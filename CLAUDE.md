@@ -21,7 +21,7 @@ This is **not** stock Next.js from training data. Before changing routing, data 
 
 | Area | Purpose |
 |------|---------|
-| [app/[[...slug]]/page.tsx](app/[[...slug]]/page.tsx) | SPA shell: Projects, Vibe-Coding Projects, Todos, Chat, Roles, Prompts, Junior Context, Crons |
+| [app/[[...slug]]/page.tsx](app/[[...slug]]/page.tsx) | SPA shell: Product Features, Vibe Projects, Todos, Chat, Roles, Prompts, Junior Context, Crons |
 | [app/api/](app/api/) | Route handlers (Meego sync, digests, chat, crons, admin, Lark webhooks) |
 | [lib/](lib/) | Domain logic: `meego.ts`, `lark.ts`, `digests.ts`, `prompts.ts`, `gcs-state.ts`, `agents.ts`, … |
 | [components/](components/) | UI views (`ProjectView`, `ChatView`, `JuniorContextView`, …) |

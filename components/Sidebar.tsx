@@ -14,7 +14,7 @@ interface Props {
   onCreateFeature: () => void;
   user?: { name: string; avatarUrl: string };
   /** Total ongoing features (excludes Done). Shown next to the
-   *  "Ongoing Features" nav item. */
+   *  "Product Features" nav item. */
   featureCount?: number;
   /** Features awaiting the user's action — shown next to "To Dos". */
   todoCount?: number;
@@ -42,8 +42,8 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user, featu
   }, [onCreateFeature]);
 
   const workspace: NavEntry[] = [
-    { id: 'project', icon: <LayoutList className="w-3.5 h-3.5" />,    label: 'Ongoing Features', count: featureCount },
-    { id: 'vibe',    icon: <Wand2 className="w-3.5 h-3.5" />,         label: 'Vibe-Coding Projects' },
+    { id: 'project', icon: <LayoutList className="w-3.5 h-3.5" />,    label: 'Product Features', count: featureCount },
+    { id: 'vibe',    icon: <Wand2 className="w-3.5 h-3.5" />,         label: 'Vibe Projects' },
     { id: 'todos',   icon: <CheckSquare className="w-3.5 h-3.5" />,   label: 'To Dos', count: todoCount },
     { id: 'chat',    icon: <MessageSquare className="w-3.5 h-3.5" />, label: 'Chat' },
     { id: 'roles',   icon: <Users className="w-3.5 h-3.5" />,         label: 'R&R' },

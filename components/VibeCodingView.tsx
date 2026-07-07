@@ -135,9 +135,9 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header bar (matches the Ongoing Features header) */}
       <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
-        <h1 className="text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">Vibe-Coding Projects</h1>
+        <h1 className="text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">Vibe Projects</h1>
         <p className="text-[12px] text-[var(--text-muted)] mt-0.5 leading-[1.5]">
-          Side projects you&apos;re building without a Meego item — add rows and fill them in inline.
+          Projects without a dedicated Meego
         </p>
       </div>
 
