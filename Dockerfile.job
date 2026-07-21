@@ -2,7 +2,7 @@
 # that used to run on a Mac LaunchAgent.
 #
 # It is deliberately NOT the standalone Next.js image: the entrypoint runs
-# tools/run-digests-local.ts, which imports lib/ directly, so it needs the
+# tools/run-digests.ts, which imports lib/ directly, so it needs the
 # TypeScript sources plus node_modules (including tsx). Size does not matter
 # here the way it does for the request-serving service — nothing waits on
 # this container's cold start.
@@ -33,5 +33,5 @@ RUN mkdir -p /home/hamlet && chmod 777 /home/hamlet
 
 # Mode is argv[2]: all | refresh | digests | watch-trigger. Override per
 # execution with `gcloud run jobs execute --args <mode>`.
-ENTRYPOINT ["npx", "tsx", "tools/run-digests-local.ts"]
+ENTRYPOINT ["npx", "tsx", "tools/run-digests.ts"]
 CMD ["all"]

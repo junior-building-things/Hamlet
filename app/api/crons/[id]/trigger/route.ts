@@ -30,11 +30,12 @@ export async function POST(
   const def = getCronById(id);
   if (!def) return NextResponse.json({ error: 'unknown cron' }, { status: 404 });
 
-  // runsLocally jobs execute on the owner's Mac — Cloud Run can't dispatch
-  // them. Record a trigger request in GCS; the Mac's trigger-watch
-  // LaunchAgent (run-digests-local.ts watch-trigger) polls for it and runs
-  // the local pass, then clears the flag + writes the heartbeat.
-  if (def.runsLocally) {
+  // runsInJob crons are sections of one batch pass in the hamlet-digests
+  // Cloud Run Job, so there's nothing per-section to invoke here. Record a
+  // trigger request in GCS; the hamlet-digests-trigger Scheduler entry runs
+  // the Job in watch-trigger mode every 10 min, which picks the request up,
+  // runs the pass, then clears the flag + writes the heartbeat.
+  if (def.runsInJob) {
     try {
       const state = await loadDigestState();
       state.cronTriggerRequests = {
@@ -46,7 +47,7 @@ export async function POST(
       await markCronStarted(def.id, 'manual');
       return NextResponse.json({
         ok: true,
-        note: 'Requested — your Mac will run the digest on its next trigger check (≤10 min).',
+        note: 'Requested — the digest Job picks this up on its next trigger check (≤10 min).',
       });
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : 'request failed' }, { status: 500 });

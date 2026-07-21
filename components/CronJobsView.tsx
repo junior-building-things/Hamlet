@@ -20,7 +20,7 @@ interface CronJob {
   scheduleFrequency: string;
   target: string;
   kind: CronKind;
-  runsLocally?: boolean;
+  runsInJob?: boolean;
   cloudSchedulerJobId?: string;
   cloudSchedulerService?: string;
   sectionKey?: string;
@@ -211,9 +211,10 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
     }
   }
 
-  // Local jobs run from a LaunchAgent plist, not Cloud Scheduler — their
-  // schedule isn't editable here (the PUT route rejects it).
-  const editable = job.kind === 'cloud_scheduler' && !job.runsLocally;
+  // Job-backed crons are dispatched by one Scheduler entry that runs the
+  // whole batch pass, so an individual card's schedule isn't editable here
+  // (the PUT route rejects it).
+  const editable = job.kind === 'cloud_scheduler' && !job.runsInJob;
 
   async function updateSchedule(field: 'scheduleTime' | 'scheduleFrequency', value: string) {
     setBusy(true);
@@ -263,9 +264,9 @@ function CronCard({ job, onChange }: { job: CronJob; onChange: () => void }) {
 
       {/* Meta row: send time + frequency + last-run note */}
       <div className="meta-row">
-        {job.runsLocally ? (
-          <span className="meta-note" style={{ marginLeft: 0 }} title="Runs on the owner's Mac via a LaunchAgent — schedule set in the plist">
-            ⌘ Runs locally · {job.scheduleFrequency} · {job.scheduleTime}
+        {job.runsInJob ? (
+          <span className="meta-note" style={{ marginLeft: 0 }} title="Runs in the hamlet-digests Cloud Run Job as part of one batch pass — schedule is set on the hamlet-daily-digest Scheduler entry">
+            ☁ Batch job · {job.scheduleFrequency} · {job.scheduleTime}
           </span>
         ) : (
           <>

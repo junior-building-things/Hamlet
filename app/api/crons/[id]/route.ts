@@ -27,9 +27,9 @@ export async function PUT(
 
     // Schedule update path.
     if (body.scheduleTime !== undefined || body.scheduleFrequency !== undefined) {
-      if (def.runsLocally) {
+      if (def.runsInJob) {
         return NextResponse.json(
-          { error: 'This job runs on your Mac — its schedule lives in the LaunchAgent plist, not Cloud Scheduler. Edit tools/launchd/com.bytedance.hamlet-digests.plist.' },
+          { error: 'This runs as one section of the hamlet-digests batch pass, so it has no schedule of its own. Change the timing on the hamlet-daily-digest Cloud Scheduler job instead.' },
           { status: 400 },
         );
       }

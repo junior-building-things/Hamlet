@@ -35,16 +35,19 @@ export interface CronJobDef {
   /** Where the message lands, in plain English. */
   target: string;
   kind: CronKind;
-  /**
-   * When true, this job's real execution happens on the owner's Mac via
-   * a LaunchAgent (tools/run-digests-local.ts), NOT on Cloud Run. Its
-   * Cloud Scheduler job (if any) stays PAUSED to avoid double-runs, so
-   * the Cron Jobs tab must NOT read pause/last-run from Cloud Scheduler
-   * for these — it reads state.cronPaused / state.cronLastRun instead,
-   * and "Trigger once" writes a state.cronTriggerRequests entry the Mac's
-   * trigger-watch agent consumes. See app/api/crons/route.ts.
+   /**
+   * When true, this cron is one section of the single batch pass run by
+   * the `hamlet-digests` Cloud Run Job (tools/run-digests.ts), rather than
+   * something Cloud Scheduler invokes over HTTP. Only the
+   * `hamlet-daily-digest` Scheduler entry is ENABLED (it starts the Job);
+   * every per-section Scheduler job stays PAUSED to avoid double-runs.
+   *
+   * So the Cron Jobs tab must NOT read pause/last-run from Cloud Scheduler
+   * for these — it reads state.cronPaused / state.cronLastRun instead, and
+   * "Trigger once" writes a state.cronTriggerRequests entry that the Job's
+   * watch-trigger mode consumes. See app/api/crons/route.ts.
    */
-  runsLocally?: boolean;
+  runsInJob?: boolean;
   /** For kind='cloud_scheduler': the GCP scheduler job id. */
   cloudSchedulerJobId?: string;
   /** For kind='cloud_scheduler': the Cloud Run service this fires (display). */
@@ -91,7 +94,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleFrequency: 'Weekdays',
     target: 'GCS cache + DigestState queues',
     kind: 'cloud_scheduler',
-    runsLocally: true,
+    runsInJob: true,
     cloudSchedulerJobId: REFRESH_FEATURE_CACHE,
     cloudSchedulerService: 'hamlet',
     destinations: [{ kind: 'hamlet', label: 'Hamlet' }],
@@ -108,7 +111,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat (oc_d1f9b0ad…)',
     kind: 'cloud_scheduler',
-    runsLocally: true,
+    runsInJob: true,
     cloudSchedulerJobId: HAMLET_DAILY,
     cloudSchedulerService: 'hamlet',
     destinations: [{ kind: 'team_thomas', label: 'Team Thomas' }],
@@ -145,7 +148,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
-    runsLocally: true,
+    runsInJob: true,
     cloudSchedulerJobId: 'digest-risk',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'risk',
@@ -163,7 +166,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
-    runsLocally: true,
+    runsInJob: true,
     cloudSchedulerJobId: 'digest-prd-changes',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'prd_changes',
@@ -184,7 +187,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
-    runsLocally: true,
+    runsInJob: true,
     cloudSchedulerJobId: 'digest-unanswered',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'unanswered',
@@ -205,7 +208,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
-    runsLocally: true,
+    runsInJob: true,
     cloudSchedulerJobId: 'digest-ab-open',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'ab_open',
@@ -226,7 +229,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleFrequency: 'Weekdays',
     target: 'Personal digest chat',
     kind: 'cloud_scheduler',
-    runsLocally: true,
+    runsInJob: true,
     cloudSchedulerJobId: 'digest-ab-concluded',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'ab_concluded',
@@ -247,7 +250,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     scheduleFrequency: 'Weekdays',
     target: 'Per-feature group chat',
     kind: 'cloud_scheduler',
-    runsLocally: true,
+    runsInJob: true,
     cloudSchedulerJobId: 'digest-line-review',
     cloudSchedulerService: 'hamlet',
     sectionKey: 'line_review',
@@ -259,12 +262,12 @@ export function getCronById(id: string): CronJobDef | undefined {
   return CRON_REGISTRY.find(c => c.id === id);
 }
 
-/** Ids of all jobs whose real execution is the local LaunchAgent pass. */
-export const LOCAL_CRON_IDS: string[] = CRON_REGISTRY.filter(c => c.runsLocally).map(c => c.id);
+/** Ids of all crons that run inside the hamlet-digests batch Job pass. */
+export const JOB_CRON_IDS: string[] = CRON_REGISTRY.filter(c => c.runsInJob).map(c => c.id);
 
 /**
  * The two "master" local crons. Pausing either one stops the whole local
  * pass (the local `all` run is monolithic: refresh + send in one go). The
  * per-section `digest.*` ids only gate their own card via cronPaused.
  */
-export const LOCAL_MASTER_CRON_IDS: string[] = [HAMLET_DAILY, REFRESH_FEATURE_CACHE];
+export const JOB_MASTER_CRON_IDS: string[] = [HAMLET_DAILY, REFRESH_FEATURE_CACHE];

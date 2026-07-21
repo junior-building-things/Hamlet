@@ -11,7 +11,7 @@ Hamlet is a Next.js web app for TikTok PMs to track features, sync with Meego, c
 - **Lark** Open APIs (`LARK_APP_ID`, `LARK_APP_SECRET`, `LARK_BOT_OPEN_ID`)
 - **Meego** work items (`MEEGO_USER_TOKEN`, `MEEGO_PROJECT_KEY`)
 - **GCS** JSON state at `gs://tiktok-im-hamlet-state` (no `@google-cloud/storage` — REST + metadata token in [lib/gcs-state.ts](lib/gcs-state.ts))
-- **Docker** standalone build (`output: 'standalone'` in [next.config.ts](next.config.ts))
+- **Docker** standalone build (`output: 'standalone'` in [next.config.ts](next.config.ts)) for the service; a second image ([Dockerfile.job](Dockerfile.job)) carries the TS sources + `tsx` for the digest Cloud Run Job. Both install the `claude` CLI.
 
 ### Next.js version warning
 
@@ -43,7 +43,10 @@ When adding prompts: register in [lib/prompt-registry.ts](lib/prompt-registry.ts
 ## State and sync
 
 - Feature list and detail: Meego sync → GCS cache ([lib/feature-cache.ts](lib/feature-cache.ts), [app/api/meego/sync/route.ts](app/api/meego/sync/route.ts)).
-- Digests / risk: [lib/digests.ts](lib/digests.ts), cron triggers under [app/api/digests/](app/api/digests/) and [app/api/crons/](app/api/crons/). The batch (non-interactive) digest pipeline can also run locally via [tools/run-digests-local.ts](tools/run-digests-local.ts) — a LaunchAgent ([tools/launchd/](tools/launchd/)) that calls the same `runDailyDigests` / `runDigestSection` functions (off Cloud Run, GCS auth falls back to gcloud ADC). These digest crons are flagged `runsLocally` in [lib/cron-registry.ts](lib/cron-registry.ts) — their Cloud Scheduler jobs stay PAUSED (execution moved to the Mac), so the Crons tab reads pause/last-run from GCS state (`cronPaused` / `cronLastRun`), not Cloud Scheduler. "Trigger once" writes `cronTriggerRequests`, consumed by a second LaunchAgent (`run-digests-local.ts watch-trigger`, ~10-min poll). Pausing a master (`hamlet-daily-digest` / `refresh-feature-cache`) skips the whole local pass; per-section `digest.*` pauses skip just that card.
+- Digests / risk: [lib/digests.ts](lib/digests.ts), cron triggers under [app/api/digests/](app/api/digests/) and [app/api/crons/](app/api/crons/). The batch (non-interactive) pipeline does **not** run behind an HTTP route: a full pass takes 10–26 min, past Cloud Scheduler's 30-min HTTP ceiling and the routes' 600s `maxDuration`. It runs as the **`hamlet-digests` Cloud Run Job** ([Dockerfile.job](Dockerfile.job), entrypoint [tools/run-digests.ts](tools/run-digests.ts), 1h task timeout, `max-retries 0` because a retry could re-post cards). Two Cloud Scheduler entries drive it, both calling the Run Admin API `jobs:run`: `hamlet-daily-digest` (9:30 SGT weekdays, mode `all`) and `hamlet-digests-trigger` (every 10 min, mode `watch-trigger`).
+  - These crons are flagged `runsInJob` in [lib/cron-registry.ts](lib/cron-registry.ts). Their **per-section** Scheduler jobs stay PAUSED, so the Crons tab reads pause/last-run from GCS state (`cronPaused` / `cronLastRun`), not Cloud Scheduler. "Trigger once" writes `cronTriggerRequests`, which `watch-trigger` consumes on its next poll. Pausing a master (`hamlet-daily-digest` / `refresh-feature-cache`) skips the whole pass; per-section `digest.*` pauses skip just that card.
+  - The Job needs the same env as the service; CI mirrors it automatically via `--env-vars-file` (see [deploy.yml](.github/workflows/deploy.yml)) so the two can't drift — don't hand-maintain a second copy. Note Cloud Run Jobs set `CLOUD_RUN_JOB`, **not** `K_SERVICE`; [lib/gcs-state.ts](lib/gcs-state.ts) checks both before falling back to gcloud ADC.
+  - [tools/launchd/](tools/launchd/) is the retired Mac LaunchAgent setup this replaced; the installed plists are renamed `.disabled`. Don't re-enable them alongside the Job — both would run and double-post cards.
 - Junior context files: `gs://tiktok-im-hamlet-state/junior/context/<name>.md`.
 - Auth: Lark OAuth + session cookie ([lib/session.ts](lib/session.ts), [app/api/auth/](app/api/auth/)). Access limited to configured users.
 

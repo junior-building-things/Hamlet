@@ -84,7 +84,7 @@ function spawnClaude(prompt: string, opts: GenerateTextOpts): Promise<string> {
   return new Promise<string>((resolvePromise, reject) => {
     // --strict-mcp-config / --setting-sources '' keep these batch text calls
     // hermetic: no MCP servers and no user/project settings get pulled into
-    // a digest prompt, so the container and the Mac behave identically.
+    // a digest prompt, so every caller behaves identically.
     const args = [
       '-p', '--output-format', 'json',
       '--model', model,

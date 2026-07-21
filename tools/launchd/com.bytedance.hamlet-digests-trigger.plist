@@ -4,7 +4,7 @@
   Cron Jobs tab and run a local pass when one is queued.
 
   The Cloud Run UI can't reach this Mac, so "Trigger once" on a local
-  (runsLocally) cron writes a request flag into GCS DigestState. This
+  (runsInJob) cron writes a request flag into GCS DigestState. This
   agent runs `run.sh watch-trigger` every 10 min: it exits immediately
   when there's nothing queued (cheap — one GCS read), and runs the full
   digest pass when a request is pending, then clears the flag.

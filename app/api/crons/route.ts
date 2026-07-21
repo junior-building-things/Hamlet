@@ -15,12 +15,12 @@ export async function GET() {
     const paused = new Set(state.cronPaused ?? []);
 
     // Fetch live schedules for every Cloud Scheduler-kind job in
-    // parallel. Map by id for sub-section inheritance. Skip runsLocally
-    // jobs: their GCP job is parked PAUSED (execution moved to the Mac),
-    // so its state/lastAttemptTime are meaningless here — we read pause +
-    // last-run from GCS state instead.
+    // parallel. Map by id for sub-section inheritance. Skip runsInJob
+    // jobs: their per-section GCP job is parked PAUSED (they run inside
+    // the hamlet-digests batch Job instead), so its state/lastAttemptTime
+    // are meaningless here — we read pause + last-run from GCS state.
     const cloudJobs = CRON_REGISTRY.filter(
-      c => c.kind === 'cloud_scheduler' && c.cloudSchedulerJobId && !c.runsLocally,
+      c => c.kind === 'cloud_scheduler' && c.cloudSchedulerJobId && !c.runsInJob,
     );
     const live = await Promise.all(
       cloudJobs.map(async c => {
@@ -37,10 +37,10 @@ export async function GET() {
       let schedule = c.schedule;
       let lastAttemptTime: string | undefined;
       let gcpPaused = false;
-      if (c.runsLocally) {
-        // Local pass: schedule is the LaunchAgent's (registry value);
-        // "Last run" is the heartbeat the Mac writes on each pass; pause
-        // is the GCS flag only (the GCP job is permanently PAUSED).
+      if (c.runsInJob) {
+        // Batch pass: schedule is the registry value; "Last run" is the
+        // heartbeat the Job writes at the end of each pass; pause is the
+        // GCS flag only (the per-section GCP job is permanently PAUSED).
         lastAttemptTime = state.cronLastRun?.[c.id];
       } else if (c.kind === 'cloud_scheduler') {
         const info = liveById.get(c.id);

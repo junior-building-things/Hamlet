@@ -262,8 +262,8 @@ export interface DigestStateFile {
 
   /**
    * Per-cron heartbeat: id → ISO timestamp of the last COMPLETED local
-   * run, written by tools/run-digests-local.ts after each pass. The Cron
-   * Jobs tab reads this as "Last run" for `runsLocally` jobs, whose Cloud
+   * run, written by tools/run-digests.ts after each pass. The Cron
+   * Jobs tab reads this as "Last run" for `runsInJob` jobs, whose Cloud
    * Scheduler jobs are paused and so never advance lastAttemptTime.
    * Distinct from cronRuns, which tracks in-flight runs and is cleared on
    * completion.
@@ -271,11 +271,11 @@ export interface DigestStateFile {
   cronLastRun?: Record<string, string>;
 
   /**
-   * Manual-trigger requests for `runsLocally` jobs: id → requestedAt ISO.
-   * The Cron Jobs tab's "Trigger once" button writes here; the local
-   * trigger-watch LaunchAgent (run-digests-local.ts watch-trigger) polls
-   * GCS, runs the pass, and clears the entries. This is the bridge that
-   * lets the Cloud Run UI kick a run on the owner's Mac.
+   * Manual-trigger requests for `runsInJob` crons: id → requestedAt ISO.
+   * The Cron Jobs tab's "Trigger once" button writes here; the
+   * hamlet-digests Job in watch-trigger mode (run-digests.ts) polls GCS
+   * every 10 min, runs the pass, and clears the entries. This is the
+   * bridge that lets the UI kick off a batch run it can't invoke directly.
    */
   cronTriggerRequests?: Record<string, string>;
 
