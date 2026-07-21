@@ -20,10 +20,24 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      # Every LLM call shells out to the `claude` CLI baked into the image
+      # (see Dockerfile), so the service needs:
+      #   - CLAUDE_CODE_OAUTH_TOKEN from Secret Manager. Never set
+      #     ANTHROPIC_API_KEY: that switches the CLI to per-token API
+      #     billing instead of the subscription.
+      #   - Headroom for the CLI subprocesses. Each `claude -p` is its own
+      #     Node process and lib/llm.ts runs up to CLAUDE_CONCURRENCY (3)
+      #     of them at once, which does not fit the old 512Mi/1cpu.
+      # --remove-env-vars drops the now-unused Gemini key; it is a no-op
+      # once the variable is gone.
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy hamlet \
             --source . \
             --region asia-southeast1 \
             --allow-unauthenticated \
+            --memory 2Gi \
+            --cpu 2 \
+            --update-secrets CLAUDE_CODE_OAUTH_TOKEN=claude-code-oauth-token:latest \
+            --remove-env-vars GOOGLE_AI_API_KEY \
             --quiet

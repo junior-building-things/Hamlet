@@ -82,7 +82,15 @@ function releaseClaudeSlot(): void {
 function spawnClaude(prompt: string, opts: GenerateTextOpts): Promise<string> {
   const model = resolveModel(opts);
   return new Promise<string>((resolvePromise, reject) => {
-    const args = ['-p', '--output-format', 'json', '--model', model];
+    // --strict-mcp-config / --setting-sources '' keep these batch text calls
+    // hermetic: no MCP servers and no user/project settings get pulled into
+    // a digest prompt, so the container and the Mac behave identically.
+    const args = [
+      '-p', '--output-format', 'json',
+      '--model', model,
+      '--strict-mcp-config',
+      '--setting-sources', '',
+    ];
     const child = spawn('claude', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
