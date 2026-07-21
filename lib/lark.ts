@@ -1804,29 +1804,31 @@ function formatChangeLogEntry(e: { date: string; detail: string; by?: string }):
   return e.by ? `[${e.date}] ${e.detail} — ${e.by}` : `[${e.date}] ${e.detail}`;
 }
 
-export async function appendPrdChangeLog(
-  prdUrl: string,
-  entries: Array<{ date: string; detail: string; by?: string }>,
-): Promise<void> {
-  if (entries.length === 0) return;
+// ── Change Log table ────────────────────────────────────────────────────────
+// A PRD's Change Log lives in a table that may sit under any heading (or
+// none), so it's found by scanning table cells for header keywords and then
+// walking up to the enclosing table block.
+//
+// Both the writer (appendPrdChangeLog) and the diff reader
+// (readDocContentSansChangeLog) go through this one locator on purpose: if
+// they disagreed about which table is the Change Log, the digest would diff
+// text containing the very rows it just wrote and re-trigger itself.
+const CHANGE_LOG_KEYWORDS = ['change log', 'changelog', 'version history', 'date//日期', '修改人'];
 
-  const docId = await resolveDocId(prdUrl);
-  const token = await getAccessToken();
-  const blocks = await getDocBlocks(docId, token);
-
-  // Build parent map
+function indexBlocks(blocks: LarkBlock[]) {
   const parentOf = new Map<string, string>();
   for (const b of blocks) {
     for (const childId of b.children ?? []) parentOf.set(childId, b.block_id);
   }
   const byId = new Map(blocks.map(b => [b.block_id, b]));
+  return { parentOf, byId };
+}
 
-  // Find the Change Log table by looking for header row cells with matching keywords.
-  // The table may be under any heading — search all table cells in row 0.
-  const KEYWORDS = ['change log', 'changelog', 'version history', 'date//日期', '修改人', 'date//日期'];
-  let tableBlockId = '';
+/** Block id of the PRD's Change Log table, or '' when the doc has none. */
+function findChangeLogTableBlockId(blocks: LarkBlock[]): string {
+  const { parentOf, byId } = indexBlocks(blocks);
 
-  // Collect all text from a block and its descendants
+  // Text of a block plus all its descendants, lowercased.
   function allText(blockId: string): string {
     const b = byId.get(blockId);
     if (!b) return '';
@@ -1837,22 +1839,83 @@ export async function appendPrdChangeLog(
 
   for (const b of blocks) {
     if (!b.table_cell) continue;
-    const cellText = allText(b.block_id);
-    if (KEYWORDS.some(kw => cellText.includes(kw))) {
-      // Walk up to find the table block (parent of the cell)
-      let parentId = parentOf.get(b.block_id);
-      // table_cell → table (may be one or two levels up)
-      while (parentId) {
-        const parent = byId.get(parentId);
-        if (parent?.table) { tableBlockId = parentId; break; }
-        parentId = parentOf.get(parentId);
-      }
-      if (tableBlockId) {
-        console.log(`[lark] found Change Log table: ${tableBlockId} (matched: "${cellText.trim().slice(0, 40)}")`);
-        break;
-      }
+    if (!CHANGE_LOG_KEYWORDS.some(kw => allText(b.block_id).includes(kw))) continue;
+    // table_cell → table, which may be one or two levels up.
+    let parentId = parentOf.get(b.block_id);
+    while (parentId) {
+      if (byId.get(parentId)?.table) return parentId;
+      parentId = parentOf.get(parentId);
     }
   }
+  return '';
+}
+
+/** `rootId` and every block beneath it. */
+function subtreeIds(blocks: LarkBlock[], rootId: string): Set<string> {
+  const { byId } = indexBlocks(blocks);
+  const out = new Set<string>([rootId]);
+  const stack = [rootId];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    for (const childId of byId.get(id)?.children ?? []) {
+      if (!out.has(childId)) { out.add(childId); stack.push(childId); }
+    }
+  }
+  return out;
+}
+
+/** Flatten blocks to markdown-ish lines, skipping any block in `skip`. */
+function renderBlockLines(blocks: LarkBlock[], skip?: Set<string>): string[] {
+  const lines: string[] = [];
+  for (const b of blocks) {
+    if (skip?.has(b.block_id)) continue;
+    const text = blockText(b);
+    if (!text.trim()) continue;
+    if (HEADING_BLOCK_TYPES.has(b.block_type)) {
+      const level = b.block_type - 2; // block_type 3 = H1, 4 = H2, etc.
+      lines.push(`${'#'.repeat(level)} ${text}`);
+    } else {
+      lines.push(text);
+    }
+  }
+  return lines;
+}
+
+/**
+ * Like readDocContent, but with the Change Log table removed.
+ *
+ * Used for the daily PRD-change diff. Appending a Change Log row edits the
+ * doc, so diffing the full text made every write show up as the next run's
+ * "change" — the log fed itself. Excluding the table means change-log-only
+ * edits produce identical text and never reach the LLM at all.
+ */
+export async function readDocContentSansChangeLog(docUrl: string): Promise<string> {
+  const docId = await resolveDocId(docUrl);
+  const token = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+  const tableId = findChangeLogTableBlockId(blocks);
+  if (!tableId) {
+    // No table found — fall back to full text. The prompt still instructs
+    // the model to ignore change-log edits, so this degrades rather than breaks.
+    console.log(`[readDocContentSansChangeLog] no Change Log table in ${docId}; diffing full text`);
+  }
+  const skip = tableId ? subtreeIds(blocks, tableId) : undefined;
+  return renderBlockLines(blocks, skip).join('\n') || '(empty document)';
+}
+
+export async function appendPrdChangeLog(
+  prdUrl: string,
+  entries: Array<{ date: string; detail: string; by?: string }>,
+): Promise<void> {
+  if (entries.length === 0) return;
+
+  const docId = await resolveDocId(prdUrl);
+  const token = await getAccessToken();
+  const blocks = await getDocBlocks(docId, token);
+
+  const { byId } = indexBlocks(blocks);
+  const tableBlockId = findChangeLogTableBlockId(blocks);
+  if (tableBlockId) console.log(`[lark] found Change Log table: ${tableBlockId}`);
 
   if (tableBlockId) {
     // Collect existing cell IDs before insertion

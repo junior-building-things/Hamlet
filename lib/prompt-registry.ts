@@ -234,7 +234,19 @@ Respond with ONLY a single JSON object on one line, no markdown fences:
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
-const HAMLET_PRD_CHANGE_SUMMARY = `A PRD (Product Requirements Document) was edited. Compare the old and new versions and write a 1-sentence summary of what changed. Focus on REQUIREMENT CONTENT changes (new sections, removed requirements, updated logic), not formatting or bookkeeping. If it's just minor wording tweaks or changes to the "change log" section, say "Minor wording edits". Reply with ONLY the summary, no prefix.
+const HAMLET_PRD_CHANGE_SUMMARY = `A PRD (Product Requirements Document) was edited. Compare the old and new versions and write a 1-sentence summary of what changed.
+
+Only REQUIREMENT CONTENT counts as a real change: new or removed sections, changed requirements, changed logic, new scope, changed metrics or targets.
+
+Reply with EXACTLY "Minor wording edits" and nothing else if the only differences are:
+- rephrasing, typo fixes, grammar, punctuation or capitalisation
+- formatting, whitespace, table re-rendering, or reordering with no change in meaning
+- edits to a "Change Log" / "Version History" / "修改人" table or section
+- bookkeeping such as dates, owner names, status labels or links
+
+When in doubt between a real change and a cosmetic one, answer "Minor wording edits".
+
+Otherwise reply with ONLY the 1-sentence summary, no prefix.
 
 OLD VERSION:
 \${prevText}

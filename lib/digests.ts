@@ -3901,7 +3901,12 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // Step 2c: PRD Change Log auto-update — scan each feature's PRD for
   // content changes since the last run. If the text differs, use Gemini
   // to summarize what changed and append it to the Change Log section.
-  const PRD_SNAPSHOTS_PATH = 'hamlet/prd-snapshots.json';
+  // v2: snapshots now hold the doc text WITHOUT the Change Log table (see
+  // readDocContentSansChangeLog). The path is versioned so every PRD
+  // re-baselines silently on the first run after that switch — with no
+  // prevText the scan stores the snapshot and skips both the LLM call and
+  // the change-log write, instead of reporting the format change as an edit.
+  const PRD_SNAPSHOTS_PATH = 'hamlet/prd-snapshots-v2.json';
   const prdChanges: Array<{
     name: string;
     prdUrl: string;
@@ -3912,7 +3917,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     pocEmails?: string[];
   }> = [];
   try {
-    const { readDocContent, grantBotEditAccess } = await import('./lark');
+    const { readDocContentSansChangeLog, grantBotEditAccess } = await import('./lark');
     const { readJsonState, writeJsonState } = await import('./gcs-state');
     const snapshots: Record<string, string> = await readJsonState<Record<string, string>>(PRD_SNAPSHOTS_PATH).catch(() => ({})) ?? {};
     // Use Singapore time (SGT = UTC+8) for the change log date
@@ -3937,7 +3942,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
       if (!f.prd || f.overallStatusKey === 'end') continue;
       prdScanned++;
       try {
-        const currentText = await readDocContent(f.prd);
+        const currentText = await readDocContentSansChangeLog(f.prd);
         if (!currentText) continue;
         const prevText = snapshots[f.workItemId];
 
@@ -3978,9 +3983,14 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           // Skip trivial wording-only edits: don't append to the PRD change
           // log and don't include in the daily digest card. Snapshot still
           // gets updated below so we compare against the latest text next run.
+          //
+          // Matched on a prefix, not equality: the model reliably leads with
+          // the sentinel phrase but often continues it ("Minor wording edits
+          // only", "Minor wording tweaks to the overview"), and an exact
+          // comparison let all of those through into the PRD.
           const normalized = summary.trim().toLowerCase().replace(/[.!]+$/, '');
-          if (normalized === 'minor wording edits') {
-            console.log(`[digests] PRD change for "${f.name}" is minor wording — skipping log + digest`);
+          if (/^minor wording\b/.test(normalized) || /^no (substantive|material|meaningful)\b/.test(normalized)) {
+            console.log(`[digests] PRD change for "${f.name}" is minor wording — skipping log + digest (summary: ${JSON.stringify(summary)})`);
             snapshots[f.workItemId] = currentText;
             continue;
           }
