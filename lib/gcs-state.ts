@@ -20,18 +20,19 @@ interface CachedToken {
 let cachedToken: CachedToken | null = null;
 
 /**
- * Mint a GCS access token. On Cloud Run (K_SERVICE set) we use the
- * metadata server. Off Cloud Run — e.g. the local LaunchAgent digest
- * runner — there is no metadata server, so we fall back to the local
- * gcloud Application Default Credentials (`gcloud auth
- * application-default print-access-token`). Run
+ * Mint a GCS access token. On Cloud Run we use the metadata server —
+ * both the service (K_SERVICE) and the digest Job (CLOUD_RUN_JOB), which
+ * sets its own variables and NOT K_SERVICE. Off Cloud Run — e.g. running
+ * the digest pipeline from a dev machine — there is no metadata server,
+ * so we fall back to the local gcloud Application Default Credentials
+ * (`gcloud auth application-default print-access-token`). Run
  * `gcloud auth application-default login` once to set those up.
  */
 async function getMetadataToken(): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
     return cachedToken.token;
   }
-  if (!process.env.K_SERVICE) {
+  if (!process.env.K_SERVICE && !process.env.CLOUD_RUN_JOB) {
     return getLocalAdcToken();
   }
   const res = await fetch(METADATA_TOKEN_URL, { headers: { 'Metadata-Flavor': 'Google' } });

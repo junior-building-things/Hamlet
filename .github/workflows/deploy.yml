@@ -41,3 +41,39 @@ jobs:
             --update-secrets CLAUDE_CODE_OAUTH_TOKEN=claude-code-oauth-token:latest \
             --remove-env-vars GOOGLE_AI_API_KEY \
             --quiet
+
+      # The batch digest pipeline runs as a Cloud Run Job, not on the
+      # service: a full pass takes 10-26 min, which does not fit Cloud
+      # Scheduler's 30-min HTTP ceiling (let alone the routes' 600s
+      # maxDuration). Jobs have no such limit.
+      #
+      # Env is mirrored from the service rather than duplicated here, so
+      # the two can never drift. It goes via --env-vars-file so secret
+      # values never appear in a command line or CI log.
+      - name: Build and deploy digest Job
+        run: |
+          set -euo pipefail
+          IMAGE="asia-southeast1-docker.pkg.dev/tiktok-im/cloud-run-source-deploy/hamlet-digests:${{ github.sha }}"
+
+          gcloud auth configure-docker asia-southeast1-docker.pkg.dev --quiet
+          docker build -f Dockerfile.job -t "$IMAGE" .
+          docker push "$IMAGE"
+
+          gcloud run services describe hamlet --region asia-southeast1 --format=json \
+            | jq -r '.spec.template.spec.containers[0].env
+                     | map(select(.value != null))
+                     | .[] | "\(.name): \(.value | @json)"' > job-env.yaml
+          echo "mirrored $(wc -l < job-env.yaml) env vars from the service"
+
+          gcloud run jobs deploy hamlet-digests \
+            --image "$IMAGE" \
+            --region asia-southeast1 \
+            --cpu 2 \
+            --memory 2Gi \
+            --task-timeout 3600s \
+            --max-retries 0 \
+            --env-vars-file job-env.yaml \
+            --set-secrets CLAUDE_CODE_OAUTH_TOKEN=claude-code-oauth-token:latest \
+            --quiet
+
+          rm -f job-env.yaml
