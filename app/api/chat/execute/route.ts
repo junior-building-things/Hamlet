@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
 
       // Answer the user's question from the raw brief
       const def = getPromptDef('hamlet.meego_query');
-      const modelName = await getPromptModel('hamlet.meego_query', def?.model ?? 'claude-haiku-4-5');
+      const modelName = await getPromptModel('hamlet.meego_query', def?.model ?? 'claude-sonnet-5');
       const tmpl = await getPrompt('hamlet.meego_query', def?.default ?? '');
       const prompt = renderPrompt(tmpl, { query: params.query ?? '', brief });
       const answer = (await generateText(prompt, { model: modelName, label: 'meego-query' })).trim();
@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
       const content = await readDocContent(params.docUrl);
 
       const def = getPromptDef('hamlet.doc_summarize');
-      const modelName = await getPromptModel('hamlet.doc_summarize', def?.model ?? 'claude-haiku-4-5');
+      const modelName = await getPromptModel('hamlet.doc_summarize', def?.model ?? 'claude-sonnet-5');
       const tmpl = await getPrompt('hamlet.doc_summarize', def?.default ?? '');
       const prompt = renderPrompt(tmpl, { content });
       // If summarization fails, fall back to returning the raw doc content.
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
       // If no content provided, generate it with AI based on the doc
       if (!sectionContent) {
         const def = getPromptDef('hamlet.prd_section_autogen');
-        const modelName = await getPromptModel('hamlet.prd_section_autogen', def?.model ?? 'claude-haiku-4-5');
+        const modelName = await getPromptModel('hamlet.prd_section_autogen', def?.model ?? 'claude-sonnet-5');
 
         let docContext = '';
         try {
@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
       let finalReply = params.replyText;
       if (isInstruction) {
         const def = getPromptDef('hamlet.prd_comment_reply');
-        const modelName = await getPromptModel('hamlet.prd_comment_reply', def?.model ?? 'claude-haiku-4-5');
+        const modelName = await getPromptModel('hamlet.prd_comment_reply', def?.model ?? 'claude-sonnet-5');
 
         // Read doc content for context
         let docContext = '';

@@ -137,7 +137,7 @@ async function handleMessage(body: LarkEvent) {
 
   // Model for the feature-lookup pre-step. The final reply uses whatever
   // the prompt-registry has configured for hamlet.agent_webhook.
-  const lookupModel = 'claude-haiku-4-5';
+  const lookupModel = 'claude-sonnet-5';
   const chatType = message.chat_type === 'p2p' ? 'direct message' : 'group chat';
 
   // ── Feature lookup: 5-tier data resolution ──────────────────────────────
@@ -319,7 +319,7 @@ async function handleMessage(body: LarkEvent) {
   const persona = await getPrompt(personaId, personaDef?.default ?? agent.persona);
   const wrapperDef = getPromptDef('hamlet.agent_webhook');
   const wrapperTmpl = await getPrompt('hamlet.agent_webhook', wrapperDef?.default ?? '');
-  const modelName = await getPromptModel('hamlet.agent_webhook', wrapperDef?.model ?? 'claude-haiku-4-5');
+  const modelName = await getPromptModel('hamlet.agent_webhook', wrapperDef?.model ?? 'claude-sonnet-5');
   const prompt = renderPrompt(wrapperTmpl, {
     persona,
     chatType,

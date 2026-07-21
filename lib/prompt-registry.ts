@@ -16,7 +16,11 @@ export interface PromptDef {
   service: 'hamlet' | 'junior' | 'rio' | 'mia';
   /** Where in the codebase the prompt is used. */
   fileRef: string;
-  /** Default model — informational only; actual model is set in code. */
+  /**
+   * Default model for this prompt. Not merely informational: call sites pass
+   * it to getPromptModel as the fallback, so it is what runs unless a GCS
+   * override supplies a valid replacement.
+   */
   model: string;
   /** Short description shown in the UI. */
   description: string;
@@ -418,7 +422,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Rewrite feature name',
     service: 'hamlet',
     fileRef: 'app/api/rewrite/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Rewrites a feature name to be intuitive and user-focused',
     variables: ['text'],
     default: HAMLET_REWRITE_NAME,
@@ -428,7 +432,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Rewrite feature description',
     service: 'hamlet',
     fileRef: 'app/api/rewrite/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Rewrites a feature description as a clear "What we are building" section',
     variables: ['text'],
     default: HAMLET_REWRITE_DESCRIPTION,
@@ -438,7 +442,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Chat intent classifier',
     service: 'hamlet',
     fileRef: 'app/api/chat/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Classifies user chat messages into actionable intents',
     variables: [],
     default: HAMLET_CHAT_INTENT,
@@ -448,7 +452,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Query Meego feature',
     service: 'hamlet',
     fileRef: 'app/api/chat/execute/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Answers user questions about a feature using its Meego brief',
     variables: ['query', 'brief'],
     default: HAMLET_MEEGO_QUERY,
@@ -458,7 +462,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Summarize Lark document',
     service: 'hamlet',
     fileRef: 'app/api/chat/execute/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Summarizes a Lark document with key points and action items',
     variables: ['content'],
     default: HAMLET_DOC_SUMMARIZE,
@@ -468,7 +472,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Auto-generate PRD section',
     service: 'hamlet',
     fileRef: 'app/api/chat/execute/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Generates 2-4 sentences for a new PRD section',
     variables: ['section', 'docContext'],
     default: HAMLET_PRD_SECTION_AUTOGEN,
@@ -478,7 +482,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Generate PRD comment reply',
     service: 'hamlet',
     fileRef: 'app/api/chat/execute/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Generates AI replies to PRD comments based on instruction',
     variables: ['quote', 'content', 'existingReplies', 'docContext', 'replyText'],
     default: HAMLET_PRD_COMMENT_REPLY,
@@ -488,7 +492,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Let Jr. Reply draft',
     service: 'hamlet',
     fileRef: 'app/api/lark/card-action/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Drafts a reply to an unanswered PRD comment / chat question for the "Let Jr. Reply" button',
     variables: ['featureName', 'sourceLabel', 'questionText', 'featureContext', 'prdContent', 'pmOpenId', 'pmName'],
     default: HAMLET_LETJR_REPLY,
@@ -498,7 +502,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Rio/Mia webhook reply',
     service: 'hamlet',
     fileRef: 'app/api/agents/webhook/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Generates Rio/Mia agent replies in Lark group chats',
     variables: ['persona', 'chatType', 'userText', 'featureContext'],
     default: HAMLET_AGENT_WEBHOOK,
@@ -579,7 +583,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Junior daily brief banner',
     service: 'hamlet',
     fileRef: 'app/api/junior-brief/route.ts',
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-5',
     description: 'Generates the personal-assistant-style daily brief banner at the top of the Ongoing Features tab',
     variables: ['userName', 'dayName', 'partOfDay', 'newItems', 'ongoingCount'],
     default: HAMLET_JUNIOR_BRIEF,

@@ -502,7 +502,7 @@ export async function POST(req: NextRequest) {
           const { renderPrompt, getPromptDef } = await import('@/lib/prompt-registry');
           const promptDef = getPromptDef('hamlet.letjr_reply');
           const template = await getPrompt('hamlet.letjr_reply', promptDef?.default ?? '');
-          const modelName = await getPromptModel('hamlet.letjr_reply', promptDef?.model ?? 'claude-haiku-4-5');
+          const modelName = await getPromptModel('hamlet.letjr_reply', promptDef?.model ?? 'claude-sonnet-5');
           const prompt = renderPrompt(template, {
             featureName,
             sourceLabel: questionSource === 'prd_comment' ? 'PRD comment' : 'feature group chat',

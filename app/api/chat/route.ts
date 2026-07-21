@@ -103,7 +103,7 @@ async function parseIntent(messages: ChatMsg[], userMessage: string): Promise<In
 
   const def = getPromptDef('hamlet.chat_intent');
   const systemPrompt = await getPrompt('hamlet.chat_intent', def?.default ?? SYSTEM);
-  const modelName = await getPromptModel('hamlet.chat_intent', def?.model ?? 'claude-haiku-4-5');
+  const modelName = await getPromptModel('hamlet.chat_intent', def?.model ?? 'claude-sonnet-5');
 
   const raw = (await generateText(
     `${systemPrompt}${history}\n\nUser: ${userMessage}`,

@@ -16,9 +16,10 @@
  * overrides written during the Gemini era can still hold `gemini-*` ids, and
  * handing one to `claude -p --model` would hard-fail the call.
  *
- * Every call draws on the same subscription quota. Prefer a small model
- * (claude-haiku-4-5) on real-time request paths and reserve the stronger
- * default for batch digest work.
+ * Every call draws on the same subscription quota. Hamlet runs every prompt
+ * on claude-sonnet-5 by choice, real-time paths included — a lighter model
+ * (claude-haiku-4-5) is still selectable per prompt in the Prompts tab if a
+ * particular call turns out to be latency-sensitive.
  */
 
 import { spawn } from 'node:child_process';

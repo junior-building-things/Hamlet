@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   const def = getPromptDef('hamlet.junior_brief');
   const tmpl = await getPrompt('hamlet.junior_brief', def?.default ?? '');
-  const modelName = await getPromptModel('hamlet.junior_brief', def?.model ?? 'claude-haiku-4-5');
+  const modelName = await getPromptModel('hamlet.junior_brief', def?.model ?? 'claude-sonnet-5');
   const prompt = renderPrompt(tmpl, {
     userName,
     dayName,

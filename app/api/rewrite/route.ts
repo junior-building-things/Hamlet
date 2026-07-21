@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
     const promptId = field === 'name' ? 'hamlet.rewrite_name' : 'hamlet.rewrite_description';
     const def = getPromptDef(promptId);
-    const modelName = await getPromptModel(promptId, def?.model ?? 'claude-haiku-4-5');
+    const modelName = await getPromptModel(promptId, def?.model ?? 'claude-sonnet-5');
 
     const tmpl = await getPrompt(promptId, def?.default ?? '');
     const prompt = renderPrompt(tmpl, { text: text.trim() });
