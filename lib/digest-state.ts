@@ -10,7 +10,7 @@
  * `Feature.versionChanges`, not here.
  */
 
-import { readJsonState, writeJsonState } from './gcs-state';
+import { readJsonState, writeJsonState, updateJsonState } from './gcs-state';
 
 const STATE_PATH = 'digests/chat-risks.json';
 
@@ -280,6 +280,21 @@ export interface DigestStateFile {
   cronTriggerRequests?: Record<string, string>;
 
   /**
+   * In-flight marker for the batch digest pass — at most one may run at a
+   * time. A pass takes 10-26 min while the watch-trigger poller fires every
+   * 10 min, so without this a poller starts a duplicate pass on top of a
+   * running one and both post cards. (The Mac LaunchAgent this replaced was
+   * implicitly serialised: launchd won't start a second copy of a running
+   * job. Cloud Run Job executions have no such guard.)
+   *
+   * Claimed/released via acquireDigestPassLease / releaseDigestPassLease,
+   * which use a GCS generation precondition so two executions racing for it
+   * can't both win. Expires after PASS_LEASE_TTL_MS so a crashed pass can't
+   * wedge the pipeline forever.
+   */
+  digestPassLease?: { startedAt: string; execution?: string };
+
+  /**
    * Pending Line Review (PRD Ready ✅) cards queued by the
    * `refresh-feature-cache` job. Consumed + cleared by the
    * `digest-line-review` cron. Each entry produces one feature card
@@ -433,6 +448,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const cronTriggerRequests = (obj.cronTriggerRequests && typeof obj.cronTriggerRequests === 'object')
     ? (obj.cronTriggerRequests as DigestStateFile['cronTriggerRequests'])
     : undefined;
+  const digestPassLease = (obj.digestPassLease && typeof obj.digestPassLease === 'object')
+    ? (obj.digestPassLease as DigestStateFile['digestPassLease'])
+    : undefined;
   const pendingLineReviewCards = Array.isArray(obj.pendingLineReviewCards)
     ? (obj.pendingLineReviewCards as DigestStateFile['pendingLineReviewCards'])
     : undefined;
@@ -464,6 +482,7 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     cronRuns,
     cronLastRun,
     cronTriggerRequests,
+    digestPassLease,
     pendingLineReviewCards,
     pendingAbOpenCards,
     pendingPrdChanges,
@@ -486,6 +505,64 @@ export async function loadDigestState(): Promise<DigestStateFile> {
   } catch (e) {
     console.warn('[digest-state] failed to load digest state, treating as empty:', e);
     return { updatedAt: new Date().toISOString(), recentRunTimes: [], features: {} };
+  }
+}
+
+/**
+ * How long a pass may hold the lease before another execution may take it.
+ * Comfortably above the worst observed pass (~26 min) so a slow-but-healthy
+ * run is never double-started, and well under the daily cadence so a crashed
+ * pass can't block tomorrow's.
+ */
+const PASS_LEASE_TTL_MS = 45 * 60 * 1000;
+
+/**
+ * Try to become the one in-flight digest pass. Returns false when another
+ * execution already holds an unexpired lease, in which case the caller must
+ * exit without running.
+ *
+ * The read-modify-write goes through updateJsonState, so it carries a GCS
+ * generation precondition: if two executions try to claim simultaneously,
+ * one write is rejected and retried against fresh state, and it then sees
+ * the winner's lease.
+ */
+export async function acquireDigestPassLease(execution?: string): Promise<boolean> {
+  let acquired = false;
+  try {
+    await updateJsonState<unknown>(STATE_PATH, current => {
+      const state = current ? migrateLegacy(current) : {
+        updatedAt: new Date().toISOString(), recentRunTimes: [], features: {},
+      } as DigestStateFile;
+      const lease = state.digestPassLease;
+      const heldUntil = lease ? Date.parse(lease.startedAt) + PASS_LEASE_TTL_MS : 0;
+      if (lease && Number.isFinite(heldUntil) && Date.now() < heldUntil) {
+        acquired = false;
+        return state;
+      }
+      acquired = true;
+      state.digestPassLease = { startedAt: new Date().toISOString(), execution };
+      return state;
+    });
+  } catch (e) {
+    // Don't let a lease-write failure silently skip the daily digest.
+    console.warn('[digest-state] lease acquire failed, proceeding without it:', e);
+    return true;
+  }
+  return acquired;
+}
+
+/** Drop the in-flight marker. Safe to call even if the lease already expired. */
+export async function releaseDigestPassLease(): Promise<void> {
+  try {
+    await updateJsonState<unknown>(STATE_PATH, current => {
+      const state = current ? migrateLegacy(current) : {
+        updatedAt: new Date().toISOString(), recentRunTimes: [], features: {},
+      } as DigestStateFile;
+      delete state.digestPassLease;
+      return state;
+    });
+  } catch (e) {
+    console.warn('[digest-state] lease release failed (expires in <45 min):', e);
   }
 }
 

@@ -114,6 +114,24 @@ async function pendingTriggers(): Promise<string[]> {
  * so a request doesn't loop and the sidebar's "working" marker clears.
  * Re-loads state so this layers on top of runDailyDigests's own save.
  */
+/**
+ * Claim the single-pass lease, or log why we're standing down.
+ * `CLOUD_RUN_EXECUTION` is recorded so an in-flight pass is traceable.
+ */
+async function claimPass(): Promise<boolean> {
+  const { acquireDigestPassLease } = await import('../lib/digest-state');
+  const ok = await acquireDigestPassLease(process.env.CLOUD_RUN_EXECUTION);
+  if (!ok) {
+    console.log(`[run-digests] ${new Date().toISOString()} another pass is already in flight — standing down`);
+  }
+  return ok;
+}
+
+async function releasePass(): Promise<void> {
+  const { releaseDigestPassLease } = await import('../lib/digest-state');
+  await releaseDigestPassLease();
+}
+
 async function finishPass(ran: boolean): Promise<void> {
   const { loadDigestState, saveDigestState } = await import('../lib/digest-state');
   const { JOB_CRON_IDS } = await import('../lib/cron-registry');
@@ -165,9 +183,18 @@ async function main(): Promise<void> {
       await finishPass(false);
       return;
     }
-    const { runDailyDigests } = await import('../lib/digests');
-    await runDailyDigests({ mode: 'full' });
-    await finishPass(true);
+    // A pass outlives the 10-min poll interval, and the request isn't
+    // cleared until it finishes — so without this the next poll would start
+    // a duplicate pass on top of this one. Leave the request in place when
+    // standing down: the pass already running will clear it.
+    if (!(await claimPass())) return;
+    try {
+      const { runDailyDigests } = await import('../lib/digests');
+      await runDailyDigests({ mode: 'full' });
+      await finishPass(true);
+    } finally {
+      await releasePass();
+    }
     console.log(`[run-digests] ${ts()} finished mode=watch-trigger`);
     return;
   }
@@ -185,34 +212,42 @@ async function main(): Promise<void> {
     return;
   }
 
-  const { runDailyDigests, runDigestSection } = await import('../lib/digests');
+  // Same single-pass guard as watch-trigger: the scheduled run must not
+  // pile on top of a manual pass that's still going (or vice versa).
+  if (!(await claimPass())) return;
 
-  if (mode === 'all') {
-    // One full pass: pull Meego once, detect, send all sections. Avoids
-    // the 3× heavy-scan repeat you get from refresh + per-section drains.
-    console.log(`[run-digests] ${ts()} full: Meego pull + detect + send all sections`);
-    await runDailyDigests({ mode: 'full' });
-  }
+  try {
+    const { runDailyDigests, runDigestSection } = await import('../lib/digests');
 
-  if (mode === 'refresh') {
-    console.log(`[run-digests] ${ts()} refresh: Meego pull + transition detection + queue`);
-    await runDailyDigests({ mode: 'refresh' });
-  }
+    if (mode === 'all') {
+      // One full pass: pull Meego once, detect, send all sections. Avoids
+      // the 3× heavy-scan repeat you get from refresh + per-section drains.
+      console.log(`[run-digests] ${ts()} full: Meego pull + detect + send all sections`);
+      await runDailyDigests({ mode: 'full' });
+    }
 
-  if (mode === 'digests') {
-    for (const id of SECTIONS) {
-      try {
-        console.log(`[run-digests] ${ts()} section ${id} …`);
-        const result = await runDigestSection(id);
-        console.log(`[run-digests] ${ts()} section ${id} done: ${JSON.stringify(result)}`);
-      } catch (e) {
-        console.error(`[run-digests] ${ts()} section ${id} FAILED:`, e);
+    if (mode === 'refresh') {
+      console.log(`[run-digests] ${ts()} refresh: Meego pull + transition detection + queue`);
+      await runDailyDigests({ mode: 'refresh' });
+    }
+
+    if (mode === 'digests') {
+      for (const id of SECTIONS) {
+        try {
+          console.log(`[run-digests] ${ts()} section ${id} …`);
+          const result = await runDigestSection(id);
+          console.log(`[run-digests] ${ts()} section ${id} done: ${JSON.stringify(result)}`);
+        } catch (e) {
+          console.error(`[run-digests] ${ts()} section ${id} FAILED:`, e);
+        }
       }
     }
-  }
 
-  // Stamp the per-cron "Last run" heartbeat + clear any consumed trigger.
-  await finishPass(true);
+    // Stamp the per-cron "Last run" heartbeat + clear any consumed trigger.
+    await finishPass(true);
+  } finally {
+    await releasePass();
+  }
   console.log(`[run-digests] ${ts()} finished mode=${mode}`);
 }
 
