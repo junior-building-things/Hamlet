@@ -1573,9 +1573,6 @@ export async function inferVersionSlipReason(
   rioToken: string,
   meegoUrl?: string,
 ): Promise<string | null> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) return null;
-
   // (a) Last 7d of chat — best-effort. If chat is empty, the comments
   // path below may still produce a reason.
   let chatFormatted = '';
@@ -1632,7 +1629,7 @@ export async function inferVersionSlipReason(
   const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
   const def = getDefFn('hamlet.version_slip_reason');
   const tmpl = await getPromptFn('hamlet.version_slip_reason', def?.default ?? '');
-  const modelName = await getModelFn('hamlet.version_slip_reason', def?.model ?? 'gemini-2.5-flash-lite');
+  const modelName = await getModelFn('hamlet.version_slip_reason', def?.model ?? 'claude-sonnet-5');
   const prompt = renderFn(tmpl, {
     featureName,
     fromVersion,
@@ -1903,11 +1900,6 @@ export async function evaluateChatRisk(
   prior?: PriorChatRisk,
   meegoUrl?: string,
 ): Promise<ChatRiskFinding> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
-  }
-
   // Pull messages over the wider 7d window — risks usually surface in
   // discussion that pre-dates the digest run, similar to how slips get
   // discussed before the field actually moves.
@@ -1990,7 +1982,7 @@ export async function evaluateChatRisk(
   const promptId = prior ? 'hamlet.chat_risk_eval_prior' : 'hamlet.chat_risk_eval';
   const def = getDefFn(promptId);
   const tmpl = await getPromptFn(promptId, def?.default ?? '');
-  const modelName = await getModelFn(promptId, def?.model ?? 'gemini-2.5-flash-lite');
+  const modelName = await getModelFn(promptId, def?.model ?? 'claude-sonnet-5');
   const prompt = renderFn(tmpl, prior ? {
     featureName,
     priorLevel: prior.level,
@@ -2231,13 +2223,12 @@ async function lookupUserName(id: string, idType: 'open_id' | 'user_id'): Promis
  * so we trust the thread-activity rule and don't flood the digest
  * with false positives.
  */
-async function isAnsweredByGemini(
+async function isAnsweredByLlm(
   question: string,
   laterReplies: string[],
   contextLabel: string,
 ): Promise<boolean> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey || laterReplies.length === 0) return true;
+  if (laterReplies.length === 0) return true;
   const prompt = `Original question/request: "${question.replace(/"/g, '\\"')}"
 
 Later messages in the same thread, in chronological order:
@@ -2247,7 +2238,7 @@ Did any of the later messages actually answer or directly address the original q
 
 Reply with ONLY "yes" or "no", no other text.`;
   try {
-    const raw = (await generateText(prompt, { model: 'gemini-2.5-flash-lite', label: 'answer-check' }))
+    const raw = (await generateText(prompt, { model: 'claude-sonnet-5', label: 'answer-check' }))
       .trim().toLowerCase();
     const answered = raw.startsWith('y');
     console.log(`[digests] LLM answer-check (${contextLabel}): ${answered ? 'answered' : 'unanswered'} (raw=${JSON.stringify(raw).slice(0, 60)})`);
@@ -2459,7 +2450,7 @@ export async function collectUnansweredForFeature(
     console.log(`[digests] ${qLabel} → Gemini check (${laterChat.length} later msgs, ${threadReplyCount} thread replies)`);
     const questionText = chatMessageText(msg);
     const laterTexts = laterChat.map(chatMessageText).filter(t => t.length > 0);
-    const outstanding = await isOutstandingByGemini(questionText, laterTexts, qLabel);
+    const outstanding = await isOutstandingByLlm(questionText, laterTexts, qLabel);
     if (!outstanding) continue;
 
     flaggedQuestions.push(await buildUnansweredQuestion(msg));
@@ -2492,15 +2483,11 @@ async function buildUnansweredQuestion(msg: ChatMessage): Promise<UnansweredQues
  * the question is unanswered. Defaults to true on any failure (better
  * to over-flag than miss).
  */
-async function isOutstandingByGemini(
+async function isOutstandingByLlm(
   question: string,
   laterConversation: string[],
   contextLabel: string,
 ): Promise<boolean> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  // Without a key we can't run the gate — default to "outstanding" so we
-  // don't silently swallow real questions.
-  if (!apiKey) return true;
   // Cap to avoid massive prompts on busy chats.
   const capped = laterConversation.slice(0, 50);
   const conversationBlock = capped.length === 0
@@ -2519,7 +2506,7 @@ Decide one of three labels:
 
 Reply with ONLY one word: "not_a_question", "addressed", or "outstanding". No other text.`;
   try {
-    const raw = (await generateText(prompt, { model: 'gemini-2.5-flash-lite', label: 'outstanding-check' }))
+    const raw = (await generateText(prompt, { model: 'claude-sonnet-5', label: 'outstanding-check' }))
       .trim().toLowerCase();
     // Only "outstanding" flags the message; both "not_a_question" and
     // "addressed" mean we should skip it.
@@ -2590,7 +2577,7 @@ export async function collectUnansweredCommentsForFeature(
     if (laterReplies.length > 0) {
       const questionText = (t.quote ? `"${t.quote}" — ` : '') + (original.text || '');
       const replyTexts = laterReplies.map(r => r.text);
-      const answered = await isAnsweredByGemini(
+      const answered = await isAnsweredByLlm(
         questionText,
         replyTexts,
         `prd "${feature.name}" comment=${t.commentId}`,
@@ -3137,17 +3124,15 @@ async function summariseAbReport(
   }
   if (!content) return '_(AB report is empty — fill in)_';
 
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) return '_(model not configured — fill in)_';
   const { getPrompt: getPromptFn, getPromptModel: getModelFn } = await import('./prompts');
   const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
   const def = getDefFn('hamlet.ab_results_summary');
   const tmpl = await getPromptFn('hamlet.ab_results_summary', def?.default ?? '');
-  const modelName = await getModelFn('hamlet.ab_results_summary', def?.model ?? 'gemini-2.5-flash-lite');
-  // Send the full doc — gemini-2.5-flash-lite has a 1M-token context
-  // and AB report sections (results tables, Next Steps) can sit
-  // anywhere. Truncating to a head window dropped end-of-doc content
-  // and made Gemini hallucinate "section not present".
+  const modelName = await getModelFn('hamlet.ab_results_summary', def?.model ?? 'claude-sonnet-5');
+  // Send the full doc rather than a head window: AB report sections
+  // (results tables, Next Steps) can sit anywhere, and truncating
+  // dropped end-of-doc content and made the model hallucinate
+  // "section not present".
   const prompt = renderFn(tmpl, { featureName, abReportContent: content });
   try {
     const raw = (await generateText(prompt, { model: modelName, label: 'ab-results-summary' })).trim();
@@ -3188,14 +3173,12 @@ async function getFirstNextStep(
     }
   }
   if (!content) return '';
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) return '';
   const { getPrompt: getPromptFn, getPromptModel: getModelFn } = await import('./prompts');
   const { renderPrompt: renderFn, getPromptDef: getDefFn } = await import('./prompt-registry');
   const def = getDefFn('hamlet.first_next_step');
   const tmpl = await getPromptFn('hamlet.first_next_step', def?.default ?? '');
-  const modelName = await getModelFn('hamlet.first_next_step', def?.model ?? 'gemini-2.5-flash-lite');
-  // Send the full doc — gemini-2.5-flash-lite has a 1M-token context.
+  const modelName = await getModelFn('hamlet.first_next_step', def?.model ?? 'claude-sonnet-5');
+  // Send the full doc rather than a head window.
   const prompt = renderFn(tmpl, { featureName, abReportContent: content });
   console.log(`[digests] AB-concluded: first_next_step "${featureName}" report=${content.length}c, tail=${JSON.stringify(content.slice(-400))}`);
   try {
@@ -3978,7 +3961,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             const { getPrompt, getPromptModel } = await import('./prompts');
             const { renderPrompt, getPromptDef } = await import('./prompt-registry');
             const def = getPromptDef('hamlet.prd_change_summary');
-            const modelName = await getPromptModel('hamlet.prd_change_summary', def?.model ?? 'gemini-3.1-flash-lite-preview');
+            const modelName = await getPromptModel('hamlet.prd_change_summary', def?.model ?? 'claude-sonnet-5');
             const tmpl = await getPrompt('hamlet.prd_change_summary', def?.default ?? '');
             // No char-cap: gemini-3.1-flash-lite-preview handles ~1M
             // tokens, and a 4k head-window was missing edits below the

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '@/lib/llm';
 import { getPrompt, getPromptModel } from '@/lib/prompts';
 import { getPromptDef, renderPrompt } from '@/lib/prompt-registry';
 
@@ -13,22 +13,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'field must be "name" or "description"' }, { status: 400 });
     }
 
-    const apiKey = process.env.GOOGLE_AI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'GOOGLE_AI_API_KEY not set' }, { status: 500 });
-    }
-
     const promptId = field === 'name' ? 'hamlet.rewrite_name' : 'hamlet.rewrite_description';
     const def = getPromptDef(promptId);
-    const modelName = await getPromptModel(promptId, def?.model ?? 'gemini-3.1-flash-lite-preview');
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
+    const modelName = await getPromptModel(promptId, def?.model ?? 'claude-haiku-4-5');
 
     const tmpl = await getPrompt(promptId, def?.default ?? '');
     const prompt = renderPrompt(tmpl, { text: text.trim() });
 
-    const result = await model.generateContent(prompt);
-    const rewritten = result.response.text().trim();
+    const rewritten = (await generateText(prompt, { model: modelName, label: 'rewrite' })).trim();
 
     return NextResponse.json({ rewritten });
   } catch (err) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat, refreshUserToken, sendPostToChat, replyToMessage, readDocContent, PostParagraph } from '@/lib/lark';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '@/lib/llm';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -496,31 +496,25 @@ export async function POST(req: NextRequest) {
           console.warn('[card-action] letjr_reply: feature cache lookup failed:', e);
         }
 
-        const apiKey = process.env.GOOGLE_AI_API_KEY;
-        let replyText = '_(Couldn\'t generate a reply — Gemini not configured)_';
-        if (apiKey) {
-          try {
-            const { getPrompt, getPromptModel } = await import('@/lib/prompts');
-            const { renderPrompt, getPromptDef } = await import('@/lib/prompt-registry');
-            const promptDef = getPromptDef('hamlet.letjr_reply');
-            const template = await getPrompt('hamlet.letjr_reply', promptDef?.default ?? '');
-            const modelName = await getPromptModel('hamlet.letjr_reply', promptDef?.model ?? 'gemini-2.5-flash-lite');
-            const prompt = renderPrompt(template, {
-              featureName,
-              sourceLabel: questionSource === 'prd_comment' ? 'PRD comment' : 'feature group chat',
-              questionText,
-              prdContent: prdContent || '(PRD not available)',
-              featureContext,
-              pmOpenId,
-              pmName,
-            });
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ model: modelName });
-            const result = await model.generateContent(prompt);
-            replyText = result.response.text().trim();
-          } catch (e) {
-            console.warn('[card-action] letjr_reply: Gemini failed:', e);
-          }
+        let replyText = '_(Couldn\'t generate a reply)_';
+        try {
+          const { getPrompt, getPromptModel } = await import('@/lib/prompts');
+          const { renderPrompt, getPromptDef } = await import('@/lib/prompt-registry');
+          const promptDef = getPromptDef('hamlet.letjr_reply');
+          const template = await getPrompt('hamlet.letjr_reply', promptDef?.default ?? '');
+          const modelName = await getPromptModel('hamlet.letjr_reply', promptDef?.model ?? 'claude-haiku-4-5');
+          const prompt = renderPrompt(template, {
+            featureName,
+            sourceLabel: questionSource === 'prd_comment' ? 'PRD comment' : 'feature group chat',
+            questionText,
+            prdContent: prdContent || '(PRD not available)',
+            featureContext,
+            pmOpenId,
+            pmName,
+          });
+          replyText = (await generateText(prompt, { model: modelName, label: 'letjr-reply' })).trim();
+        } catch (e) {
+          console.warn('[card-action] letjr_reply: generation failed:', e);
         }
         const botToken = await getLarkBotToken();
         // Prepend the askers @-mention inline so the proposal reads

@@ -7,7 +7,7 @@ import {
 } from '@/lib/lark';
 import { readFeatureCache } from '@/lib/feature-cache';
 import { callMeegoMcp } from '@/lib/digests';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '@/lib/llm';
 import { Feature } from '@/lib/types';
 
 // ─── Agent config ────────────────────────────────────────────────────────────
@@ -135,16 +135,9 @@ async function handleMessage(body: LarkEvent) {
 
   console.log(`[webhook] ${agent.name} received: "${userText.slice(0, 100)}" in ${message.chat_type} chat`);
 
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    console.warn('[webhook] GOOGLE_AI_API_KEY not set');
-    return;
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  // Default model for the feature-lookup pre-step. The final reply uses
-  // whatever the prompt-registry has configured for hamlet.agent_webhook.
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+  // Model for the feature-lookup pre-step. The final reply uses whatever
+  // the prompt-registry has configured for hamlet.agent_webhook.
+  const lookupModel = 'claude-haiku-4-5';
   const chatType = message.chat_type === 'p2p' ? 'direct message' : 'group chat';
 
   // ── Feature lookup: 5-tier data resolution ──────────────────────────────
@@ -157,15 +150,15 @@ async function handleMessage(body: LarkEvent) {
   try {
     const cache = await readFeatureCache();
     if (cache && cache.features.length > 0) {
-      // Ask Gemini to identify which feature + what info is needed.
-      // Include status so Gemini can prioritize ongoing features over done ones.
+      // Ask the model to identify which feature + what info is needed.
+      // Include status so it can prioritize ongoing features over done ones.
       const featureList = cache.features
         .map(f => `${f.name} [${f.status || 'Unknown'}]`)
         .join('\n');
-      const matchResult = await model.generateContent(
-        `Given this user message: "${userText}"\n\nTwo tasks:\n1. Which feature is the user most likely asking about? Match by partial name, keywords, or abbreviation — the user may omit words like "in", "the", "for" or use shorthand. IMPORTANT: If multiple features match, prefer ongoing/active features over completed ("Done") ones. Return the EXACT feature name (without the status in brackets) from the list that best matches, or "NONE" only if truly no feature is related.\n2. What info are they looking for? Return a short keyword like "figma", "status", "libra", "team", "risk", "prd", "ab_report", "existence", "general", etc.\n\nReturn as: FEATURE_NAME|||INFO_TYPE\n\nFeatures:\n${featureList}`
-      );
-      const matchRaw = matchResult.response.text().trim();
+      const matchRaw = (await generateText(
+        `Given this user message: "${userText}"\n\nTwo tasks:\n1. Which feature is the user most likely asking about? Match by partial name, keywords, or abbreviation — the user may omit words like "in", "the", "for" or use shorthand. IMPORTANT: If multiple features match, prefer ongoing/active features over completed ("Done") ones. Return the EXACT feature name (without the status in brackets) from the list that best matches, or "NONE" only if truly no feature is related.\n2. What info are they looking for? Return a short keyword like "figma", "status", "libra", "team", "risk", "prd", "ab_report", "existence", "general", etc.\n\nReturn as: FEATURE_NAME|||INFO_TYPE\n\nFeatures:\n${featureList}`,
+        { model: lookupModel, label: 'agent-feature-lookup' },
+      )).trim();
       const [matchedName, infoTypeParsed] = matchRaw.split('|||').map(s => s.trim());
       let infoType = infoTypeParsed;
 
@@ -326,8 +319,7 @@ async function handleMessage(body: LarkEvent) {
   const persona = await getPrompt(personaId, personaDef?.default ?? agent.persona);
   const wrapperDef = getPromptDef('hamlet.agent_webhook');
   const wrapperTmpl = await getPrompt('hamlet.agent_webhook', wrapperDef?.default ?? '');
-  const modelName = await getPromptModel('hamlet.agent_webhook', wrapperDef?.model ?? 'gemini-2.5-flash-lite');
-  const replyModel = genAI.getGenerativeModel({ model: modelName });
+  const modelName = await getPromptModel('hamlet.agent_webhook', wrapperDef?.model ?? 'claude-haiku-4-5');
   const prompt = renderPrompt(wrapperTmpl, {
     persona,
     chatType,
@@ -336,8 +328,7 @@ async function handleMessage(body: LarkEvent) {
   });
 
   try {
-    const result = await replyModel.generateContent(prompt);
-    const reply = result.response.text().trim();
+    const reply = (await generateText(prompt, { model: modelName, label: 'agent-webhook' })).trim();
 
     if (!reply) return;
 

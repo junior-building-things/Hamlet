@@ -32,8 +32,20 @@ export type ThinkingBudget = 'dynamic' | 'off' | 'minimal' | 'low' | 'medium' | 
 
 export const THINKING_BUDGETS: ThinkingBudget[] = ['dynamic', 'off', 'minimal', 'low', 'medium', 'high'];
 
-/** Models that can be selected per prompt in the UI. */
-export const ALLOWED_MODELS = ['gemini-3.1-flash-lite-preview', 'gemini-2.5-flash-lite'] as const;
+/**
+ * Models that can be selected per prompt in the UI.
+ *
+ * Hamlet's own prompts run through the Claude CLI (lib/llm.ts), so pick a
+ * `claude-*` model for those. The `gemini-*` entries remain selectable for
+ * the `junior.*` prompts, which Hamlet only stores — Junior is a separate
+ * service and still executes them on Gemini.
+ */
+export const ALLOWED_MODELS = [
+  'claude-haiku-4-5',
+  'claude-sonnet-5',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-2.5-flash-lite',
+] as const;
 export type AllowedModel = typeof ALLOWED_MODELS[number];
 
 export interface PromptOverride {
@@ -41,7 +53,7 @@ export interface PromptOverride {
   content?: string;
   /** Override thinking budget. If absent, fall back to the registry default (or 'dynamic'). */
   thinkingBudget?: ThinkingBudget;
-  /** Override Gemini model. If absent, fall back to the registry default. */
+  /** Override model. If absent, fall back to the registry default. */
   model?: string;
   updatedAt: string;
   updatedBy?: string;
@@ -86,7 +98,7 @@ export async function getPromptThinkingBudget(
 }
 
 /**
- * Get the Gemini model name for a prompt. Returns the override if set,
+ * Get the model name for a prompt. Returns the override if set,
  * else the provided fallback (the registry's default model).
  */
 export async function getPromptModel(id: string, fallback: string): Promise<string> {

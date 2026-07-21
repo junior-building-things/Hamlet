@@ -8,7 +8,13 @@ import { ServiceTag, stripServicePrefix } from '@/components/ServiceTag';
 type ThinkingBudget = 'dynamic' | 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
 const THINKING_BUDGET_OPTIONS: ThinkingBudget[] = ['dynamic', 'off', 'minimal', 'low', 'medium', 'high'];
-const MODEL_OPTIONS = ['gemini-3.1-flash-lite-preview', 'gemini-2.5-flash-lite'] as const;
+const MODEL_OPTIONS = [
+  'claude-haiku-4-5',
+  'claude-sonnet-5',
+  // Junior (separate service) still runs its prompts on Gemini.
+  'gemini-3.1-flash-lite-preview',
+  'gemini-2.5-flash-lite',
+] as const;
 
 interface PromptItem {
   id: string;

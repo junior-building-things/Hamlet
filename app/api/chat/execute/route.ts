@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '@/lib/llm';
 import { createFeature, fetchUserStories, completeNode, updateFeatureFields } from '@/lib/meego';
 import { copyPrdTemplate, readDocContent, editDocSection, renameDocSection, addDocSection, addDocComment, listDocComments, replyToComment, duplicateDoc } from '@/lib/lark';
 import { getPrompt, getPromptModel } from '@/lib/prompts';
@@ -137,17 +137,12 @@ export async function POST(req: NextRequest) {
 
       const brief = await callMeego('get_workitem_brief', { project_key: PROJECT_KEY, work_item_id: workItemId });
 
-      // Use Gemini to answer the user's question from the raw brief
-      const apiKey = process.env.GOOGLE_AI_API_KEY;
-      if (!apiKey) throw new Error('GOOGLE_AI_API_KEY not set');
+      // Answer the user's question from the raw brief
       const def = getPromptDef('hamlet.meego_query');
-      const modelName = await getPromptModel('hamlet.meego_query', def?.model ?? 'gemini-3.1-flash-lite-preview');
-      const genAI  = new GoogleGenerativeAI(apiKey);
-      const model  = genAI.getGenerativeModel({ model: modelName });
+      const modelName = await getPromptModel('hamlet.meego_query', def?.model ?? 'claude-haiku-4-5');
       const tmpl = await getPrompt('hamlet.meego_query', def?.default ?? '');
       const prompt = renderPrompt(tmpl, { query: params.query ?? '', brief });
-      const result  = await model.generateContent(prompt);
-      const answer  = result.response.text().trim();
+      const answer = (await generateText(prompt, { model: modelName, label: 'meego-query' })).trim();
       return NextResponse.json({ reply: answer });
     }
 
@@ -184,18 +179,16 @@ export async function POST(req: NextRequest) {
     if (action === 'read_doc' && params.docUrl) {
       const content = await readDocContent(params.docUrl);
 
-      const apiKey = process.env.GOOGLE_AI_API_KEY;
-      if (!apiKey) return NextResponse.json({ reply: content, links: [{ label: '📄 Doc', url: params.docUrl }] });
-
       const def = getPromptDef('hamlet.doc_summarize');
-      const modelName = await getPromptModel('hamlet.doc_summarize', def?.model ?? 'gemini-3.1-flash-lite-preview');
-      const genAI  = new GoogleGenerativeAI(apiKey);
-      const model  = genAI.getGenerativeModel({ model: modelName });
+      const modelName = await getPromptModel('hamlet.doc_summarize', def?.model ?? 'claude-haiku-4-5');
       const tmpl = await getPrompt('hamlet.doc_summarize', def?.default ?? '');
       const prompt = renderPrompt(tmpl, { content });
-      const result = await model.generateContent(prompt);
-      const summary = result.response.text().trim();
-      return NextResponse.json({ reply: summary, links: [{ label: '📄 Doc', url: params.docUrl }] });
+      // If summarization fails, fall back to returning the raw doc content.
+      let summary = '';
+      try {
+        summary = (await generateText(prompt, { model: modelName, label: 'doc-summarize' })).trim();
+      } catch { /* fall through to raw content */ }
+      return NextResponse.json({ reply: summary || content, links: [{ label: '📄 Doc', url: params.docUrl }] });
     }
 
     // ── Edit Doc ─────────────────────────────────────────────────────────────
@@ -222,29 +215,23 @@ export async function POST(req: NextRequest) {
 
       // If no content provided, generate it with AI based on the doc
       if (!sectionContent) {
-        const apiKey = process.env.GOOGLE_AI_API_KEY;
-        if (apiKey) {
-          const def = getPromptDef('hamlet.prd_section_autogen');
-          const modelName = await getPromptModel('hamlet.prd_section_autogen', def?.model ?? 'gemini-3.1-flash-lite-preview');
-          // Read doc and generate content in parallel to save time
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: modelName });
+        const def = getPromptDef('hamlet.prd_section_autogen');
+        const modelName = await getPromptModel('hamlet.prd_section_autogen', def?.model ?? 'claude-haiku-4-5');
 
-          let docContext = '';
-          try {
-            docContext = await readDocContent(params.docUrl);
-          } catch { /* best effort */ }
+        let docContext = '';
+        try {
+          docContext = await readDocContent(params.docUrl);
+        } catch { /* best effort */ }
 
-          const tmpl = await getPrompt('hamlet.prd_section_autogen', def?.default ?? '');
-          const prompt = renderPrompt(tmpl, {
-            section: params.section ?? '',
-            docContext: docContext ? `Context:\n${docContext}` : '',
-          });
-          try {
-            const result = await model.generateContent(prompt);
-            sectionContent = result.response.text().trim();
-          } catch { /* fallback below */ }
-        }
+        const tmpl = await getPrompt('hamlet.prd_section_autogen', def?.default ?? '');
+        const prompt = renderPrompt(tmpl, {
+          section: params.section ?? '',
+          docContext: docContext ? `Context:\n${docContext}` : '',
+        });
+        try {
+          sectionContent = (await generateText(prompt, { model: modelName, label: 'prd-section-autogen' })).trim();
+        } catch { /* fallback below */ }
+
         if (!sectionContent) sectionContent = '(To be filled in)';
       }
 
@@ -283,32 +270,29 @@ export async function POST(req: NextRequest) {
 
       let finalReply = params.replyText;
       if (isInstruction) {
-        const apiKey = process.env.GOOGLE_AI_API_KEY;
-        if (apiKey) {
-          const def = getPromptDef('hamlet.prd_comment_reply');
-          const modelName = await getPromptModel('hamlet.prd_comment_reply', def?.model ?? 'gemini-3.1-flash-lite-preview');
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: modelName });
+        const def = getPromptDef('hamlet.prd_comment_reply');
+        const modelName = await getPromptModel('hamlet.prd_comment_reply', def?.model ?? 'claude-haiku-4-5');
 
-          // Read doc content for context
-          let docContext = '';
-          try {
-            docContext = await readDocContent(params.docUrl);
-          } catch { /* best effort */ }
+        // Read doc content for context
+        let docContext = '';
+        try {
+          docContext = await readDocContent(params.docUrl);
+        } catch { /* best effort */ }
 
-          const existingReplies = target.replies.map(r => r.content).join('\n');
-          const tmpl = await getPrompt('hamlet.prd_comment_reply', def?.default ?? '');
-          const prompt = renderPrompt(tmpl, {
-            quote: target.quote,
-            content: target.content,
-            existingReplies: existingReplies ? `Existing replies:\n${existingReplies}\n` : '',
-            docContext: docContext ? `Document context:\n${docContext}\n` : '',
-            replyText: params.replyText ?? '',
-          });
+        const existingReplies = target.replies.map(r => r.content).join('\n');
+        const tmpl = await getPrompt('hamlet.prd_comment_reply', def?.default ?? '');
+        const prompt = renderPrompt(tmpl, {
+          quote: target.quote,
+          content: target.content,
+          existingReplies: existingReplies ? `Existing replies:\n${existingReplies}\n` : '',
+          docContext: docContext ? `Document context:\n${docContext}\n` : '',
+          replyText: params.replyText ?? '',
+        });
 
-          const result = await model.generateContent(prompt);
-          finalReply = result.response.text().trim();
-        }
+        // On failure keep the user's literal text as the reply.
+        try {
+          finalReply = (await generateText(prompt, { model: modelName, label: 'prd-comment-reply' })).trim() || finalReply;
+        } catch { /* keep literal replyText */ }
       }
 
       await replyToComment(params.docUrl, target.commentId, finalReply);

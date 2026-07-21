@@ -1,13 +1,11 @@
 /**
- * Run Hamlet's daily digest pipeline locally, using the Claude CLI for all
- * LLM steps instead of the Gemini API.
+ * Run Hamlet's daily digest pipeline locally.
  *
  * This is the local replacement for the Cloud Scheduler digest crons. It
- * sets LLM_PROVIDER=claude (which routes every batch LLM call in
- * lib/digests.ts through `claude -p` via lib/llm.ts), then runs the same
- * exported functions the Cloud Run crons run — so all the Meego sync,
- * Lark card posting, and GCS dedup logic is reused unchanged. Only the
- * model provider differs.
+ * runs the same exported functions the Cloud Run crons run — so all the
+ * Meego sync, Lark card posting, and GCS dedup logic is reused unchanged.
+ * Every LLM step goes through lib/llm.ts (`claude -p`), same as anywhere
+ * else in the app.
  *
  * Modes (argv[2]):
  *   all      — ONE full pass: pull Meego once, detect transitions/PRD
@@ -38,10 +36,7 @@
  *   LARK_APP_ID, LARK_APP_SECRET — bot token + card posting.
  *   LARK_USER_REFRESH_TOKEN   — PRD/AB-report image downloads in cards.
  *   OWNER_EMAIL               — @-mention filter for the unanswered scan.
- *   GOOGLE_AI_API_KEY         — must be present: several digest functions
- *                              guard on it before the LLM call, even though
- *                              inference now goes through Claude.
- *   CLAUDE_MODEL              — optional; defaults to claude-sonnet-5.
+ *   CLAUDE_MODEL              — optional; overrides the per-prompt model.
  *
  * GCS: reads features.json / writes DigestState via Application Default
  * Credentials when off Cloud Run — run `gcloud auth application-default
@@ -136,9 +131,6 @@ async function finishLocalPass(ran: boolean): Promise<void> {
 
 async function main(): Promise<void> {
   await loadDotEnv();
-  // Route all batch LLM calls through the Claude CLI. Must be set before
-  // lib/digests.ts (and its transitive lib/llm.ts) is imported.
-  process.env.LLM_PROVIDER = 'claude';
 
   const mode = (process.argv[2] ?? 'all').toLowerCase();
   if (!['refresh', 'digests', 'all', 'watch-trigger'].includes(mode)) {

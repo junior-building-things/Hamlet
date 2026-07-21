@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '@/lib/llm';
 import { getPrompt, getPromptModel } from '@/lib/prompts';
 import { renderPrompt, getPromptDef } from '@/lib/prompt-registry';
 
@@ -14,7 +14,7 @@ interface Body {
 }
 
 /**
- * Compose the daily Junior brief banner via Gemini.
+ * Compose the daily Junior brief banner via the Claude CLI.
  *
  * Stateless — the client passes the categorized items + user name,
  * the route returns a `{greeting, highlight, rest, outro}` quartet
@@ -31,17 +31,12 @@ export async function POST(req: NextRequest) {
   const userName = body.userName?.trim() || 'Thomas';
   const newItems = (body.newItems ?? []).slice(0, 6);
   // We deliberately don't pass the ongoing feature NAMES into the
-  // prompt — only the count. Gemini was ignoring "don't list them"
+  // prompt — only the count. The model was ignoring "don't list them"
   // instructions and surfacing the names anyway; passing just the
   // count makes the rule physically enforceable.
   const ongoingCount = (body.ongoingNames ?? []).length;
 
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'gemini not configured' }, { status: 503 });
-  }
-
-  // Day-of-week + part-of-day in Singapore time so Gemini can pick the
+  // Day-of-week + part-of-day in Singapore time so the model can pick the
   // right greeting ("Monday morning" vs "Friday afternoon").
   const sgtFormatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Singapore',
@@ -61,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   const def = getPromptDef('hamlet.junior_brief');
   const tmpl = await getPrompt('hamlet.junior_brief', def?.default ?? '');
-  const modelName = await getPromptModel('hamlet.junior_brief', def?.model ?? 'gemini-2.5-flash-lite');
+  const modelName = await getPromptModel('hamlet.junior_brief', def?.model ?? 'claude-haiku-4-5');
   const prompt = renderPrompt(tmpl, {
     userName,
     dayName,
@@ -71,10 +66,7 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
+    const raw = (await generateText(prompt, { model: modelName, label: 'junior-brief' })).trim();
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
     const parsed = JSON.parse(cleaned) as {
       greeting?: string;
@@ -89,7 +81,7 @@ export async function POST(req: NextRequest) {
       outro: (parsed.outro ?? '').trim(),
     });
   } catch (e) {
-    console.warn('[junior-brief] Gemini failed:', e);
+    console.warn('[junior-brief] generation failed:', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'brief generation failed' },
       { status: 500 },

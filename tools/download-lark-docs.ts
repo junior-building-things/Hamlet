@@ -9,32 +9,30 @@
  * doesn't grok. The block walk handles everything readable, no markitdown
  * dependency, no exporter round-trip.
  *
- * After rendering, Gemini Flash classifies the doc into one of:
+ * After rendering, an LLM classifies the doc into one of:
  *   PRDs, AB Reports, Tech Designs, UATs, Research Exploration,
  *   Weekly Meetings, Miscellaneous
  * and the file lands in <DOWNLOAD_DIR>/<category>/<name>__<token>.md.
  *
- * Env (required):
- *   LARK_APP_ID
- *   LARK_APP_SECRET
- *   LARK_USER_REFRESH_TOKEN   — bootstrap seed (from /api/auth/refresh-token
- *                              after logging into Hamlet). The live token is
- *                              stored in GCS state.larkUserRefreshToken,
- *                              shared with the digest pipeline; rotations are
- *                              written back to GCS (+ mirrored to .env.local).
- *                              GCS access off Cloud Run needs gcloud ADC
- *                              (`gcloud auth application-default login`).
- *   GOOGLE_AI_API_KEY         — Gemini key for classification. Omit to dump
- *                              everything into Miscellaneous/.
+ * Auth:
+ *   Lark calls go through `lark-cli api ... --as user`, which uses lark-cli's
+ *   logged-in user session (the same Lark app as Hamlet). lark-cli owns token
+ *   storage + rotation, so this job keeps NO refresh token of its own — that
+ *   removes the old failure mode where the digest pipeline (GCS store) and
+ *   this job (.env.local store) shared one single-use rotating token and kept
+ *   invalidating each other. Requires `lark-cli auth login` as the doc owner;
+ *   `lark-cli` must be on PATH (it lives in the nvm bin — run.sh adds it).
+ *
+ * Classification runs through lib/llm.ts (the `claude` CLI), so it needs a
+ * logged-in Claude CLI on PATH — no API key.
  *
  * Env (optional):
- *   LARK_BASE_URL  (default https://open.larkoffice.com)
  *   DOWNLOAD_DIR   (default /Users/bytedance/Documents/Work/Documents)
  *   FILE_TYPES     (csv list; default "docx,doc")
  *   QUERY_KEYS     (csv list of strings to search; default = a–z + 0–9.
  *                  suite/docs-api/search/object requires a non-empty key,
  *                  so we run several searches and union by docs_token.)
- *   GEMINI_MODEL   (default "gemini-3.1-flash-lite")
+ *   CLASSIFY_MODEL (default "claude-haiku-4-5")
  *   LIMIT          (int; cap the number of docs to download. Useful for probes.)
  *   FORCE          (1 = re-render every doc even if `__<token>.md` exists.
  *                   Default behaviour: skip docs already on disk.)
@@ -48,10 +46,13 @@
 import { writeFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { loadDigestState, saveDigestState } from '../lib/digest-state';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { generateText } from '../lib/llm';
 
-// ── minimal .env.local loader / writer ───────────────────────────────────
+const pExecFile = promisify(execFile);
+
+// ── minimal .env.local loader ─────────────────────────────────────────────
 const ENV_PATH = resolve(process.cwd(), '.env.local');
 
 async function loadDotEnv(): Promise<void> {
@@ -65,22 +66,50 @@ async function loadDotEnv(): Promise<void> {
   }
 }
 
-/** Replace LARK_USER_REFRESH_TOKEN in .env.local in place. Lark rotates the
- *  refresh token on every refresh call, so without this each subsequent run
- *  fails until the user re-pastes the latest value. */
-async function persistRefreshToken(newToken: string): Promise<void> {
-  if (!existsSync(ENV_PATH)) return;
-  const txt = await readFile(ENV_PATH, 'utf8');
-  const replaced = /^LARK_USER_REFRESH_TOKEN=/m.test(txt)
-    ? txt.replace(/^LARK_USER_REFRESH_TOKEN=.*$/m, `LARK_USER_REFRESH_TOKEN=${newToken}`)
-    : `${txt.replace(/\s*$/, '')}\nLARK_USER_REFRESH_TOKEN=${newToken}\n`;
-  await writeFile(ENV_PATH, replaced);
-}
+// ── Lark API via lark-cli ─────────────────────────────────────────────────
+// All Lark calls go through `lark-cli api ... --as user`, which injects the
+// logged-in user's access token and transparently refreshes/rotates it. We
+// just parse the raw Lark envelope ({code, data, msg}) lark-cli prints on
+// stdout — the same shape the previous direct-fetch code consumed.
+interface LarkResp<T = unknown> { code: number; msg?: string; data?: T }
 
-function mustEnv(k: string): string {
-  const v = process.env[k];
-  if (!v) { console.error(`[fatal] missing env: ${k}`); process.exit(1); }
-  return v;
+async function larkApi<T = unknown>(
+  method: 'GET' | 'POST',
+  path: string,
+  opts: { data?: unknown; params?: unknown } = {},
+): Promise<LarkResp<T>> {
+  const args = ['api', method, path, '--as', 'user', '--json'];
+  if (opts.params !== undefined) args.push('--params', JSON.stringify(opts.params));
+  if (opts.data !== undefined) args.push('--data', JSON.stringify(opts.data));
+
+  // On a successful HTTP round-trip lark-cli prints the raw Lark envelope
+  // ({code, data, msg}) on stdout — including Lark-level error codes (e.g.
+  // 99991400 rate limit), which we return for the caller to handle. On its
+  // OWN failures (network timeout, etc.) it exits non-zero and writes a
+  // non-envelope {ok:false, error} to stderr instead — those are transient,
+  // so retry with backoff before giving up.
+  let lastErr = '';
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let stdout = '';
+    let stderr = '';
+    try {
+      ({ stdout } = await pExecFile('lark-cli', args, { maxBuffer: 256 * 1024 * 1024 }));
+    } catch (e) {
+      const err = e as { stdout?: string; stderr?: string; message?: string };
+      stdout = err.stdout ?? '';
+      stderr = err.stderr ?? err.message ?? '';
+    }
+    const start = stdout.indexOf('{');
+    if (start >= 0) {
+      try {
+        const j = JSON.parse(stdout.slice(start)) as LarkResp<T>;
+        if (typeof j.code === 'number') return j;
+      } catch { /* unparseable — fall through to retry */ }
+    }
+    lastErr = (stderr || stdout).replace(/\s+/g, ' ').trim().slice(0, 300) || 'no envelope on stdout';
+    if (attempt < 3) await new Promise(r => setTimeout(r, 800 * (attempt + 1) * (attempt + 1)));
+  }
+  throw new Error(`lark-cli ${method} ${path} failed after retries: ${lastErr}`);
 }
 
 // ── Lark API helpers ──────────────────────────────────────────────────────
@@ -95,49 +124,6 @@ interface DriveFile {
   url?: string;
 }
 
-let BASE = '';
-let APP_ID = '';
-let APP_SECRET = '';
-
-async function getAppToken(): Promise<string> {
-  const r = await fetch(`${BASE}/open-apis/auth/v3/app_access_token/internal`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ app_id: APP_ID, app_secret: APP_SECRET }),
-  });
-  const j = await r.json() as { code: number; app_access_token?: string; msg?: string };
-  if (j.code !== 0 || !j.app_access_token) {
-    throw new Error(`app_access_token: code=${j.code} msg=${j.msg}`);
-  }
-  return j.app_access_token;
-}
-
-async function refreshUserToken(token: string): Promise<{ access: string; me: string; rotated: string }> {
-  const app = await getAppToken();
-  const r = await fetch(`${BASE}/open-apis/authen/v1/refresh_access_token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      app_access_token: app,
-      grant_type: 'refresh_token',
-      refresh_token: token,
-    }),
-  });
-  const j = await r.json() as {
-    code: number;
-    msg?: string;
-    data?: { access_token?: string; open_id?: string; refresh_token?: string };
-  };
-  if (j.code !== 0 || !j.data?.access_token) {
-    throw new Error(`refresh_access_token: code=${j.code} msg=${j.msg}`);
-  }
-  return {
-    access: j.data.access_token,
-    me: j.data.open_id ?? '',
-    rotated: j.data.refresh_token ?? '',
-  };
-}
-
 /**
  * Enumerate every doc owned by the user via the legacy suite docs search
  * (POST /open-apis/suite/docs-api/search/object). That endpoint requires a
@@ -150,8 +136,7 @@ async function refreshUserToken(token: string): Promise<{ access: string; me: st
  * scope). For now we fetch everything owned by the user.
  */
 async function searchMyDocs(
-  token: string,
-  ownerOpenId: string,
+  ownerOpenIds: string[],
   searchKeys: string[],
 ): Promise<DriveFile[]> {
   const byToken = new Map<string, DriveFile>();
@@ -159,25 +144,14 @@ async function searchMyDocs(
     let offset = 0;
     let total = 0;
     do {
-      const r = await fetch(`${BASE}/open-apis/suite/docs-api/search/object`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          search_key: key,
-          count: 50,
-          offset,
-          owner_ids: [ownerOpenId],
-        }),
+      const j = await larkApi<{
+        docs_entities?: Array<{
+          docs_token: string; docs_type: string; title: string; owner_id?: string;
+        }>;
+        has_more?: boolean; total?: number;
+      }>('POST', '/open-apis/suite/docs-api/search/object', {
+        data: { search_key: key, count: 50, offset, owner_ids: ownerOpenIds },
       });
-      const j = await r.json() as {
-        code: number; msg?: string;
-        data?: {
-          docs_entities?: Array<{
-            docs_token: string; docs_type: string; title: string; owner_id?: string;
-          }>;
-          has_more?: boolean; total?: number;
-        };
-      };
       if (j.code !== 0) {
         throw new Error(`suite docs search (key=${JSON.stringify(key)}): code=${j.code} msg=${j.msg}`);
       }
@@ -239,19 +213,18 @@ function blockText(b: RenderBlock): string {
   return '';
 }
 
-async function fetchAllBlocks(token: string, docToken: string): Promise<RenderBlock[]> {
+async function fetchAllBlocks(docToken: string): Promise<RenderBlock[]> {
   const all: RenderBlock[] = [];
   let pageToken: string | undefined;
   for (let safety = 0; safety < 30; safety++) {
-    const url = new URL(`${BASE}/open-apis/docx/v1/documents/${docToken}/blocks`);
-    url.searchParams.set('page_size', '500');
-    url.searchParams.set('document_revision_id', '-1');
-    if (pageToken) url.searchParams.set('page_token', pageToken);
+    const params: Record<string, unknown> = { page_size: 500, document_revision_id: -1 };
+    if (pageToken) params.page_token = pageToken;
     // Per-page retry on rate-limit (99991400)
-    let pageData: { code: number; msg?: string; data?: { items?: RenderBlock[]; has_more?: boolean; page_token?: string } } | undefined;
+    let pageData: LarkResp<{ items?: RenderBlock[]; has_more?: boolean; page_token?: string }> | undefined;
     for (let attempt = 0; attempt < 4; attempt++) {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      pageData = await r.json();
+      pageData = await larkApi(
+        'GET', `/open-apis/docx/v1/documents/${docToken}/blocks`, { params },
+      );
       if (pageData?.code === 99991400) {
         await new Promise(rr => setTimeout(rr, 500 * (attempt + 1) * (attempt + 1)));
         continue;
@@ -360,8 +333,8 @@ function renderBlocksAsMarkdown(blocks: RenderBlock[], title: string): string {
   return out.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
-async function fetchDocAsMarkdown(token: string, docToken: string, title: string): Promise<string> {
-  const blocks = await fetchAllBlocks(token, docToken);
+async function fetchDocAsMarkdown(docToken: string, title: string): Promise<string> {
+  const blocks = await fetchAllBlocks(docToken);
   return renderBlocksAsMarkdown(blocks, title);
 }
 
@@ -385,16 +358,25 @@ const CATEGORIES = [
 ] as const;
 type Category = typeof CATEGORIES[number];
 
+// Teammates whose docs we additionally pull but ONLY keep when they're A/B
+// reports (their PRDs / other docs are skipped). Default: Lionel Lew (DS).
+// Override / extend via AB_REPORT_OWNERS (csv of open_ids).
+const AB_REPORT_OWNERS = (process.env.AB_REPORT_OWNERS
+  ?? 'ou_a9dc0ccf0169f3e69543cdd782a56557'   // lionel.lew@bytedance.com
+).split(',').map(s => s.trim()).filter(Boolean);
+
+// Title test for A/B *reports* (not designs): matches "[A/B Report]",
+// "【Agile A/B report】", "A/B 报告", etc., but not "[A/B Design]".
+function isAbReportTitle(title: string): boolean {
+  return /a\s*\/?\s*b[\s_-]*report/i.test(title) || /a\s*\/?\s*b\s*报告/.test(title);
+}
+
 /**
- * Ask Gemini which folder this doc belongs in. Returns 'Miscellaneous' on any
- * parse/quota error so a single bad classification doesn't sink the whole run.
+ * Ask the model which folder this doc belongs in. Returns 'Miscellaneous' on
+ * any parse/quota error so a single bad classification doesn't sink the run.
  */
 async function classifyDoc(title: string, md: string): Promise<Category> {
-  const key = process.env.GOOGLE_AI_API_KEY;
-  if (!key) return 'Miscellaneous';
-  const modelName = process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite';
-  const ai = new GoogleGenerativeAI(key);
-  const model = ai.getGenerativeModel({ model: modelName });
+  const modelName = process.env.CLASSIFY_MODEL ?? 'claude-haiku-4-5';
   const prompt = `Categorize this Lark document into EXACTLY ONE of these folders. Respond with ONLY the folder name from the list, nothing else.
 
 Folders:
@@ -415,8 +397,7 @@ Folder name:`;
   let lastErr: Error | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const result = await model.generateContent(prompt);
-      const raw = result.response.text().trim();
+      const raw = (await generateText(prompt, { model: modelName, label: 'classify-doc' })).trim();
       const first = raw.split('\n')[0].trim().replace(/^["'`*\-\s]+|["'`*\-\s]+$/g, '');
       const match = CATEGORIES.find(c => c.toLowerCase() === first.toLowerCase());
       return match ?? 'Miscellaneous';
@@ -432,9 +413,6 @@ Folder name:`;
 // ── main ──────────────────────────────────────────────────────────────────
 async function main() {
   await loadDotEnv();
-  BASE = process.env.LARK_BASE_URL ?? 'https://open.larkoffice.com';
-  APP_ID = mustEnv('LARK_APP_ID');
-  APP_SECRET = mustEnv('LARK_APP_SECRET');
 
   const DOWNLOAD_DIR = process.env.DOWNLOAD_DIR ?? '/Users/bytedance/Documents/Work/Documents';
   const wantedTypes = (process.env.FILE_TYPES ?? 'docx,doc')
@@ -444,50 +422,43 @@ async function main() {
     ?? 'a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z,0,1,2,3,4,5,6,7,8,9'
   ).split(',').map(s => s.trim()).filter(Boolean);
 
-  // User refresh token: GCS state.larkUserRefreshToken is the single
-  // source of truth, shared with the digest pipeline; .env.local's
-  // LARK_USER_REFRESH_TOKEN is the bootstrap seed. The Lark token is
-  // single-use and rotates per refresh, so sharing ONE store across both
-  // local jobs (which run at different times) avoids them invalidating
-  // each other. Rotations are written back to GCS (+ mirrored to
-  // .env.local). Needs gcloud ADC for GCS off Cloud Run.
-  const envSeed = process.env.LARK_USER_REFRESH_TOKEN ?? '';
-  const state = await loadDigestState();
-  const gcsToken = state.larkUserRefreshToken ?? '';
-  if (!gcsToken && !envSeed) {
-    console.error('[fatal] no Lark user refresh token in GCS state or LARK_USER_REFRESH_TOKEN');
+  // Identity + auth come from lark-cli's logged-in user session (same Lark
+  // app as Hamlet). lark-cli owns token storage + rotation, so this job no
+  // longer keeps its own refresh token — no GCS/.env.local token stores to
+  // clobber each other. Just confirm there's a live user session.
+  const who = await larkApi<{ open_id?: string; name?: string }>(
+    'GET', '/open-apis/authen/v1/user_info',
+  );
+  if (who.code !== 0 || !who.data?.open_id) {
+    console.error(
+      `[fatal] no lark-cli user session (code=${who.code} msg=${who.msg}). ` +
+      'Run: lark-cli auth login',
+    );
     process.exit(1);
   }
+  const me = who.data.open_id;
+  console.log(`[info] using lark-cli user session (name=${who.data.name ?? '?'}, open_id=${me})`);
 
-  console.log(`[info] refreshing user token (source=${gcsToken ? 'gcs' : 'env'})...`);
-  let token: { access: string; me: string; rotated: string };
-  try {
-    token = await refreshUserToken(gcsToken || envSeed);
-  } catch (e) {
-    // The GCS token may be dead (rotated out from under us). Heal from the
-    // .env.local bootstrap seed if it's different.
-    if (gcsToken && envSeed && envSeed !== gcsToken) {
-      console.warn(`[info] GCS token refresh failed (${e instanceof Error ? e.message : e}); retrying with .env.local seed`);
-      token = await refreshUserToken(envSeed);
-    } else {
-      throw e;
-    }
-  }
-  const { access, me, rotated } = token;
-  console.log(`[info] user token ok (open_id=${me || 'unknown'})`);
-  if (rotated) {
-    state.larkUserRefreshToken = rotated;
-    await saveDigestState(state);
-    await persistRefreshToken(rotated);
-    console.log(`[info] refresh token rotated; GCS state + .env.local updated`);
-  }
-
-  console.log(`[info] searching My Drive (${queryKeys.length} queries, owner=${me})...`);
-  const all = await searchMyDocs(access, me, queryKeys);
+  // Owners we search: you (all categories) + AB-report owners (kept only if
+  // the doc is an A/B report — see filtering below).
+  const abOwners = AB_REPORT_OWNERS.filter(o => o !== me);
+  const owners = [me, ...abOwners];
+  console.log(`[info] searching My Drive (${queryKeys.length} queries, owners=${owners.length}` +
+    `${abOwners.length ? `, +${abOwners.length} AB-report owner(s)` : ''})...`);
+  const all = await searchMyDocs(owners, queryKeys);
   console.log(`[info] ${all.length} unique docs found`);
 
-  let wanted = all.filter(f => wantedSet.has(f.type) && SUPPORTED_DOC_TYPES.has(f.type));
-  console.log(`[info] ${wanted.length} fetchable, types=${wantedTypes.join(',')}`);
+  const abOwnerSet = new Set(abOwners);
+  let wanted = all.filter(f => {
+    if (!wantedSet.has(f.type) || !SUPPORTED_DOC_TYPES.has(f.type)) return false;
+    // Docs owned by an AB-report owner (not you) are kept only when their
+    // title marks them as an A/B report — skip their PRDs / other docs.
+    if (abOwnerSet.has(f.owner_id)) return isAbReportTitle(f.name);
+    return true;
+  });
+  const abExtra = wanted.filter(f => abOwnerSet.has(f.owner_id)).length;
+  console.log(`[info] ${wanted.length} fetchable, types=${wantedTypes.join(',')}` +
+    `${abExtra ? ` (incl. ${abExtra} AB report(s) from other owners)` : ''}`);
 
   const limit = Number(process.env.LIMIT ?? '0');
   if (limit > 0 && wanted.length > limit) {
@@ -526,8 +497,12 @@ async function main() {
     }
     const fname = `${safeName(f.name)}__${f.token}.md`;
     try {
-      const md = await fetchDocAsMarkdown(access, f.token, f.name);
-      const category = await classifyDoc(f.name, md);
+      const md = await fetchDocAsMarkdown(f.token, f.name);
+      // Extra owners' docs are already title-gated to A/B reports — file them
+      // straight into AB Reports/ (no LLM call). Your docs get classified.
+      const category: Category = abOwnerSet.has(f.owner_id)
+        ? 'AB Reports'
+        : await classifyDoc(f.name, md);
       const target = resolve(DOWNLOAD_DIR, category, fname);
       await writeFile(target, md, 'utf8');
       byCategory[category] = (byCategory[category] ?? 0) + 1;

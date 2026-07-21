@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '@/lib/llm';
 import { getPrompt, getPromptModel } from '@/lib/prompts';
 import { getPromptDef } from '@/lib/prompt-registry';
 
@@ -96,9 +96,6 @@ function isReady(intent: Intent): boolean {
 // ── Intent parsing ─────────────────────────────────────────────────────────────
 
 async function parseIntent(messages: ChatMsg[], userMessage: string): Promise<Intent> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) throw new Error('GOOGLE_AI_API_KEY not set');
-
   const recent = messages.slice(-5);
   const history = recent.length
     ? '\n\nPrevious conversation:\n' + recent.map(m => `${m.role === 'user' ? 'User' : 'Hamlet'}: ${m.content}`).join('\n')
@@ -106,12 +103,12 @@ async function parseIntent(messages: ChatMsg[], userMessage: string): Promise<In
 
   const def = getPromptDef('hamlet.chat_intent');
   const systemPrompt = await getPrompt('hamlet.chat_intent', def?.default ?? SYSTEM);
-  const modelName = await getPromptModel('hamlet.chat_intent', def?.model ?? 'gemini-3.1-flash-lite-preview');
+  const modelName = await getPromptModel('hamlet.chat_intent', def?.model ?? 'claude-haiku-4-5');
 
-  const genAI  = new GoogleGenerativeAI(apiKey);
-  const model  = genAI.getGenerativeModel({ model: modelName });
-  const result = await model.generateContent(`${systemPrompt}${history}\n\nUser: ${userMessage}`);
-  const raw    = result.response.text().trim();
+  const raw = (await generateText(
+    `${systemPrompt}${history}\n\nUser: ${userMessage}`,
+    { model: modelName, label: 'chat-intent' },
+  )).trim();
 
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error(`No JSON in response: ${raw.slice(0, 200)}`);

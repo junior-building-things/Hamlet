@@ -1,7 +1,7 @@
 import { Feature } from './types';
 import { readChatMessages, sendTextMessage, resolveOpenIds, mentionOpenId, senderOpenIdOf, ChatMessage } from './lark';
 import { syncFeatureStatus } from './meego';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from './llm';
 
 const LARK_BASE_URL = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 
@@ -156,19 +156,11 @@ async function runUnansweredCheck(
 
   if (unanswered.length === 0) return actions;
 
-  // Use Gemini to generate contextual follow-up messages
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    console.warn('[agents] GOOGLE_AI_API_KEY not set, skipping unanswered check');
-    return actions;
-  }
-
+  // Generate contextual follow-up messages
   const { getPrompt, getPromptModel } = await import('./prompts');
   const { getPromptDef, renderPrompt } = await import('./prompt-registry');
   const def = getPromptDef('hamlet.unanswered_followup');
-  const modelName = await getPromptModel('hamlet.unanswered_followup', def?.model ?? 'gemini-2.5-flash-lite');
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: modelName });
+  const modelName = await getPromptModel('hamlet.unanswered_followup', def?.model ?? 'claude-sonnet-5');
 
   for (const msg of unanswered.slice(0, 3)) { // limit to 3 per run
     try {
@@ -188,8 +180,7 @@ async function runUnansweredCheck(
         content,
       });
 
-      const result = await model.generateContent(prompt);
-      const followUp = result.response.text().trim();
+      const followUp = (await generateText(prompt, { model: modelName, label: 'unanswered-followup' })).trim();
 
       const fullMsg = mentionTags ? `${mentionTags} ${followUp}` : followUp;
       await sendTextMessage(chatId, fullMsg, token, msg.message_id);
