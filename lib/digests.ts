@@ -4267,7 +4267,26 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
 
   const nowIso = new Date().toISOString();
   const riskFindings: RiskFinding[] = [];
-  for (const feature of inDev) {
+  // Pause gate before the scan rather than before the card: this loop runs a
+  // chat-risk LLM call per in-flight feature and is the single most expensive
+  // step in the pass, so gating only the send left a paused section costing
+  // full runtime and quota.
+  //
+  // NOTE this is broader than suppressing a card: the loop also refreshes
+  // state.features[<id>].chatRisk, which the app reads for its per-feature
+  // risk indicators. While digest.risk is paused those indicators hold their
+  // last computed value instead of going stale-but-updating. That is the
+  // intended reading of "paused" — the job doesn't run — but it is why
+  // pausing this section is not purely cosmetic.
+  const scanRisk = shouldSendSection(state, opts, 'digest.risk');
+  if (!scanRisk) {
+    console.log('[digests] risk scan skipped (paused or section-filtered) — chatRisk state not refreshed');
+  }
+  // Empty when paused, which leaves riskFindings empty — the cache
+  // writeback below already treats "no finding" as keep-previous, so
+  // indicators freeze rather than clear.
+  const featuresToScanForRisk = scanRisk ? inDev : [];
+  for (const feature of featuresToScanForRisk) {
     try {
       const finding = await evaluateFeatureRisk(feature);
       // Deadline-pressure reasons (e.g. "QA not started, planned merge date
@@ -4475,7 +4494,16 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // workItemId → finding so chat + PRD-comment results merge into a
   // single section per feature in the card.
   const unansweredByFeature = new Map<string, UnansweredFinding>();
-  if (ownerOpenId && botToken) {
+  // Pause gate sits BEFORE the scan, not just before the send: these scans
+  // are the chattiest LLM work in the pass (an answer-check per candidate
+  // question, per chat and per PRD comment). Gating only the card meant a
+  // paused section still cost full runtime and subscription quota. Nothing
+  // but the card consumes unansweredFindings, so skipping is side-effect free.
+  const scanUnanswered = shouldSendSection(state, opts, 'digest.unanswered');
+  if (!scanUnanswered) {
+    console.log('[digests] unanswered scan skipped (paused or section-filtered)');
+  }
+  if (scanUnanswered && ownerOpenId && botToken) {
     let scanned = 0;
     let skippedNoBrief = 0;
     let skippedEnded = 0;
