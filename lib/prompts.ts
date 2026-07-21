@@ -100,10 +100,21 @@ export async function getPromptThinkingBudget(
 /**
  * Get the model name for a prompt. Returns the override if set,
  * else the provided fallback (the registry's default model).
+ *
+ * `hamlet.*` prompts run through the Claude CLI, so a non-`claude-*`
+ * override on one is stale config left from the Gemini era — it is ignored
+ * in favour of the registry default. Without this, such an override wins
+ * here, then lib/llm.ts rejects the name and falls back to the *global*
+ * default: prompts meant for haiku silently ran on the heavier default
+ * model instead. Junior's `junior.*` prompts are left exactly as stored —
+ * that service really does execute them on Gemini.
  */
 export async function getPromptModel(id: string, fallback: string): Promise<string> {
   const overrides = await loadOverrides();
-  return overrides[id]?.model ?? fallback;
+  const override = overrides[id]?.model;
+  if (!override) return fallback;
+  if (id.startsWith('hamlet.') && !/^claude[-.]/i.test(override)) return fallback;
+  return override;
 }
 
 // Note: the helper that maps ThinkingBudget into the @google/genai
