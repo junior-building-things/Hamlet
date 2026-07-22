@@ -14,7 +14,10 @@ const AGENT_RUN_SECRET = process.env.AGENT_RUN_SECRET;
  * daily-scan transition detector. Useful for one-off testing or
  * regenerating a card after Hamlet ships a new field.
  *
- * POST { workItemId: string }
+ * POST { workItemId: string, libraUrl?: string }
+ *
+ * libraUrl overrides the cached value — handy when firing a card for a
+ * feature whose Libra link hasn't been saved to the cache yet.
  */
 export async function POST(req: NextRequest) {
   if (AGENT_RUN_SECRET) {
@@ -24,7 +27,7 @@ export async function POST(req: NextRequest) {
     }
   }
   try {
-    const body = await req.json() as { workItemId?: string };
+    const body = await req.json() as { workItemId?: string; libraUrl?: string };
     const workItemId = String(body.workItemId ?? '');
     if (!workItemId) return NextResponse.json({ error: 'missing workItemId' }, { status: 400 });
 
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     await sendAbOpenDigestCard([{
       feature,
-      libraUrl: cached.libraUrl ?? '',
+      libraUrl: body.libraUrl?.trim() || cached.libraUrl || '',
     }]);
 
     return NextResponse.json({ ok: true, sent: feature.name });
