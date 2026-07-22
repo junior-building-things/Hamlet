@@ -198,7 +198,7 @@ export default function Home() {
             </div>
           )}
           {activeView === 'chat' && (
-            <ChatView onFeatureCreated={f => setFeatures(prev => [f, ...prev])} />
+            <ChatView />
           )}
           {activeView === 'todos' && (
             <TodoView features={features} setFeatures={setFeatures} />

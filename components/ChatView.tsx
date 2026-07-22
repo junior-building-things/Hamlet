@@ -1,13 +1,12 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
-import type { Feature } from '@/lib/types';
 
 const SUGGESTIONS = [
-  'Summarize this week\'s PRD changes',
-  'Which features are at risk?',
-  'Show me my To Dos',
-  'What\'s blocking line review?',
+  'Help me draft a PRD background section',
+  'Explain the line review process',
+  'What does "已上车" mean?',
+  'Suggest questions to ask in a design review',
 ];
 
 /** Render a chat-bubble line — supports **bold** segments. */
@@ -29,25 +28,17 @@ interface Link { label: string; url: string }
 interface Msg { role: 'user' | 'assistant'; content: string; links?: Link[]; isWelcome?: boolean }
 interface ChatResponse {
   reply: string;
-  action?: string;
-  feature?: Feature;
   links?: Link[];
-  executing?: boolean;
-  params?: Record<string, string>;
 }
 
 const WELCOME_MSG: Msg = {
   role: 'assistant',
   isWelcome: true,
   content:
-    "I'm Hamlet, your helpful PM assistant. I can help you create features, edit PRDs, or update workflow nodes. How can I assist you with your project today?",
+    "Hi, I'm Junior. Ask me anything about your features, PRDs, or process — I can talk through ideas, draft copy, and explain how things work. What's on your mind?",
 };
 
-interface Props {
-  onFeatureCreated?: (feature: Feature) => void;
-}
-
-export function ChatView({ onFeatureCreated }: Props) {
+export function ChatView() {
   // Seed with welcome so it's always the first message in the list
   const [messages, setMessages]     = useState<Msg[]>([WELCOME_MSG]);
   const [input, setInput]           = useState('');
@@ -98,50 +89,18 @@ export function ChatView({ onFeatureCreated }: Props) {
     setLoading(true);
 
     try {
-      // ── Phase 1: intent parsing (fast) ──────────────────────────────────────
-      const res1  = await fetch('/api/chat', {
+      // Single conversational call — Junior's chat system prompt + context,
+      // run through the Claude CLI (opus-4.8 / high). See app/api/chat/route.ts.
+      const res  = await fetch('/api/chat', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ messages: snapshot, userMessage: text }),
       });
-      const data1 = await res1.json() as ChatResponse;
+      const data = await res.json() as ChatResponse;
 
-      const phase1Msg: Msg = { role: 'assistant', content: data1.reply };
-      setMessages(prev => [...prev, phase1Msg]);
-
-      if (data1.executing && data1.action && data1.params) {
-        // ── Phase 2: execute action (slow) ────────────────────────────────────
-        setLoading(true);
-        const res2  = await fetch('/api/chat/execute', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ action: data1.action, params: data1.params }),
-        });
-        const data2 = await res2.json() as ChatResponse;
-
-        const phase2Msg: Msg = {
-          role:    'assistant',
-          content: data2.reply,
-          links:   data2.links,
-        };
-        setMessages(prev => [...prev, phase2Msg]);
-
-        if (data2.action === 'create_feature' && data2.feature) {
-          onFeatureCreated?.(data2.feature);
-        }
-
-        await saveToHistory([userMsg, phase1Msg, phase2Msg]);
-      } else {
-        // If there are links on the non-executing response, attach them
-        if (data1.links?.length) {
-          setMessages(prev => {
-            const updated = [...prev];
-            updated[updated.length - 1] = { ...updated[updated.length - 1], links: data1.links };
-            return updated;
-          });
-        }
-        await saveToHistory([userMsg, { ...phase1Msg, links: data1.links }]);
-      }
+      const reply: Msg = { role: 'assistant', content: data.reply, links: data.links };
+      setMessages(prev => [...prev, reply]);
+      await saveToHistory([userMsg, reply]);
     } catch (err) {
       console.error('[ChatView] Error:', err);
       const errMsg: Msg = { role: 'assistant', content: `Something went wrong: ${err instanceof Error ? err.message : 'Please try again.'}` };

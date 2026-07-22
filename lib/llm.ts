@@ -27,9 +27,14 @@ import { spawn } from 'node:child_process';
 /** Used when neither the caller nor CLAUDE_MODEL specifies a model. */
 const DEFAULT_MODEL = 'claude-sonnet-5';
 
+/** Reasoning-effort levels the `claude` CLI accepts via --effort. */
+const EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+
 export interface GenerateTextOpts {
   /** Claude model id for this call (e.g. 'claude-haiku-4-5'). Falls back to CLAUDE_MODEL. */
   model?: string;
+  /** Reasoning effort (low|medium|high|xhigh|max). Omitted → CLI default. */
+  effort?: string;
   /** Short label for log lines. */
   label?: string;
 }
@@ -92,6 +97,9 @@ function spawnClaude(prompt: string, opts: GenerateTextOpts): Promise<string> {
       '--strict-mcp-config',
       '--setting-sources', '',
     ];
+    if (opts.effort && EFFORT_LEVELS.has(opts.effort)) {
+      args.push('--effort', opts.effort);
+    }
     const child = spawn('claude', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
