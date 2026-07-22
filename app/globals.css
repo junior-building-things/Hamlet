@@ -545,10 +545,16 @@ body {
   position: relative;
 }
 .chat-avatar.junior {
-  background: var(--ai-soft);
   border: 1px solid oklch(0.82 0.14 var(--ai-h) / 0.3);
   color: var(--ai);
   overflow: hidden;
+  /* Junior avatar art. The source is a wide scene, so zoom + bias up-left
+     to frame the face inside the small circle. */
+  background-color: var(--ai-soft);
+  background-image: url('/junior_avatar.png');
+  background-size: 260%;
+  background-position: 46% 18%;
+  background-repeat: no-repeat;
 }
 .chat-avatar.user {
   background: linear-gradient(135deg, oklch(0.74 0.14 295), oklch(0.82 0.14 var(--ai-h)));

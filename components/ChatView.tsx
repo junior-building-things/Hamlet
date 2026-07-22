@@ -140,7 +140,7 @@ export function ChatView() {
               return (
                 <div key={i} className={`chat-msg ${isUser ? 'user' : 'junior'}`}>
                   <div className={`chat-avatar ${isUser ? 'user' : 'junior'}`}>
-                    {isUser ? 'TS' : <Sparkles className="w-2.5 h-2.5" />}
+                    {isUser ? 'TS' : null}
                   </div>
                   <div className="chat-bubble-wrap">
                     <div className="chat-name">
@@ -176,9 +176,7 @@ export function ChatView() {
           {/* Typing indicator */}
           {loading && (
             <div className="chat-msg junior">
-              <div className="chat-avatar junior">
-                <Sparkles className="w-2.5 h-2.5" />
-              </div>
+              <div className="chat-avatar junior" />
               <div className="chat-bubble-wrap">
                 <div className="chat-name">
                   Junior <span className="chat-time">· thinking</span>
