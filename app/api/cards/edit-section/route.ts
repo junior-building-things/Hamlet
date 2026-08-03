@@ -4,6 +4,10 @@ import {
   buildInteractiveCardContent,
   patchInteractiveCard,
   getLarkBotToken,
+  extractSectionImageTokens,
+  uploadDocImageForMessage,
+  resolveDocIdFromUrl,
+  refreshUserToken,
   CardSection,
   CardButton,
   PostParagraph,
@@ -11,6 +15,17 @@ import {
 } from '@/lib/lark';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 120;
+
+// Section-heading aliases to look under when attaching a doc's image to a
+// card. AB reports lead with a "Background" screenshot; PRDs use the
+// "what we are building" phrasing.
+const IMAGE_SECTION_ALIASES = [
+  'background',
+  'what we are building', 'what we are building?',
+  'what are we building', 'what are we building?',
+  'what we are building and why', 'what are we building and why',
+];
 
 // Owner open_id used for the trailing "cc @Thomas" mention on the
 // AB-open / AB-concluded posts. Must stay in sync with
@@ -25,8 +40,15 @@ const AB_OPEN_MENTION_OPEN_ID = 'ou_1e7fa98f1e46311d8a5e4554dc7a668e';
  *   {
  *     cardMsgId: string,            // the original card message_id
  *     featureWorkItemId: string,    // which feature section to edit
- *     newCardContent: string,       // new lark_md body for that section
+ *     newCardContent?: string,      // new lark_md body (omit to keep current)
+ *     attachImageDocUrl?: string,   // pull image(s) from this doc and add to
+ *                                   //   the card (defaults to the section's
+ *                                   //   heading; see attachImageSection)
+ *     attachImageSection?: string,  // heading to look under (default: the
+ *                                   //   Background / "what we're building" set)
  *   }
+ *
+ * At least one of newCardContent / attachImageDocUrl is required.
  *
  * The "Send to PM Group" button payload uses postParagraphs (rich text).
  * We re-derive postParagraphs from the new cardContent so the post stays
@@ -38,12 +60,17 @@ export async function POST(req: NextRequest) {
       cardMsgId?: string;
       featureWorkItemId?: string;
       newCardContent?: string;
+      attachImageDocUrl?: string;
+      attachImageSection?: string;
     };
     const cardMsgId = String(body.cardMsgId ?? '');
     const featureWorkItemId = String(body.featureWorkItemId ?? '');
-    const newCardContent = String(body.newCardContent ?? '');
-    if (!cardMsgId || !featureWorkItemId || !newCardContent) {
+    const attachImageDocUrl = body.attachImageDocUrl?.trim();
+    if (!cardMsgId || !featureWorkItemId) {
       return NextResponse.json({ error: 'missing fields' }, { status: 400 });
+    }
+    if (body.newCardContent === undefined && !attachImageDocUrl) {
+      return NextResponse.json({ error: 'nothing to do: pass newCardContent and/or attachImageDocUrl' }, { status: 400 });
     }
 
     const state = await loadDigestState();
@@ -56,6 +83,51 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'feature section not found in card' }, { status: 404 });
     }
 
+    const featureSnap = ctx.features[featureIdx];
+    // Keep the existing body when the caller only wants to attach an image.
+    const newCardContent = body.newCardContent === undefined
+      ? featureSnap.cardContent
+      : String(body.newCardContent);
+
+    // Optionally pull image(s) from a doc (e.g. the AB report) and add them
+    // to this feature's image set. Merge (dedupe by image_key) so repeated
+    // calls don't duplicate, and so an image attach doesn't wipe existing art.
+    const mergedImages = [...featureSnap.cardImages];
+    let attachedCount = 0;
+    if (attachImageDocUrl) {
+      const aliases = body.attachImageSection?.trim()
+        ? [body.attachImageSection.trim().toLowerCase()]
+        : IMAGE_SECTION_ALIASES;
+      let userAccessToken: string | undefined;
+      if (state.larkUserRefreshToken) {
+        try {
+          const refreshed = await refreshUserToken(state.larkUserRefreshToken);
+          if (refreshed) {
+            userAccessToken = refreshed.accessToken;
+            state.larkUserRefreshToken = refreshed.refreshToken; // rotate + persist below
+          }
+        } catch { /* fall back to bot token for the media download */ }
+      }
+      const tokens = await extractSectionImageTokens(attachImageDocUrl, aliases);
+      if (tokens.length === 0) {
+        return NextResponse.json({ error: 'no image found under the requested section of that doc' }, { status: 404 });
+      }
+      const parentDocToken = await resolveDocIdFromUrl(attachImageDocUrl);
+      const uploaded = await Promise.all(
+        tokens.map(t => uploadDocImageForMessage(t, parentDocToken, userAccessToken)),
+      );
+      const existingKeys = new Set(mergedImages.map(i => i.image_key));
+      for (const img of uploaded) {
+        if (!img || existingKeys.has(img.image_key)) continue;
+        existingKeys.add(img.image_key);
+        mergedImages.push({ image_key: img.image_key });
+        attachedCount++;
+      }
+      if (attachedCount === 0) {
+        return NextResponse.json({ error: 'found image(s) but upload to Lark failed' }, { status: 500 });
+      }
+    }
+
     // Update the snapshot — both cardContent and postParagraphs.
     // Re-derive the BODY from the new markdown, then append the
     // image paragraphs (from cardImages) + the trailing cc paragraph.
@@ -63,9 +135,8 @@ export async function POST(req: NextRequest) {
     // any @-mentions resolved at build time (PM + POC stakeholders for
     // AB-concluded) carry through the edit instead of being reset to
     // PM-only.
-    const featureSnap = ctx.features[featureIdx];
     const bodyParagraphs = cardContentToPostParagraphs(newCardContent);
-    const imageParagraphs: PostParagraph[] = featureSnap.cardImages.map(img => [
+    const imageParagraphs: PostParagraph[] = mergedImages.map(img => [
       { tag: 'img', image_key: img.image_key } as PostInline,
     ]);
     let ccParagraph: PostParagraph = [
@@ -89,6 +160,7 @@ export async function POST(req: NextRequest) {
     ctx.features[featureIdx] = {
       ...featureSnap,
       cardContent: newCardContent,
+      cardImages: mergedImages,
       postParagraphsJson: JSON.stringify(newPostParagraphs),
     };
     state.cardEditContexts![cardMsgId] = ctx;
@@ -146,7 +218,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'lark patch failed' }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, imagesAttached: attachedCount });
   } catch (e) {
     console.warn('[cards/edit-section] error:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'edit failed' }, { status: 500 });
