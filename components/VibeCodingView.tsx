@@ -4,10 +4,9 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Feature } from '@/lib/types';
 import { PriorityBadge } from './PriorityBadge';
-import { LinkIcons } from './LinkIcons';
 import { UserAvatar } from './AvatarSelect';
 import { StatusBadge, STATUS_TONE, STATUS_TONE_STYLES } from './StatusBadge';
-import { SingleLinkCell } from './LinkIcons';
+import { LinkIcons } from './LinkIcons';
 
 interface VibeProject {
   id: string;
@@ -33,14 +32,15 @@ const PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const;
 const STATUSES = ['Not Started', 'In Progress', 'Done'] as const;
 // LinkIcons reports edits by link key; map those to VibeProject fields.
 const LINK_KEY_TO_FIELD: Record<string, keyof VibeProject> = {
+  bits: 'bitsUrl',
   meego: 'meegoUrl', prd: 'prd', compliance: 'complianceUrl',
   figma: 'figmaUrl', libra: 'libraUrl', ab: 'abReportUrl',
 };
 
 // Fixed/capped column tracks (only the trailing spacer flexes) so columns
 // pack tight on the left like the Product Features table — no growing gaps.
-// Feature, Version, Priority, Status, Links, Bits, Team, spacer(flex), Delete.
-const GRID = 'minmax(220px,400px) 70px 60px 118px 150px 44px 60px minmax(40px,1fr) 36px';
+// Feature, Version, Priority, Status, Links, Team, spacer(flex), Delete.
+const GRID = 'minmax(220px,400px) 70px 60px 118px 150px 60px minmax(40px,1fr) 36px';
 
 // ─── Inline editable text cell (click to edit, Enter/blur saves, Esc cancels) ──
 function EditableCell({ value, placeholder, onSave }: {
@@ -185,7 +185,7 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
         {/* Column header */}
         <div className="hidden sm:grid py-2.5 sticky top-0 bg-[var(--bg-elev-1)] border-b border-[var(--hairline)] z-10"
           style={{ gridTemplateColumns: GRID, columnGap: '0.75rem' }}>
-          {['Feature', 'Version', 'Priority', 'Status', 'Links', 'Bits', 'Team', '', ''].map((l, i) => (
+          {['Feature', 'Version', 'Priority', 'Status', 'Links', 'Team', '', ''].map((l, i) => (
             <span key={i} className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-dim)] pl-1">{l}</span>
           ))}
         </div>
@@ -242,28 +242,16 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
                         </select>
                       </div>
                     </div>
-                    {/* Links — reuse the Product Features LinkIcons (icons + add affordance) */}
+                    {/* Links — reuse the Product Features LinkIcons; Bits is
+                        the first link type here (includeBits). */}
                     <div className="pl-1 min-w-0">
                       <LinkIcons
                         feature={p as unknown as Feature}
+                        includeBits
                         onLinkUpdate={(key, url) => {
                           const field = LINK_KEY_TO_FIELD[key];
                           if (field) void updateField(p.id, field, url);
                         }}
-                      />
-                    </div>
-                    {/* Bits — single link, same chip UI as the Links column */}
-                    <div className="pl-1">
-                      <SingleLinkCell
-                        linkKey="bits"
-                        label="Bits"
-                        icon="/bits-v2.png"
-                        iconW={16}
-                        iconH={16}
-                        iconBox={16}
-                        color="#2F55E5"
-                        url={p.bitsUrl}
-                        onUpdate={u => void updateField(p.id, 'bitsUrl', u)}
                       />
                     </div>
                     {/* Team — single avatar (only you) */}
