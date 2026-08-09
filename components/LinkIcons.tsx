@@ -434,6 +434,98 @@ function AddLinkButton({ feature, onLinkUpdate }: {
   );
 }
 
+// ─── Single fixed-purpose link cell (e.g. the Vibe "Bits" column) ───────────
+// Reuses the same chip + hover bubble (open / edit / copy) as the Links
+// column, but for exactly one link. Empty state shows a "+" that opens a
+// URL input — mirroring the Links column's add affordance.
+export function SingleLinkCell({
+  linkKey, label, icon, iconW, iconH, color, url, onUpdate, invertInDark,
+}: {
+  linkKey: string; label: string; icon: string; iconW: number; iconH: number;
+  color: string; url?: string; onUpdate: (url: string) => void; invertInDark?: boolean;
+}) {
+  const link: LinkDef = { key: linkKey, label, icon, iconW, iconH, color, url, invertInDark };
+  if (url) {
+    return (
+      <div className="flex items-center">
+        <LinkChip link={link} index={0} total={1} onLinkUpdate={(_, u) => onUpdate(u)} />
+      </div>
+    );
+  }
+  return <SingleAddButton label={label} onUpdate={onUpdate} />;
+}
+
+function SingleAddButton({ label, onUpdate }: { label: string; onUpdate: (url: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0 });
+  const ref = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { if (open && inputRef.current) inputRef.current.focus(); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      const t = e.target as Node;
+      if (popRef.current?.contains(t) || ref.current?.contains(t)) return;
+      setOpen(false); setDraft('');
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  function toggle() {
+    if (open) { setOpen(false); setDraft(''); return; }
+    if (ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      setAnchor({ top: r.top, left: r.left, width: r.width });
+    }
+    setOpen(true);
+  }
+  function commit() {
+    const t = draft.trim();
+    if (t) onUpdate(t);
+    setOpen(false); setDraft('');
+  }
+
+  return (
+    <>
+      <button
+        ref={ref}
+        onClick={toggle}
+        title={`Add ${label}`}
+        className="inline-flex items-center justify-center w-[22px] h-[22px] rounded-[6px] bg-[var(--bg-elev-1)] text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer relative transition-transform duration-150 hover:-translate-y-[2px]"
+        style={{ border: '1.5px solid var(--bg-elev-1)', boxShadow: '0 0 0 0.5px var(--hairline)' }}
+      >
+        <Plus className="w-3 h-3" />
+      </button>
+      {open && createPortal(
+        <div
+          ref={popRef}
+          className="fixed bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-2 px-2"
+          style={{ top: anchor.top - 8, left: anchor.left + anchor.width / 2, transform: 'translate(-50%, -100%)', zIndex: 9999 }}
+        >
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); commit(); }
+              if (e.key === 'Escape') { setOpen(false); setDraft(''); }
+            }}
+            className="w-[280px] text-xs bg-transparent border-none outline-none text-[var(--foreground)] px-1.5 py-1"
+            placeholder={`Paste ${label} URL…`}
+          />
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[var(--card)]" />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 // ─── Public component ────────────────────────────────────────────────────────
 
 interface Props {

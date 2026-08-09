@@ -24,6 +24,7 @@ export interface VibeProject {
   libraUrl?: string;
   abReportUrl?: string;
   meegoUrl?: string;
+  bitsUrl?: string;    // Bits build link (Vibe-only column)
   team: string;        // always the owner ("me")
   createdAt: string;
 }
@@ -31,7 +32,7 @@ export interface VibeProject {
 // Fields a PATCH may set (everything except id/team/createdAt).
 const EDITABLE_FIELDS = [
   'feature', 'version', 'priority', 'status',
-  'prd', 'figmaUrl', 'complianceUrl', 'libraUrl', 'abReportUrl', 'meegoUrl',
+  'prd', 'figmaUrl', 'complianceUrl', 'libraUrl', 'abReportUrl', 'meegoUrl', 'bitsUrl',
 ] as const;
 
 /** Read-modify-write with a generation precondition + retry, so concurrent
