@@ -18,6 +18,9 @@ interface LinkDef {
   url?: string;
   onClick?: () => void;
   invertInDark?: boolean;
+  /** Override the 12px cap for self-contained badge icons (e.g. Bits) that
+   *  should fill more of the 22px tile. */
+  iconBox?: number;
 }
 
 // Hook to track current theme (light/dark) from document.documentElement.
@@ -259,7 +262,7 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
     // eslint-disable-next-line @next/next/no-img-element
     <img src={link.icon} alt={link.label} className="w-[12px] h-[12px] shrink-0" style={invertStyle} />
   ) : (
-    <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 12)} height={Math.min(link.iconH, 12)} className="shrink-0" style={invertStyle} />
+    <Image src={link.icon} alt={link.label} width={link.iconBox ?? Math.min(link.iconW, 12)} height={link.iconBox ?? Math.min(link.iconH, 12)} className="shrink-0" style={invertStyle} />
   );
 
   // Design spec: 22×22 rounded-square tiles, 1.5px bg-elev-1 border with
@@ -439,12 +442,12 @@ function AddLinkButton({ feature, onLinkUpdate }: {
 // column, but for exactly one link. Empty state shows a "+" that opens a
 // URL input — mirroring the Links column's add affordance.
 export function SingleLinkCell({
-  linkKey, label, icon, iconW, iconH, color, url, onUpdate, invertInDark,
+  linkKey, label, icon, iconW, iconH, color, url, onUpdate, invertInDark, iconBox,
 }: {
   linkKey: string; label: string; icon: string; iconW: number; iconH: number;
-  color: string; url?: string; onUpdate: (url: string) => void; invertInDark?: boolean;
+  color: string; url?: string; onUpdate: (url: string) => void; invertInDark?: boolean; iconBox?: number;
 }) {
-  const link: LinkDef = { key: linkKey, label, icon, iconW, iconH, color, url, invertInDark };
+  const link: LinkDef = { key: linkKey, label, icon, iconW, iconH, color, url, invertInDark, iconBox };
   if (url) {
     return (
       <div className="flex items-center">
