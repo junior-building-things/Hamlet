@@ -16,6 +16,7 @@ export interface VibeProject {
   feature: string;
   version: string;
   priority: string;   // P0 | P1 | P2 | P3
+  status: string;     // Not Started | In Progress | Done (defaults on the client for legacy rows)
   // Link fields — same keys as lib/types.ts Feature.
   prd?: string;
   figmaUrl?: string;
@@ -29,7 +30,7 @@ export interface VibeProject {
 
 // Fields a PATCH may set (everything except id/team/createdAt).
 const EDITABLE_FIELDS = [
-  'feature', 'version', 'priority',
+  'feature', 'version', 'priority', 'status',
   'prd', 'figmaUrl', 'complianceUrl', 'libraUrl', 'abReportUrl', 'meegoUrl',
 ] as const;
 
@@ -72,6 +73,7 @@ export async function POST() {
       feature: '',
       version: '',
       priority: 'P2',
+      status: 'Not Started',
       team: session.name,          // "only me" — always the logged-in PM
       createdAt: new Date().toISOString(),
     };

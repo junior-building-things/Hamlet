@@ -6,12 +6,14 @@ import type { Feature } from '@/lib/types';
 import { PriorityBadge } from './PriorityBadge';
 import { LinkIcons } from './LinkIcons';
 import { UserAvatar } from './AvatarSelect';
+import { StatusBadge, STATUS_TONE, STATUS_TONE_STYLES } from './StatusBadge';
 
 interface VibeProject {
   id: string;
   feature: string;
   version: string;
   priority: string;
+  status: string;
   prd?: string;
   figmaUrl?: string;
   complianceUrl?: string;
@@ -23,6 +25,10 @@ interface VibeProject {
 }
 
 const PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const;
+// Status values + display order (groups render in this order). The tones
+// (rose/blue/green) live in StatusBadge's STATUS_TONE map so the badge and
+// group-header pill match the Product Features tab exactly.
+const STATUSES = ['Not Started', 'In Progress', 'Done'] as const;
 // LinkIcons reports edits by link key; map those to VibeProject fields.
 const LINK_KEY_TO_FIELD: Record<string, keyof VibeProject> = {
   meego: 'meegoUrl', prd: 'prd', compliance: 'complianceUrl',
@@ -31,8 +37,8 @@ const LINK_KEY_TO_FIELD: Record<string, keyof VibeProject> = {
 
 // Fixed/capped column tracks (only the trailing spacer flexes) so columns
 // pack tight on the left like the Product Features table — no growing gaps.
-// Feature, Version, Priority, Links, Team, spacer(flex), Delete.
-const GRID = 'minmax(220px,400px) 70px 60px 150px 60px minmax(40px,1fr) 36px';
+// Feature, Version, Priority, Status, Links, Team, spacer(flex), Delete.
+const GRID = 'minmax(220px,400px) 70px 60px 118px 150px 60px minmax(40px,1fr) 36px';
 
 // ─── Inline editable text cell (click to edit, Enter/blur saves, Esc cancels) ──
 function EditableCell({ value, placeholder, onSave }: {
@@ -68,6 +74,27 @@ function EditableCell({ value, placeholder, onSave }: {
   return (
     <div className="editable-cell w-full min-w-0 text-[12.5px] truncate" onClick={() => setEditing(true)}>
       <span className={value ? 'text-[var(--text)]' : 'text-[var(--text-dim)]'}>{value || placeholder}</span>
+    </div>
+  );
+}
+
+// Status group header — same tone pill + count + fading hairline as the
+// Product Features tab (components/ProjectView.tsx GroupHeader).
+function GroupHeader({ label, count, first }: { label: string; count: number; first: boolean }) {
+  const s = STATUS_TONE_STYLES[STATUS_TONE[label] ?? 'gray'];
+  return (
+    <div
+      className={`flex items-center gap-2.5 py-2 sticky bg-[var(--bg-elev-1)] z-[5] ${first ? 'mt-1' : 'mt-3'}`}
+      style={{ top: 34 }}
+    >
+      <span
+        className="inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.06em] whitespace-nowrap"
+        style={{ background: s.bg, color: s.fg }}
+      >
+        {label}
+      </span>
+      <span className="font-mono text-[10.5px] text-[var(--text-dim)]">{count}</span>
+      <span className="flex-1 h-px ml-1" style={{ background: 'linear-gradient(90deg, var(--hairline) 0%, transparent 90%)' }} />
     </div>
   );
 }
@@ -135,6 +162,14 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
 
   const priorityOf = (p: VibeProject) =>
     (PRIORITIES.includes(p.priority as typeof PRIORITIES[number]) ? p.priority : 'P2') as 'P0' | 'P1' | 'P2' | 'P3';
+  const statusOf = (p: VibeProject) =>
+    (STATUSES.includes(p.status as typeof STATUSES[number]) ? p.status : 'Not Started');
+
+  // Group rows by status, in STATUSES order; only non-empty groups show —
+  // same as the Product Features status grouping.
+  const groups = STATUSES
+    .map(s => ({ status: s, rows: projects.filter(p => statusOf(p) === s) }))
+    .filter(g => g.rows.length > 0);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -148,7 +183,7 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
         {/* Column header */}
         <div className="hidden sm:grid py-2.5 sticky top-0 bg-[var(--bg-elev-1)] border-b border-[var(--hairline)] z-10"
           style={{ gridTemplateColumns: GRID, columnGap: '0.75rem' }}>
-          {['Feature', 'Version', 'Priority', 'Links', 'Team', '', ''].map((l, i) => (
+          {['Feature', 'Version', 'Priority', 'Status', 'Links', 'Team', '', ''].map((l, i) => (
             <span key={i} className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-dim)] pl-1">{l}</span>
           ))}
         </div>
@@ -162,53 +197,72 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
             {projects.length === 0 && (
               <div className="text-[12px] text-[var(--text-dim)] py-6 pl-1">No projects yet — add your first row below.</div>
             )}
-            {projects.map(p => (
-              <div key={p.id}
-                className="grid items-center py-2 border-b border-[var(--hairline)] hover:bg-[var(--hairline)]/40 transition-colors"
-                style={{ gridTemplateColumns: GRID, columnGap: '0.75rem' }}>
-                {/* Feature */}
-                <div className="pl-1 min-w-0">
-                  <EditableCell value={p.feature} placeholder="Untitled project" onSave={v => updateField(p.id, 'feature', v)} />
-                </div>
-                {/* Version */}
-                <div className="pl-1 min-w-0">
-                  <EditableCell value={p.version} placeholder="—" onSave={v => updateField(p.id, 'version', v)} />
-                </div>
-                {/* Priority */}
-                <div className="pl-1">
-                  <div className="relative inline-flex">
-                    <PriorityBadge priority={priorityOf(p)} />
-                    <select
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                      value={priorityOf(p)}
-                      onChange={e => updateField(p.id, 'priority', e.target.value)}
-                      title="Change priority"
-                    >
-                      {PRIORITIES.map(pr => <option key={pr} value={pr}>{pr}</option>)}
-                    </select>
+            {groups.map((g, gi) => (
+              <div key={g.status}>
+                <GroupHeader label={g.status} count={g.rows.length} first={gi === 0} />
+                {g.rows.map(p => (
+                  <div key={p.id}
+                    className="grid items-center py-2 border-b border-[var(--hairline)] hover:bg-[var(--hairline)]/40 transition-colors"
+                    style={{ gridTemplateColumns: GRID, columnGap: '0.75rem' }}>
+                    {/* Feature */}
+                    <div className="pl-1 min-w-0">
+                      <EditableCell value={p.feature} placeholder="Untitled project" onSave={v => updateField(p.id, 'feature', v)} />
+                    </div>
+                    {/* Version */}
+                    <div className="pl-1 min-w-0">
+                      <EditableCell value={p.version} placeholder="—" onSave={v => updateField(p.id, 'version', v)} />
+                    </div>
+                    {/* Priority */}
+                    <div className="pl-1">
+                      <div className="relative inline-flex">
+                        <PriorityBadge priority={priorityOf(p)} />
+                        <select
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          value={priorityOf(p)}
+                          onChange={e => updateField(p.id, 'priority', e.target.value)}
+                          title="Change priority"
+                        >
+                          {PRIORITIES.map(pr => <option key={pr} value={pr}>{pr}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {/* Status — same badge UI as Product Features; overlay select to change */}
+                    <div className="pl-1">
+                      <div className="relative inline-flex">
+                        <StatusBadge status={statusOf(p)} />
+                        <select
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          value={statusOf(p)}
+                          onChange={e => updateField(p.id, 'status', e.target.value)}
+                          title="Change status"
+                        >
+                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {/* Links — reuse the Product Features LinkIcons (icons + add affordance) */}
+                    <div className="pl-1 min-w-0">
+                      <LinkIcons
+                        feature={p as unknown as Feature}
+                        onLinkUpdate={(key, url) => {
+                          const field = LINK_KEY_TO_FIELD[key];
+                          if (field) void updateField(p.id, field, url);
+                        }}
+                      />
+                    </div>
+                    {/* Team — single avatar (only you) */}
+                    <div className="pl-1">
+                      <UserAvatar name={p.team || user?.name || 'Me'} url={user?.avatarUrl} size={5} />
+                    </div>
+                    {/* Spacer */}
+                    <div />
+                    {/* Delete */}
+                    <button onClick={() => void removeRow(p.id)} title="Delete row"
+                      className="grid place-items-center w-6 h-6 rounded text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--hairline)] transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                </div>
-                {/* Links — reuse the Product Features LinkIcons (icons + add affordance) */}
-                <div className="pl-1 min-w-0">
-                  <LinkIcons
-                    feature={p as unknown as Feature}
-                    onLinkUpdate={(key, url) => {
-                      const field = LINK_KEY_TO_FIELD[key];
-                      if (field) void updateField(p.id, field, url);
-                    }}
-                  />
-                </div>
-                {/* Team — single avatar (only you) */}
-                <div className="pl-1">
-                  <UserAvatar name={p.team || user?.name || 'Me'} url={user?.avatarUrl} size={5} />
-                </div>
-                {/* Spacer */}
-                <div />
-                {/* Delete */}
-                <button onClick={() => void removeRow(p.id)} title="Delete row"
-                  className="grid place-items-center w-6 h-6 rounded text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--hairline)] transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                ))}
               </div>
             ))}
 
