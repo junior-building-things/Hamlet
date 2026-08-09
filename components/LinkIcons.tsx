@@ -18,9 +18,6 @@ interface LinkDef {
   url?: string;
   onClick?: () => void;
   invertInDark?: boolean;
-  /** Override the 12px cap for self-contained badge icons (e.g. Bits) that
-   *  should fill more of the 22px tile. */
-  iconBox?: number;
 }
 
 // Hook to track current theme (light/dark) from document.documentElement.
@@ -41,10 +38,9 @@ function useTheme(): 'light' | 'dark' {
 
 function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void, theme: 'light' | 'dark' = 'light', includeBits = false): LinkDef[] {
   const links: LinkDef[] = [];
-  // Bits is the first link when enabled (Vibe Projects only). iconBox lifts
-  // the 12px cap so the badge fills the tile.
+  // Bits is the first link when enabled (Vibe Projects only).
   if (includeBits && feature.bitsUrl)
-    links.push({ key: 'bits', label: 'Bits', icon: '/bits-v2.png', iconW: 16, iconH: 16, iconBox: 16, color: '#2F55E5', url: feature.bitsUrl });
+    links.push({ key: 'bits', label: 'Bits', icon: '/bits-v2.png', iconW: 12, iconH: 12, color: '#2F55E5', url: feature.bitsUrl });
   if (feature.meegoUrl)
     links.push({ key: 'meego', label: 'Meego', icon: '/meego.png', iconW: 16, iconH: 16, color: '#B291F7', url: feature.meegoUrl });
   if (feature.prd)
@@ -266,7 +262,7 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
     // eslint-disable-next-line @next/next/no-img-element
     <img src={link.icon} alt={link.label} className="w-[12px] h-[12px] shrink-0" style={invertStyle} />
   ) : (
-    <Image src={link.icon} alt={link.label} width={link.iconBox ?? Math.min(link.iconW, 12)} height={link.iconBox ?? Math.min(link.iconH, 12)} className="shrink-0" style={invertStyle} />
+    <Image src={link.icon} alt={link.label} width={Math.min(link.iconW, 12)} height={Math.min(link.iconH, 12)} className="shrink-0" style={invertStyle} />
   );
 
   // Design spec: 22×22 rounded-square tiles, 1.5px bg-elev-1 border with
@@ -332,7 +328,7 @@ function AddLinkButton({ feature, onLinkUpdate, includeBits = false }: {
 
   // Filter to only links the feature is missing. Bits (Vibe only) leads.
   const addable = includeBits
-    ? [{ key: 'bits', label: 'Bits', color: '#2F55E5', icon: '/bits-v2.png', iconW: 16, iconH: 16 }, ...ADDABLE_LINKS]
+    ? [{ key: 'bits', label: 'Bits', color: '#2F55E5', icon: '/bits-v2.png', iconW: 14, iconH: 14 }, ...ADDABLE_LINKS]
     : ADDABLE_LINKS;
   const missingLinks = addable.filter(l => {
     if (l.key === 'bits') return !feature.bitsUrl;
