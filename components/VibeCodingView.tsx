@@ -257,7 +257,7 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
                       <SingleLinkCell
                         linkKey="bits"
                         label="Bits"
-                        icon="/bits.png?v=2"
+                        icon="/bits-v2.png"
                         iconW={18}
                         iconH={18}
                         iconBox={18}
