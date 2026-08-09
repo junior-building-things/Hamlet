@@ -258,9 +258,9 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
                         linkKey="bits"
                         label="Bits"
                         icon="/bits-v2.png"
-                        iconW={18}
-                        iconH={18}
-                        iconBox={18}
+                        iconW={16}
+                        iconH={16}
+                        iconBox={16}
                         color="#2F55E5"
                         url={p.bitsUrl}
                         onUpdate={u => void updateField(p.id, 'bitsUrl', u)}
