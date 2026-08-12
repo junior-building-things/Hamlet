@@ -38,9 +38,11 @@ function useTheme(): 'light' | 'dark' {
 
 function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void, theme: 'light' | 'dark' = 'light', includeBits = false): LinkDef[] {
   const links: LinkDef[] = [];
-  // Bits is the first link when enabled (Vibe Projects only).
-  if (includeBits && feature.bitsUrl)
-    links.push({ key: 'bits', label: 'Bits', icon: '/bits-v2.png', iconW: 12, iconH: 12, color: '#2F55E5', url: feature.bitsUrl });
+  // Bits leads when enabled (Vibe Projects only) — one link per platform.
+  if (includeBits && feature.bitsAndroidUrl)
+    links.push({ key: 'bitsAndroid', label: 'Bits (Android)', icon: '/android.svg', iconW: 12, iconH: 12, color: '#3DDC84', url: feature.bitsAndroidUrl });
+  if (includeBits && feature.bitsIosUrl)
+    links.push({ key: 'bitsIos', label: 'Bits (iOS)', icon: '/apple.svg', iconW: 11, iconH: 11, color: '#86868B', url: feature.bitsIosUrl });
   if (feature.meegoUrl)
     links.push({ key: 'meego', label: 'Meego', icon: '/meego.png', iconW: 16, iconH: 16, color: '#B291F7', url: feature.meegoUrl });
   if (feature.prd)
@@ -328,10 +330,15 @@ function AddLinkButton({ feature, onLinkUpdate, includeBits = false }: {
 
   // Filter to only links the feature is missing. Bits (Vibe only) leads.
   const addable = includeBits
-    ? [{ key: 'bits', label: 'Bits', color: '#2F55E5', icon: '/bits-v2.png', iconW: 14, iconH: 14 }, ...ADDABLE_LINKS]
+    ? [
+        { key: 'bitsAndroid', label: 'Bits (Android)', color: '#3DDC84', icon: '/android.svg', iconW: 14, iconH: 14 },
+        { key: 'bitsIos', label: 'Bits (iOS)', color: '#86868B', icon: '/apple.svg', iconW: 13, iconH: 13 },
+        ...ADDABLE_LINKS,
+      ]
     : ADDABLE_LINKS;
   const missingLinks = addable.filter(l => {
-    if (l.key === 'bits') return !feature.bitsUrl;
+    if (l.key === 'bitsAndroid') return !feature.bitsAndroidUrl;
+    if (l.key === 'bitsIos') return !feature.bitsIosUrl;
     if (l.key === 'figma') return !feature.figmaUrl;
     if (l.key === 'libra') return !feature.libraUrl;
     if (l.key === 'ab') return !feature.abReportUrl;
@@ -449,7 +456,7 @@ interface Props {
   ringColor?: string;
   onPackageClick?: (ios: boolean) => void;
   onLinkUpdate?: (linkKey: string, newUrl: string) => void;
-  /** Surface Bits as the first link + add option. Vibe Projects only. */
+  /** Surface the Bits (Android/iOS) links + add options. Vibe Projects only. */
   includeBits?: boolean;
 }
 

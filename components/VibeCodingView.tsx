@@ -20,7 +20,8 @@ interface VibeProject {
   libraUrl?: string;
   abReportUrl?: string;
   meegoUrl?: string;
-  bitsUrl?: string;
+  bitsAndroidUrl?: string;
+  bitsIosUrl?: string;
   team: string;
   createdAt: string;
 }
@@ -32,7 +33,7 @@ const PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const;
 const STATUSES = ['Not Started', 'In Progress', 'Done'] as const;
 // LinkIcons reports edits by link key; map those to VibeProject fields.
 const LINK_KEY_TO_FIELD: Record<string, keyof VibeProject> = {
-  bits: 'bitsUrl',
+  bitsAndroid: 'bitsAndroidUrl', bitsIos: 'bitsIosUrl',
   meego: 'meegoUrl', prd: 'prd', compliance: 'complianceUrl',
   figma: 'figmaUrl', libra: 'libraUrl', ab: 'abReportUrl',
 };
@@ -242,8 +243,8 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
                         </select>
                       </div>
                     </div>
-                    {/* Links — reuse the Product Features LinkIcons; Bits is
-                        the first link type here (includeBits). */}
+                    {/* Links — reuse the Product Features LinkIcons; Bits
+                        (Android + iOS) lead the row here (includeBits). */}
                     <div className="pl-1 min-w-0">
                       <LinkIcons
                         feature={p as unknown as Feature}

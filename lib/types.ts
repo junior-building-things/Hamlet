@@ -54,7 +54,9 @@ export interface Feature {
   versionHistory?: string[];
   abReportUrl?: string;
   libraUrl?: string;
-  bitsUrl?: string;   // Bits build link — only surfaced in the Vibe Projects tab (LinkIcons includeBits)
+  // Bits build links, per platform — only surfaced in the Vibe Projects tab (LinkIcons includeBits)
+  bitsAndroidUrl?: string;
+  bitsIosUrl?: string;
   packageQrUrl?: string;
   packageDownloadUrl?: string;
   packageName?: string;
