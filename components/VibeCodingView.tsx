@@ -179,7 +179,7 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
       {/* Page header — matches Product Features. */}
       <div className="shrink-0 px-5 py-4 border-b border-[var(--hairline)]">
         <div className="text-[18px] font-semibold text-[var(--text)] tracking-[-0.02em]">Vibe Projects</div>
-        <div className="text-[12px] text-[var(--text-muted)] mt-0.5">Projects without a dedicated Meego</div>
+        <div className="text-[12px] text-[var(--text-muted)] mt-0.5">Projects without a dedicated PRD/Meego</div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-16">
