@@ -1,7 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Priority } from '@/lib/types';
-import { Search, Plus, ArrowUp, ArrowDown, Sun, Moon } from 'lucide-react';
+import { Search, Plus, ArrowUp, ArrowDown, Sun, Moon, Monitor, Check } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 // Inline SVG icons that match the design's distinct icon vocabulary.
 // Filter (funnel) for filter chips, Group (2x2 grid) for grouping,
@@ -165,28 +166,83 @@ export function FilterBar({
   );
 }
 
+export type ThemeMode = 'system' | 'dark' | 'light';
+
+const THEME_MODES: Array<{ id: ThemeMode; label: string; Icon: LucideIcon }> = [
+  { id: 'system', label: 'System', Icon: Monitor },
+  { id: 'light',  label: 'Light',  Icon: Sun },
+  { id: 'dark',   label: 'Dark',   Icon: Moon },
+];
+
+/** Resolve a mode to a concrete theme and stamp it on <html>. Mirrors the
+ *  pre-paint script in app/layout.tsx, which reads the same storage key. */
+function applyTheme(mode: ThemeMode) {
+  const dark = mode === 'dark'
+    || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+}
+
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('light');
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    if (typeof window === 'undefined') return 'system';
+    const s = localStorage.getItem('hamlet_theme');
+    return s === 'dark' || s === 'light' || s === 'system' ? s : 'system';
+  });
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // While on System, follow the OS as it flips (e.g. macOS auto dark at dusk).
+  useEffect(() => {
+    if (mode !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => applyTheme('system');
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [mode]);
 
   useEffect(() => {
-    const stored = document.documentElement.getAttribute('data-theme') as 'dark' | 'light' | null;
-    if (stored) setTheme(stored);
-  }, []);
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
 
-  function toggle() {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
+  function pick(next: ThemeMode) {
+    setMode(next);
     localStorage.setItem('hamlet_theme', next);
+    applyTheme(next);
+    setOpen(false);
   }
 
+  const active = THEME_MODES.find(m => m.id === mode) ?? THEME_MODES[0];
+  const ActiveIcon = active.Icon;
+
   return (
-    <button
-      onClick={toggle}
-      className="hm-icon-btn shrink-0"
-      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-    >
-      {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-    </button>
+    <div ref={ref} className="relative shrink-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="hm-icon-btn shrink-0"
+        title={`Theme: ${active.label}`}
+      >
+        <ActiveIcon className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1.5 z-[9999] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl py-1.5 px-1.5 min-w-[132px]">
+          {THEME_MODES.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => pick(id)}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--foreground)] hover:bg-[var(--card-hover)] transition-colors"
+            >
+              <Icon className="w-3.5 h-3.5 shrink-0" />
+              <span className="flex-1 text-left">{label}</span>
+              {mode === id && <Check className="w-3 h-3 shrink-0 text-[var(--ai)]" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

@@ -14,11 +14,19 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // Inline script to set theme before paint to avoid flash. Default to
-  // light; toggle persists only within the session for now.
+  // Inline script to set the theme before paint, so there is no flash.
+  // Reads the same 'hamlet_theme' key the ThemeToggle writes ('system' |
+  // 'light' | 'dark'); unset means follow the OS.
   const themeScript = `
     (function() {
-      document.documentElement.setAttribute('data-theme', 'light');
+      try {
+        var mode = localStorage.getItem('hamlet_theme') || 'system';
+        var dark = mode === 'dark' ||
+          (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
     })();
   `;
 
