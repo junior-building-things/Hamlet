@@ -27,7 +27,7 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   'Merged':           'teal',
   'Done':             'green',
   // Vibe Projects statuses (no Meego equivalent). red / blue / green.
-  'Not Started':      'rose',
+  'Backlog':          'rose',
   'In Progress':      'blue',
 };
 

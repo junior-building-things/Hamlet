@@ -30,7 +30,7 @@ const PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const;
 // Status values + display order (groups render in this order). The tones
 // (rose/blue/green) live in StatusBadge's STATUS_TONE map so the badge and
 // group-header pill match the Product Features tab exactly.
-const STATUSES = ['Not Started', 'In Progress', 'Done'] as const;
+const STATUSES = ['Backlog', 'In Progress', 'Done'] as const;
 // LinkIcons reports edits by link key; map those to VibeProject fields.
 const LINK_KEY_TO_FIELD: Record<string, keyof VibeProject> = {
   bitsAndroid: 'bitsAndroidUrl', bitsIos: 'bitsIosUrl',
@@ -166,7 +166,7 @@ export function VibeCodingView({ user }: { user?: { name: string; avatarUrl?: st
   const priorityOf = (p: VibeProject) =>
     (PRIORITIES.includes(p.priority as typeof PRIORITIES[number]) ? p.priority : 'P2') as 'P0' | 'P1' | 'P2' | 'P3';
   const statusOf = (p: VibeProject) =>
-    (STATUSES.includes(p.status as typeof STATUSES[number]) ? p.status : 'Not Started');
+    (STATUSES.includes(p.status as typeof STATUSES[number]) ? p.status : 'Backlog');
 
   // Group rows by status, in STATUSES order; only non-empty groups show —
   // same as the Product Features status grouping.

@@ -16,7 +16,7 @@ export interface VibeProject {
   feature: string;
   version: string;
   priority: string;   // P0 | P1 | P2 | P3
-  status: string;     // Not Started | In Progress | Done (defaults on the client for legacy rows)
+  status: string;     // Backlog | In Progress | Done (defaults on the client for legacy rows)
   // Link fields — same keys as lib/types.ts Feature.
   prd?: string;
   figmaUrl?: string;
@@ -76,7 +76,7 @@ export async function POST() {
       feature: '',
       version: '',
       priority: 'P2',
-      status: 'Not Started',
+      status: 'Backlog',
       team: session.name,          // "only me" — always the logged-in PM
       createdAt: new Date().toISOString(),
     };
