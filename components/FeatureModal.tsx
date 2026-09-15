@@ -17,6 +17,8 @@ interface Props {
   onNodeCompleted?: (featureId: string) => void;
   /** Called after background creation completes. null = failed (temp entry should be removed). */
   onFeatureCreated?: (tempId: string, feature: Feature | null) => void;
+  /** Called when background PRD creation finishes. No prd = failed. */
+  onPrdReady?: (featureId: string, prd?: string) => void;
 }
 
 function av(name: string): AvatarOption { return { value: name, label: name, avatarUrl: AV[name] }; }
@@ -110,7 +112,7 @@ const SERVER_OWNERS = (): AvatarOption[] => [
   opt('7291604705006895105', 'Kyle Chan'),
   opt('6990536503940218908', 'Xuan Sheng'),
   opt('7405623196516450307', 'Tianyang Ni'),
-  opt('jinming.zhang', 'Jinming Zhang'),
+  opt('7509048925504946204', 'Jinming Zhang'),
 ];
 const ANDROID_OWNERS = (): AvatarOption[] => [
   opt('7210676945535778820', 'Austin Lee'),
@@ -141,6 +143,14 @@ const TPM_OPTIONS: AvatarOption[] = [
   { value: '7330558724446191620', label: 'Spring Ren',  avatarUrl: AV['Spring Ren'] },
   { value: '7287415984883810308', label: 'Yunyi Yang',  avatarUrl: AV['Yunyi Yang'] },
 ];
+
+// The synced AV map is keyed by Meego display names (often Chinese), which rarely
+// match these labels — so resolve the dropdown avatars by Meego user key instead.
+const POC_USER_KEYS = [...new Set([
+  ...PM_OPTIONS, ...TPM_OPTIONS, ...TECH_OWNERS(), ...SERVER_OWNERS(), ...ANDROID_OWNERS(),
+  ...IOS_OWNERS(), ...UIUX_OWNERS(), ...DA_OPTIONS(), ...CONTENT_OPTIONS(), ...QA_OPTIONS(),
+].map(o => o.value))];
+let pocAvatarsPromise: Promise<Record<string, string>> | null = null;
 
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
@@ -199,7 +209,7 @@ const inputCls = 'w-full bg-[var(--bg-elev-2)] border border-[var(--hairline)] t
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNodeCompleted, onFeatureCreated }: Props) {
+export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNodeCompleted, onFeatureCreated, onPrdReady }: Props) {
 
   // ── Edit-mode state ──
   const [completing, setCompleting]       = useState(false);
@@ -235,6 +245,25 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
   });
   const [prdType, setPrdType]               = useState<'regular' | 'halfday'>('regular');
   const [createChatGroup, setCreateChatGroup] = useState(false);
+  const [avatarByKey, setAvatarByKey] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (mode !== 'add') return;
+    pocAvatarsPromise ??= fetch('/api/avatars/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userKeys: POC_USER_KEYS }),
+    })
+      .then(r => (r.ok ? r.json() : {}) as Promise<{ avatars?: Record<string, string> }>)
+      .then(d => d.avatars ?? {})
+      .catch(() => ({}));
+    let alive = true;
+    pocAvatarsPromise.then(m => {
+      if (Object.keys(m).length === 0) pocAvatarsPromise = null; // retry on next open
+      if (alive) setAvatarByKey(m);
+    });
+    return () => { alive = false; };
+  }, [mode]);
+  const withAv = (opts: AvatarOption[]) => opts.map(o => (avatarByKey[o.value] ? { ...o, avatarUrl: avatarByKey[o.value] } : o));
   const [featureDescription, setFeatureDescription] = useState('');
   const [rewritingName, setRewritingName]           = useState(false);
   const [rewritingDesc, setRewritingDesc]           = useState(false);
@@ -323,17 +352,11 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
           businessLineLabel:       BUSINESS_LINES.find(b => b.id === form.businessLine)?.label,
           socialComponentLabel:    SOCIAL_COMPONENTS.find(s => s.id === form.socialComponent)?.label,
           roles,
-          featureDescription:      featureDescription.trim() || undefined,
-          useHalfDayPrd:           prdType === 'halfday' ? true : undefined,
           createChatGroup,
         }),
       });
-      const data = await res.json() as { id?: string; meegoUrl?: string; prd?: string; prdError?: string; error?: string };
+      const data = await res.json() as { id?: string; meegoUrl?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Create failed');
-      if (data.prdError) {
-        console.error('PRD creation failed:', data.prdError);
-        toast.error(`PRD creation failed: ${data.prdError}`);
-      }
       // Look up the human-readable label for each selected option so the
       // post-create modal renders Project Details / POC Details exactly
       // like the "click an existing feature" view (which gets these
@@ -352,7 +375,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
         meegoUrl:        data.meegoUrl,
         meegoIssueId:    data.id,
         meegoProjectKey: TIKTOK_PROJECT_KEY,
-        prd:             data.prd,
+        prdPending:      true,
         quarterlyCycle:  QUARTERLY_CYCLES.find(q => q.id === form.quarterlyCycle)?.label,
         businessLine:    BUSINESS_LINES.find(b => b.id === form.businessLine)?.label,
         socialComponent: SOCIAL_COMPONENTS.find(s => s.id === form.socialComponent)?.label,
@@ -373,6 +396,29 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
       // edit UI. The drawer popping open is the success cue, so no
       // toast is needed.
       onClose();
+
+      // The PRD (doc research + drafting) can take a minute; it runs after the
+      // modal closes and the Links section shows a loading chip meanwhile.
+      fetch('/api/meego/create-prd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id:                 data.id,
+          name:               newFeature.name,
+          meegoUrl:           data.meegoUrl,
+          featureDescription: featureDescription.trim() || undefined,
+          useHalfDayPrd:      prdType === 'halfday' ? true : undefined,
+        }),
+      })
+        .then(async r => {
+          const d = await r.json() as { prd?: string; error?: string };
+          if (!r.ok || !d.prd) throw new Error(d.error ?? 'PRD creation failed');
+          onPrdReady?.(newFeature.id, d.prd);
+        })
+        .catch(err => {
+          onPrdReady?.(newFeature.id);
+          toast.error(`PRD creation failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Create failed';
@@ -546,55 +592,55 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>PM</FormLabel>
-                    <AvatarSelect options={PM_OPTIONS} value={form.pm} onChange={v => setField('pm', v)} placeholder="Optional" />
+                    <AvatarSelect options={withAv(PM_OPTIONS)} value={form.pm} onChange={v => setField('pm', v)} placeholder="Optional" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>TPM</FormLabel>
-                    <AvatarSelect options={TPM_OPTIONS} value={form.tpm} onChange={v => setField('tpm', v)} />
+                    <AvatarSelect options={withAv(TPM_OPTIONS)} value={form.tpm} onChange={v => setField('tpm', v)} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>UX Designer</FormLabel>
-                    <AvatarSelect options={UIUX_OWNERS()} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
+                    <AvatarSelect options={withAv(UIUX_OWNERS())} value={form.uiux} onChange={v => setField('uiux', v)} placeholder="Optional" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Content Designer</FormLabel>
-                    <AvatarSelect options={CONTENT_OPTIONS()} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} />
+                    <AvatarSelect options={withAv(CONTENT_OPTIONS())} value={form.contentDesigner} onChange={v => setField('contentDesigner', v)} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>DS</FormLabel>
-                    <AvatarSelect options={DA_OPTIONS()} value={form.da} onChange={v => setField('da', v)} />
+                    <AvatarSelect options={withAv(DA_OPTIONS())} value={form.da} onChange={v => setField('da', v)} />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>QA</FormLabel>
-                    <AvatarSelect options={QA_OPTIONS()} value={form.qa} onChange={v => setField('qa', v)} />
+                    <AvatarSelect options={withAv(QA_OPTIONS())} value={form.qa} onChange={v => setField('qa', v)} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Android</FormLabel>
-                    <AvatarSelect options={ANDROID_OWNERS()} value={form.android} onChange={v => setField('android', v)} placeholder="Optional" />
+                    <AvatarSelect options={withAv(ANDROID_OWNERS())} value={form.android} onChange={v => setField('android', v)} placeholder="Optional" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>iOS</FormLabel>
-                    <AvatarSelect options={IOS_OWNERS()} value={form.ios} onChange={v => setField('ios', v)} placeholder="Optional" />
+                    <AvatarSelect options={withAv(IOS_OWNERS())} value={form.ios} onChange={v => setField('ios', v)} placeholder="Optional" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Server</FormLabel>
-                    <AvatarSelect options={SERVER_OWNERS()} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" dropUp />
+                    <AvatarSelect options={withAv(SERVER_OWNERS())} value={form.server} onChange={v => setField('server', v)} placeholder="Optional" dropUp />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <FormLabel>Tech Owner</FormLabel>
-                    <AvatarSelect options={TECH_OWNERS()} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" dropUp />
+                    <AvatarSelect options={withAv(TECH_OWNERS())} value={form.techOwner} onChange={v => setField('techOwner', v)} placeholder="Optional" dropUp />
                   </div>
                 </div>
               </div>

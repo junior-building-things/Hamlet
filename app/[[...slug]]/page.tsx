@@ -152,6 +152,11 @@ export default function Home() {
     }
   }
 
+  /** Background PRD creation finished — swap the loading chip for the link. */
+  function handlePrdReady(featureId: string, prd?: string) {
+    setFeatures(prev => prev.map(f => f.id === featureId ? { ...f, prd, prdPending: false } : f));
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -223,6 +228,7 @@ export default function Home() {
             onSave={handleTempAdded}
             onClose={() => setShowAddModal(false)}
             onFeatureCreated={handleFeatureCreated}
+            onPrdReady={handlePrdReady}
           />
         )}
       </main>

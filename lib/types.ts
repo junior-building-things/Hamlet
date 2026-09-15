@@ -28,6 +28,7 @@ export interface Feature {
   tasks: Task[];
   lastUpdated: string;
   prd?: string;
+  prdPending?: boolean; // client-only: PRD still being created after New Feature
   figmaUrl?: string;
   complianceUrl?: string;
   canCompleteNode?: boolean;

@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
 import Image from 'next/image';
-import { Pencil, Copy, Check, Plus } from 'lucide-react';
+import { Pencil, Copy, Check, Plus, Loader2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 interface LinkDef {
@@ -18,6 +18,7 @@ interface LinkDef {
   url?: string;
   onClick?: () => void;
   invertInDark?: boolean;
+  pending?: boolean;
 }
 
 // Hook to track current theme (light/dark) from document.documentElement.
@@ -47,6 +48,8 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void, t
     links.push({ key: 'meego', label: 'Meego', icon: '/meego.png', iconW: 16, iconH: 16, color: '#B291F7', url: feature.meegoUrl });
   if (feature.prd)
     links.push({ key: 'prd', label: 'PRD', icon: '/prd.png', iconW: 14, iconH: 14, color: '#60A5FA', url: feature.prd });
+  else if (feature.prdPending)
+    links.push({ key: 'prd', label: 'Creating PRD…', icon: '', lucideIcon: Loader2, pending: true, iconW: 10, iconH: 10, color: 'var(--text-muted)', onClick: () => {} });
   if (feature.complianceUrl)
     links.push({ key: 'compliance', label: 'Compliance', icon: '/compliance.png', iconW: 14, iconH: 14, color: '#88DBDD', url: feature.complianceUrl });
   if (feature.figmaUrl)
@@ -259,7 +262,7 @@ function LinkChip({ link, index, total, onLinkUpdate }: {
   // brand mark sits comfortably in the center with a hairline of
   // breathing room.
   const iconEl = link.lucideIcon ? (
-    <link.lucideIcon className="w-[10px] h-[10px] shrink-0" style={{ color: link.color }} />
+    <link.lucideIcon className={`w-[10px] h-[10px] shrink-0 ${link.pending ? 'animate-spin' : ''}`} style={{ color: link.color }} />
   ) : link.dynamicIcon ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={link.icon} alt={link.label} className="w-[12px] h-[12px] shrink-0" style={invertStyle} />

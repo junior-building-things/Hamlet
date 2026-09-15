@@ -961,6 +961,26 @@ export async function readDocContentWithToken(docUrl: string, token: string): Pr
   return lines.join('\n') || '(empty document)';
 }
 
+/** Drive full-text search for docx files, as the user (the bot can't search). */
+export async function searchLarkDocs(query: string, userToken: string, count = 5): Promise<Array<{ title: string; url: string }>> {
+  const res = await fetch(`${LARK_BASE_URL}/open-apis/suite/docs-api/search/object`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${userToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ search_key: query, count, offset: 0, owner_ids: [], docs_types: ['docx'] }),
+  });
+  const data = await parseJson(res, 'drive_search') as {
+    code: number; msg?: string;
+    data?: { docs_entities?: Array<{ docs_token: string; docs_type: string; title: string }> };
+  };
+  if (data.code !== 0) {
+    console.warn(`[lark] doc search failed for "${query}": ${data.code} ${data.msg}`);
+    return [];
+  }
+  return (data.data?.docs_entities ?? [])
+    .filter(d => d.docs_type === 'docx')
+    .map(d => ({ title: d.title, url: `https://bytedance.sg.larkoffice.com/docx/${d.docs_token}` }));
+}
+
 /**
  * Pull the body text under each named section from a markdown-ish doc
  * representation (the kind `readDocContent` produces — `#`/`##`/`###`
@@ -2662,6 +2682,8 @@ export async function fillUserInteractionDesignTable(
 // ─── Scaffold Requirement detail + A/B Testing Setup tables ─────────────────
 
 export interface PrdScaffold {
+  /** Concise rewrite of the PM's description, when it needed one. */
+  description?: string;
   requirements: Array<{ scenario: string; logic: string[] }>;
   abGroups: Array<{ group: string; treatment: string; traffic: string }>;
 }
@@ -2842,11 +2864,12 @@ export async function copyPrdTemplate(
         meegoUrl: options?.meegoUrl,
         complianceUrl: options?.complianceUrl,
       }, botToken).catch(e => console.warn('PRD basic info fill failed:', e));
-      if (featureDescription?.trim()) {
-        await fillWhatWeAreBuilding(fileToken, featureDescription.trim(), botToken)
+      const scaffold = await options?.scaffold;
+      const description = scaffold?.description || featureDescription?.trim();
+      if (description) {
+        await fillWhatWeAreBuilding(fileToken, description, botToken)
           .catch(e => console.warn('Fill "What are we building" failed:', e));
       }
-      const scaffold = await options?.scaffold;
       if (scaffold) {
         await fillPrdScaffold(fileToken, scaffold, botToken)
           .catch(e => console.warn('PRD scaffold fill failed:', e));

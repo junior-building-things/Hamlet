@@ -127,12 +127,26 @@ Document content:
 const HAMLET_PRD_SECTION_AUTOGEN = `Write 2-4 sentences for a PRD section titled "\${section}". \${docContext}
 Return ONLY plain text.`;
 
+const HAMLET_PRD_RESEARCH_QUERIES = `A PM is creating a PRD for a TikTok feature called "\${featureName}":
+
+\${description}
+
+Suggest 2-4 short Lark Docs search queries (2-4 words each) that would find existing PRDs, tech designs or AB reports about the same product area or logic this feature changes. Prefer the established product term (e.g. "typing recommendation", "sticker panel") over this feature's own wording.
+
+Return ONLY a JSON array of strings.`;
+
 const HAMLET_PRD_SCAFFOLD = `You're drafting the skeleton of a TikTok PRD for a feature called "\${featureName}". The PM wrote this under "What we are building and why":
 
 \${description}
 
+Related existing documents found by searching Lark (earlier PRDs, tech designs, AB reports). Use them only to reuse established terminology, existing flow aspects and prior A/B setups — they describe what already exists, not what this feature must do:
+
+\${relatedDocs}
+
 Return ONLY a JSON object — no prose, no code fences:
-{"requirements": [{"scenario": string, "logic": string[]}], "abGroups": [{"group": string, "treatment": string, "traffic": string}]}
+{"description": string, "requirements": [{"scenario": string, "logic": string[]}], "abGroups": [{"group": string, "treatment": string, "traffic": string}]}
+
+description: if the PM's text is already 1-2 sentences, return it exactly as written. Otherwise rewrite it as at most 2 concise sentences keeping the what and the why. Never add anything the PM didn't say.
 
 requirements: rows of the Requirement Detail table. Each scenario is a user-facing capability or surface the feature introduces or changes (e.g. "Recommended stickers", "Recommendation logic") — usually 1-3, at most 5. For each, "logic" lists 2-6 short plain labels (no numbering, no trailing colon) for the aspects its Interactions/logic cell will need to specify, in the order a reader walks through them (e.g. "Entrance", "Trigger conditions", "Display", "Sending", "Dismissal", "Edge cases"). Aspects are never scenarios of their own. Labels only: never invent behaviour, numbers, thresholds or copy the description doesn't state.
 
@@ -489,13 +503,23 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     default: HAMLET_PRD_SECTION_AUTOGEN,
   },
   {
+    id: 'hamlet.prd_research_queries',
+    name: 'Hamlet — PRD related-doc search queries',
+    service: 'hamlet',
+    fileRef: 'lib/prd-scaffold.ts',
+    model: 'claude-haiku-4-5',
+    description: 'Suggests Lark Docs search queries to find existing PRDs / tech designs / AB reports before drafting a new PRD',
+    variables: ['featureName', 'description'],
+    default: HAMLET_PRD_RESEARCH_QUERIES,
+  },
+  {
     id: 'hamlet.prd_scaffold',
     name: 'Hamlet — Scaffold new PRD tables',
     service: 'hamlet',
     fileRef: 'lib/prd-scaffold.ts',
     model: 'claude-sonnet-5',
-    description: 'Proposes Requirement Detail scenarios (with Interactions/logic aspect labels) and an A/B setup for a newly created PRD',
-    variables: ['featureName', 'description'],
+    description: 'Tightens the PRD description and proposes Requirement Detail scenarios (with Interactions/logic aspects) and an A/B setup, using related Lark docs as context',
+    variables: ['featureName', 'description', 'relatedDocs'],
     default: HAMLET_PRD_SCAFFOLD,
   },
   {
