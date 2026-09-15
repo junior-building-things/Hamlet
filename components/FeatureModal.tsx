@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Feature, Priority } from '@/lib/types';
+import { Feature, Priority, PrdRequest } from '@/lib/types';
 import { X, Loader2, CheckCircle2, WandSparkles, Plus } from 'lucide-react';
 import Image from 'next/image';
 import { toast } from 'sonner';
@@ -17,8 +17,8 @@ interface Props {
   onNodeCompleted?: (featureId: string) => void;
   /** Called after background creation completes. null = failed (temp entry should be removed). */
   onFeatureCreated?: (tempId: string, feature: Feature | null) => void;
-  /** Called when background PRD creation finishes. No prd = failed. */
-  onPrdReady?: (featureId: string, prd?: string) => void;
+  /** Start background PRD creation for a just-created story (runs in page.tsx so it can be retried). */
+  onCreatePrd?: (featureId: string, request: PrdRequest) => void;
 }
 
 function av(name: string): AvatarOption { return { value: name, label: name, avatarUrl: AV[name] }; }
@@ -209,7 +209,7 @@ const inputCls = 'w-full bg-[var(--bg-elev-2)] border border-[var(--hairline)] t
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNodeCompleted, onFeatureCreated, onPrdReady }: Props) {
+export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNodeCompleted, onFeatureCreated, onCreatePrd }: Props) {
 
   // ── Edit-mode state ──
   const [completing, setCompleting]       = useState(false);
@@ -399,26 +399,15 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
 
       // The PRD (doc research + drafting) can take a minute; it runs after the
       // modal closes and the Links section shows a loading chip meanwhile.
-      fetch('/api/meego/create-prd', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      if (data.id) {
+        onCreatePrd?.(newFeature.id, {
           id:                 data.id,
           name:               newFeature.name,
           meegoUrl:           data.meegoUrl,
           featureDescription: featureDescription.trim() || undefined,
           useHalfDayPrd:      prdType === 'halfday' ? true : undefined,
-        }),
-      })
-        .then(async r => {
-          const d = await r.json() as { prd?: string; error?: string };
-          if (!r.ok || !d.prd) throw new Error(d.error ?? 'PRD creation failed');
-          onPrdReady?.(newFeature.id, d.prd);
-        })
-        .catch(err => {
-          onPrdReady?.(newFeature.id);
-          toast.error(`PRD creation failed: ${err instanceof Error ? err.message : String(err)}`);
         });
+      }
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Create failed';

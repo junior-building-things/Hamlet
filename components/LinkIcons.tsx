@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Feature } from '@/lib/types';
 import Image from 'next/image';
-import { Pencil, Copy, Check, Plus, Loader2 } from 'lucide-react';
+import { Pencil, Copy, Check, Plus, Loader2, RotateCw } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 interface LinkDef {
@@ -50,6 +50,8 @@ function buildLinks(feature: Feature, onPackageClick?: (ios: boolean) => void, t
     links.push({ key: 'prd', label: 'PRD', icon: '/prd.png', iconW: 14, iconH: 14, color: '#60A5FA', url: feature.prd });
   else if (feature.prdPending)
     links.push({ key: 'prd', label: 'Creating PRD…', icon: '', lucideIcon: Loader2, pending: true, iconW: 10, iconH: 10, color: 'var(--text-muted)', onClick: () => {} });
+  else if (feature.prdFailed)
+    links.push({ key: 'prd', label: 'PRD failed — click to retry', icon: '', lucideIcon: RotateCw, iconW: 10, iconH: 10, color: '#E5484D', onClick: () => window.dispatchEvent(new CustomEvent('hamlet:retry-prd', { detail: feature.id })) });
   if (feature.complianceUrl)
     links.push({ key: 'compliance', label: 'Compliance', icon: '/compliance.png', iconW: 14, iconH: 14, color: '#88DBDD', url: feature.complianceUrl });
   if (feature.figmaUrl)

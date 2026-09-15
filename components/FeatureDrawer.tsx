@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useSync } from '@/components/SyncContext';
-import { X, AlertTriangle, Activity, FileText, MessageCircleQuestion, Loader2 } from 'lucide-react';
+import { X, AlertTriangle, Activity, FileText, MessageCircleQuestion, Loader2, RotateCw } from 'lucide-react';
 import Image from 'next/image';
 
 /**
@@ -362,7 +362,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
           )}
 
           {/* Links */}
-          {(links.length > 0 || feature.prdPending) && (
+          {(links.length > 0 || feature.prdPending || feature.prdFailed) && (
             <Section title="Links">
               <div className="flex flex-wrap gap-1.5">
                 {links.map(l => (
@@ -382,6 +382,16 @@ export function FeatureDrawer({ feature, onClose }: Props) {
                     <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                     Creating PRD…
                   </span>
+                )}
+                {feature.prdFailed && !feature.prd && !feature.prdPending && (
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent('hamlet:retry-prd', { detail: feature.id }))}
+                    className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--r-sm)] bg-[var(--bg-elev-2)] border border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--hairline-strong)] text-[11.5px] transition-colors"
+                  >
+                    <RotateCw className="w-3 h-3 shrink-0" />
+                    Retry PRD
+                  </button>
                 )}
               </div>
             </Section>

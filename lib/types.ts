@@ -18,6 +18,15 @@ export interface MeegoComment {
   createdAt: string;
 }
 
+/** What /api/meego/create-prd needs; kept client-side so a failed PRD can be retried. */
+export interface PrdRequest {
+  id: string;
+  name: string;
+  meegoUrl?: string;
+  featureDescription?: string;
+  useHalfDayPrd?: boolean;
+}
+
 export interface Feature {
   id: string;
   name: string;
@@ -29,6 +38,7 @@ export interface Feature {
   lastUpdated: string;
   prd?: string;
   prdPending?: boolean; // client-only: PRD still being created after New Feature
+  prdFailed?: boolean;  // client-only: background PRD creation failed (Retry PRD in Links)
   figmaUrl?: string;
   complianceUrl?: string;
   canCompleteNode?: boolean;

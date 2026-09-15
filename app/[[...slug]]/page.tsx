@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
-import { Feature } from '@/lib/types';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { toast } from 'sonner';
+import { Feature, PrdRequest } from '@/lib/types';
 import { Sidebar, SidebarView } from '@/components/Sidebar';
 import { ProjectView } from '@/components/ProjectView';
 import { ChatView } from '@/components/ChatView';
@@ -152,10 +153,42 @@ export default function Home() {
     }
   }
 
-  /** Background PRD creation finished — swap the loading chip for the link. */
-  function handlePrdReady(featureId: string, prd?: string) {
-    setFeatures(prev => prev.map(f => f.id === featureId ? { ...f, prd, prdPending: false } : f));
+  // PRD creation runs after the New Feature modal closes. The request is kept
+  // per feature so a failure can be retried from the Links chip.
+  const prdRequests = useRef(new Map<string, PrdRequest>());
+  const runPrdCreation = useCallback((featureId: string) => {
+    const request = prdRequests.current.get(featureId);
+    if (!request) return;
+    setFeatures(prev => prev.map(f => f.id === featureId ? { ...f, prdPending: true, prdFailed: false } : f));
+    fetch('/api/meego/create-prd', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+      .then(async r => {
+        const d = await r.json().catch(() => ({})) as { prd?: string; error?: string };
+        if (!r.ok || !d.prd) throw new Error(d.error ?? `HTTP ${r.status}`);
+        prdRequests.current.delete(featureId);
+        setFeatures(prev => prev.map(f => f.id === featureId ? { ...f, prd: d.prd, prdPending: false, prdFailed: false } : f));
+      })
+      .catch(err => {
+        setFeatures(prev => prev.map(f => f.id === featureId ? { ...f, prdPending: false, prdFailed: true } : f));
+        toast.error(`PRD creation failed: ${err instanceof Error ? err.message : String(err)}. Use Retry PRD in Links.`);
+      });
+  }, []);
+
+  function handleCreatePrd(featureId: string, request: PrdRequest) {
+    prdRequests.current.set(featureId, request);
+    runPrdCreation(featureId);
   }
+
+  // Retry chips (LinkIcons / FeatureDrawer) live deep in the tree; they signal
+  // with a window event instead of threading a callback through every view.
+  useEffect(() => {
+    const onRetry = (e: Event) => runPrdCreation((e as CustomEvent<string>).detail);
+    window.addEventListener('hamlet:retry-prd', onRetry);
+    return () => window.removeEventListener('hamlet:retry-prd', onRetry);
+  }, [runPrdCreation]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -228,7 +261,7 @@ export default function Home() {
             onSave={handleTempAdded}
             onClose={() => setShowAddModal(false)}
             onFeatureCreated={handleFeatureCreated}
-            onPrdReady={handlePrdReady}
+            onCreatePrd={handleCreatePrd}
           />
         )}
       </main>

@@ -1151,6 +1151,56 @@ export async function createFeature(params: CreateFeatureParams): Promise<{ id: 
   };
 }
 
+/**
+ * A story with exactly this name created within `withinMs` — guards against the
+ * same feature being submitted twice. Names containing a quote are skipped
+ * rather than risk a malformed MQL string.
+ */
+export async function findRecentStoryByName(
+  name: string,
+  withinMs: number,
+): Promise<{ id: string; meegoUrl: string; createdAt: string } | null> {
+  if (name.includes("'")) return null;
+  const raw = await callMeegoMcp('search_by_mql', {
+    project_key: TIKTOK_PROJECT_KEY,
+    mql: "SELECT `work_item_id` FROM `TikTok`.`需求` WHERE `name` = '" + name + "'",
+  });
+  const data = JSON.parse(raw) as {
+    data?: Record<string, Array<{ moql_field_list: Array<{ key: string; value: { long_value?: number } }> }>>;
+  };
+  const ids = Object.values(data.data ?? {}).flat()
+    .map(row => row.moql_field_list.find(f => f.key === 'work_item_id')?.value.long_value)
+    .filter((v): v is number => typeof v === 'number')
+    .slice(0, 5);
+  for (const id of ids) {
+    const brief = JSON.parse(await callMeegoMcp('get_workitem_brief', {
+      project_key: TIKTOK_PROJECT_KEY,
+      work_item_id: String(id),
+    })) as { work_item_attribute?: { create_time?: string } };
+    const created = Date.parse(brief.work_item_attribute?.create_time ?? '');
+    if (!isNaN(created) && Date.now() - created < withinMs) {
+      return {
+        id: String(id),
+        meegoUrl: `https://meego.larkoffice.com/${TIKTOK_PROJECT_KEY}/story/detail/${id}`,
+        createdAt: new Date(created).toISOString(),
+      };
+    }
+  }
+  return null;
+}
+
+/** The legal / compliance ticket URL Meego auto-creates for a story ('' until it exists). */
+export async function getComplianceUrl(workItemId: string): Promise<string> {
+  const raw = await callMeegoMcp('get_workitem_brief', {
+    project_key: TIKTOK_PROJECT_KEY,
+    work_item_id: workItemId,
+    fields: ['field_due3fb'],
+  });
+  const brief = JSON.parse(raw) as { work_item_fields?: Array<{ key: string; value?: unknown }> };
+  const value = brief.work_item_fields?.find(f => f.key === 'field_due3fb')?.value;
+  return typeof value === 'string' ? value : '';
+}
+
 export async function updateFeatureFields(
   projectKey: string,
   workItemId: string,
