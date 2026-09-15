@@ -581,6 +581,26 @@ export async function saveDigestState(state: DigestStateFile): Promise<void> {
 }
 
 /**
+ * Apply a small change to the state under a GCS generation precondition, so a
+ * concurrent writer (a digest pass runs for 10-26 minutes) can't be clobbered.
+ * Prefer this over loadDigestState + saveDigestState for narrow updates.
+ */
+export async function updateDigestState(mutate: (state: DigestStateFile) => void): Promise<void> {
+  try {
+    await updateJsonState<DigestStateFile>(STATE_PATH, current => {
+      const state = current
+        ? migrateLegacy(current)
+        : { updatedAt: new Date().toISOString(), recentRunTimes: [], features: {} };
+      mutate(state);
+      state.updatedAt = new Date().toISOString();
+      return state;
+    });
+  } catch (e) {
+    console.warn('[digest-state] failed to update digest state:', e);
+  }
+}
+
+/**
  * Drop any persisted entry whose `lastSeenIso` is older than
  * STALE_RISK_MAX_AGE_DAYS. Mutates the state file in place. Called right
  * before saving so the file doesn't grow unbounded if a feature stops

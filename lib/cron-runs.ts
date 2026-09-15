@@ -10,7 +10,7 @@
  * the UI forever.
  */
 
-import { loadDigestState, saveDigestState } from './digest-state';
+import { loadDigestState, updateDigestState } from './digest-state';
 import { getCronById } from './cron-registry';
 
 const STALE_RUN_MS = 15 * 60 * 1000; // 15 minutes — covers the longest digest runs
@@ -29,9 +29,9 @@ export async function markCronStarted(id: string, source: 'manual' | 'scheduled'
   try {
     const def = getCronById(id);
     const label = def?.name ?? id;
-    const state = await loadDigestState();
-    state.cronRuns = { ...(state.cronRuns ?? {}), [id]: { label, startedAt: new Date().toISOString(), source } };
-    await saveDigestState(state);
+    await updateDigestState(state => {
+      state.cronRuns = { ...(state.cronRuns ?? {}), [id]: { label, startedAt: new Date().toISOString(), source } };
+    });
   } catch (e) {
     console.warn('[cron-runs] markCronStarted failed:', e);
   }
@@ -40,13 +40,12 @@ export async function markCronStarted(id: string, source: 'manual' | 'scheduled'
 /** Clear the running marker for a cron job. Always called from a finally. */
 export async function markCronEnded(id: string): Promise<void> {
   try {
-    const state = await loadDigestState();
-    if (state.cronRuns && state.cronRuns[id]) {
+    await updateDigestState(state => {
+      if (!state.cronRuns?.[id]) return;
       const next = { ...state.cronRuns };
       delete next[id];
       state.cronRuns = next;
-      await saveDigestState(state);
-    }
+    });
   } catch (e) {
     console.warn('[cron-runs] markCronEnded failed:', e);
   }

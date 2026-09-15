@@ -3791,14 +3791,20 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         console.log(`[digests] PRD Ready card → "${f.name}" (PRD/Design Prep → Line Review)`);
         lineReviewNotified.add(f.workItemId);
         notifiedSetChanged = true;
-        sendFeatureCard({
-          name: f.name,
-          meegoUrl: f.meegoUrl,
-          prdUrl: f.prd,
-          priority: f.priority ?? 'P1',
-          headerTitle: 'PRD Ready ✅',
-          headerTemplate: 'green',
-        }).catch(e => console.warn(`[digests] Line Review card send failed for "${f.name}":`, e));
+        try {
+          await sendFeatureCard({
+            name: f.name,
+            meegoUrl: f.meegoUrl,
+            prdUrl: f.prd,
+            priority: f.priority ?? 'P1',
+            headerTitle: 'PRD Ready ✅',
+            headerTemplate: 'green',
+          });
+        } catch (e) {
+          // Un-mark so the next pass retries instead of dropping the card.
+          lineReviewNotified.delete(f.workItemId);
+          console.warn(`[digests] Line Review card send failed for "${f.name}":`, e);
+        }
       } else if (f.overallStatusName === LINE_REVIEW_STATUS && !alreadyNotified) {
         // Skipped: log why so we can audit cases where prevStatus wasn't
         // PRD/Design Prep (likely the source of the recent over-firing).
@@ -3844,8 +3850,13 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         console.log('[digests] AB-open queue skipped (paused)');
       }
     } else if (abOpenTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_open')) {
-      sendAbOpenDigestCard(abOpenTransitions)
-        .catch(e => console.warn('[digests] AB-open digest card send failed:', e));
+      try {
+        await sendAbOpenDigestCard(abOpenTransitions);
+      } catch (e) {
+        for (const t of abOpenTransitions) abOpenNotified.delete(t.feature.workItemId);
+        notifiedSetChanged = true;
+        console.warn('[digests] AB-open digest card send failed:', e);
+      }
     } else if (abOpenTransitions.length > 0) {
       console.log('[digests] AB-open digest skipped (paused or section-filtered)');
     }
@@ -4634,8 +4645,13 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     console.log(`[digests] AB-concluded scan: ${scanned} chats scanned, ${matched} matched`);
     if (abConcludedChanged) state.abConcludedNotified = [...abConcluded];
     if (abConcludedTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_concluded')) {
-      sendAbConcludedDigestCard(abConcludedTransitions)
-        .catch(e => console.warn('[digests] AB-concluded digest card send failed:', e));
+      try {
+        await sendAbConcludedDigestCard(abConcludedTransitions);
+      } catch (e) {
+        for (const t of abConcludedTransitions) abConcluded.delete(t.feature.workItemId);
+        state.abConcludedNotified = [...abConcluded];
+        console.warn('[digests] AB-concluded digest card send failed:', e);
+      }
     } else if (abConcludedTransitions.length > 0) {
       console.log('[digests] AB-concluded digest skipped (paused or section-filtered)');
     }

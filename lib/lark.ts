@@ -1,4 +1,4 @@
-import { loadDigestState, saveDigestState } from './digest-state';
+import { loadDigestState, updateDigestState } from './digest-state';
 
 
 const LARK_BASE_URL          = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
@@ -483,8 +483,7 @@ export async function getLarkUserToken(): Promise<string | undefined> {
   if (!refresh) return undefined;
   const result = await refreshUserToken(refresh);
   if (!result) return undefined;
-  state.larkUserRefreshToken = result.refreshToken;
-  await saveDigestState(state);
+  await updateDigestState(s => { s.larkUserRefreshToken = result.refreshToken; });
   return result.accessToken;
 }
 

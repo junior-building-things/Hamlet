@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
-import { loadDigestState, saveDigestState } from '@/lib/digest-state';
+import { updateDigestState } from '@/lib/digest-state';
 
 export async function GET(req: NextRequest) {
   const base   = process.env.LARK_BASE_URL ?? 'https://open.larkoffice.com';
@@ -108,9 +108,7 @@ export async function GET(req: NextRequest) {
   // a 20026 "refresh token is invalid" error in those flows.
   if (refreshToken) {
     try {
-      const state = await loadDigestState();
-      state.larkUserRefreshToken = refreshToken;
-      await saveDigestState(state);
+      await updateDigestState(state => { state.larkUserRefreshToken = refreshToken; });
     } catch (e) {
       console.warn('[auth/callback] failed to persist refresh token to digest state:', e);
     }

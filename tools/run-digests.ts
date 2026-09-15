@@ -216,6 +216,7 @@ async function main(): Promise<void> {
   // pile on top of a manual pass that's still going (or vice versa).
   if (!(await claimPass())) return;
 
+  let ran = false;
   try {
     const { runDailyDigests, runDigestSection } = await import('../lib/digests');
 
@@ -243,9 +244,12 @@ async function main(): Promise<void> {
       }
     }
 
-    // Stamp the per-cron "Last run" heartbeat + clear any consumed trigger.
-    await finishPass(true);
+    ran = true;
   } finally {
+    // Stamp the per-cron "Last run" heartbeat + clear any consumed trigger.
+    // In the finally so a thrown pass doesn't leave the trigger request behind
+    // for the next 10-minute poll to re-run.
+    await finishPass(ran);
     await releasePass();
   }
   console.log(`[run-digests] ${ts()} finished mode=${mode}`);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCronById } from '@/lib/cron-registry';
-import { loadDigestState, saveDigestState } from '@/lib/digest-state';
+import { updateDigestState } from '@/lib/digest-state';
 import { patchSchedulerJobSchedule } from '@/lib/cloud-scheduler';
 import { buildCronExpression } from '@/lib/cron-expr';
 
@@ -48,12 +48,12 @@ export async function PUT(
 
     // Pause toggle path (default).
     const paused = !!body.paused;
-    const state = await loadDigestState();
-    const set = new Set(state.cronPaused ?? []);
-    if (paused) set.add(id);
-    else set.delete(id);
-    state.cronPaused = [...set];
-    await saveDigestState(state);
+    await updateDigestState(state => {
+      const set = new Set(state.cronPaused ?? []);
+      if (paused) set.add(id);
+      else set.delete(id);
+      state.cronPaused = [...set];
+    });
     return NextResponse.json({ ok: true, id, paused });
   } catch (e) {
     console.warn('[crons] update failed:', e);

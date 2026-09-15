@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCronById } from '@/lib/cron-registry';
 import { runSchedulerJob, getSchedulerJob } from '@/lib/cloud-scheduler';
 import { markCronStarted, markCronEnded } from '@/lib/cron-runs';
-import { loadDigestState, saveDigestState } from '@/lib/digest-state';
+import { updateDigestState } from '@/lib/digest-state';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 600;
@@ -37,12 +37,12 @@ export async function POST(
   // runs the pass, then clears the flag + writes the heartbeat.
   if (def.runsInJob) {
     try {
-      const state = await loadDigestState();
-      state.cronTriggerRequests = {
-        ...(state.cronTriggerRequests ?? {}),
-        [def.id]: new Date().toISOString(),
-      };
-      await saveDigestState(state);
+      await updateDigestState(state => {
+        state.cronTriggerRequests = {
+          ...(state.cronTriggerRequests ?? {}),
+          [def.id]: new Date().toISOString(),
+        };
+      });
       // Surface a "working" marker immediately so the sidebar reflects the ask.
       await markCronStarted(def.id, 'manual');
       return NextResponse.json({
