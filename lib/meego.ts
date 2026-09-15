@@ -1102,7 +1102,8 @@ export interface CreateFeatureParams {
 
 export async function createFeature(params: CreateFeatureParams): Promise<{ id: string; meegoUrl: string }> {
   const fields: Array<{ field_key: string; field_value: string }> = [
-    { field_key: 'template',  field_value: '207989' },
+    // 业务需求-TT. The older 业务需求-TikTok (207989) now fails Meego's option-visibility check.
+    { field_key: 'template',  field_value: '249319' },
     { field_key: 'name',      field_value: params.name },
     { field_key: 'priority',  field_value: PRIORITY_TO_MEEGO[params.priority] },
   ];
@@ -1140,7 +1141,7 @@ export async function createFeature(params: CreateFeatureParams): Promise<{ id: 
     const m = raw.match(/"?work_item_id"?\s*[:\s]+(\d+)/);
     if (m) workItemId = m[1];
   }
-  if (!workItemId) throw new Error(`Could not parse work_item_id from response: ${raw}`);
+  if (!workItemId) throw new Error(raw.startsWith('error=') ? `Meego create failed: ${raw}` : `Could not parse work_item_id from response: ${raw}`);
 
   return {
     id: workItemId,
