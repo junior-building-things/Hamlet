@@ -2670,7 +2670,7 @@ export interface PrdScaffold {
  * Write `rows` (left-aligned cell values) into the first table under a heading
  * matching one of `headings`, growing or trimming the data rows to fit.
  * Columns not supplied in a row are left untouched. An array value renders as
- * one bold "Label:" line per entry.
+ * a numbered list, one item per entry.
  */
 async function fillTableUnderHeading(docId: string, headings: string[], rows: Array<Array<string | string[]>>, token: string): Promise<void> {
   if (rows.length === 0) return;
@@ -2710,17 +2710,38 @@ async function fillTableUnderHeading(docId: string, headings: string[], rows: Ar
   const colSize = (table?.table as { property?: { column_size?: number } })?.property?.column_size ?? 1;
   const cellIds = table?.children ?? [];
   const requests: UpdateRequest[] = [];
+  const lists: Array<{ cellId: string; items: string[] }> = [];
   rows.forEach((values, i) => {
     values.slice(0, colSize).forEach((value, c) => {
-      const paraId = freshById.get(cellIds[(i + 1) * colSize + c])?.children?.[0];
+      const cellId = cellIds[(i + 1) * colSize + c];
+      const paraId = freshById.get(cellId)?.children?.[0];
       if (!paraId) return;
-      const elements = typeof value === 'string'
-        ? [{ text_run: { content: value, text_element_style: {} } }]
-        : value.map((label, j) => ({ text_run: { content: `${label}:${j < value.length - 1 ? '\n' : ''}`, text_element_style: { bold: true } } }));
-      requests.push({ block_id: paraId, update_text_elements: { elements } });
+      if (typeof value === 'string') {
+        requests.push({ block_id: paraId, update_text_elements: { elements: [{ text_run: { content: value, text_element_style: {} } }] } });
+      } else if (value.length > 0) {
+        lists.push({ cellId, items: value });
+      }
     });
   });
   await batchUpdateBlocks(docId, requests, token);
+
+  // A cell can't be left empty, so append the list first, then drop the cell's original paragraph.
+  for (const { cellId, items } of lists) {
+    const children = items.map((content, j) => ({
+      block_type: 13,
+      ordered: { elements: [{ text_run: { content, text_element_style: {} } }], style: { sequence: j === 0 ? '1' : 'auto' } },
+    }));
+    const created = await parseJson(await fetch(
+      `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${cellId}/children?document_revision_id=-1`,
+      { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ children, index: -1 }) },
+    ), 'create_list') as { code: number; msg?: string };
+    if (created.code !== 0) throw new Error(`create_list error ${created.code}: ${created.msg}`);
+    const deleted = await parseJson(await fetch(
+      `${LARK_BASE_URL}/open-apis/docx/v1/documents/${docId}/blocks/${cellId}/children/batch_delete?document_revision_id=-1`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ start_index: 0, end_index: 1 }) },
+    ), 'delete_cell_para') as { code: number; msg?: string };
+    if (deleted.code !== 0) throw new Error(`delete_cell_para error ${deleted.code}: ${deleted.msg}`);
+  }
 }
 
 export async function fillPrdScaffold(docId: string, scaffold: PrdScaffold, token: string): Promise<void> {
