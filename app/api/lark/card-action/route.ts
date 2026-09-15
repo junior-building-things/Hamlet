@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
   try { body = JSON.parse(rawBody); } catch { /* empty */ }
 
   // If the payload is encrypted, decrypt it using ENCRYPT_KEY
+  let decrypted = false;
   if (typeof body.encrypt === 'string') {
     const encryptKey = process.env.LARK_ENCRYPT_KEY;
     if (!encryptKey) {
@@ -33,12 +34,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'encryption not configured' }, { status: 400 });
     }
     try {
-      const decrypted = decryptLarkPayload(body.encrypt, encryptKey);
-      body = JSON.parse(decrypted);
+      const decryptedText = decryptLarkPayload(body.encrypt, encryptKey);
+      body = JSON.parse(decryptedText);
+      decrypted = true;
       console.log('[card-action] decrypted:', JSON.stringify(body).slice(0, 500));
     } catch (e) {
       console.warn('[card-action] decrypt failed:', e);
       return NextResponse.json({ error: 'decrypt failed' }, { status: 400 });
+    }
+  }
+
+  // Lark encrypts every callback once an encrypt key is configured, so a
+  // plaintext body can't have come from Lark — reject it rather than acting
+  // on an unauthenticated payload.
+  if (process.env.LARK_ENCRYPT_KEY && typeof body.encrypt !== 'string' && !decrypted) {
+    console.warn('[card-action] rejected unencrypted payload');
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  const verificationToken = process.env.LARK_VERIFICATION_TOKEN;
+  if (verificationToken) {
+    const token = body.token ?? (body.header as { token?: string } | undefined)?.token;
+    if (token !== verificationToken) {
+      console.warn('[card-action] rejected payload with bad verification token');
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
   }
 

@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
   // app. A full HMAC check can be added later if needed.
   // The MEEGO_AI_NODE_TOKEN is still set as an env var for future HMAC use.
   const expectedPluginId = 'MII_69D4B13554C20CDD';
-  if (body.source_plugin_id && body.source_plugin_id !== expectedPluginId) {
-    console.warn(`[prd-writer] unexpected source_plugin_id: ${body.source_plugin_id}`);
+  if (body.source_plugin_id !== expectedPluginId) {
+    console.warn(`[prd-writer] unexpected source_plugin_id: ${body.source_plugin_id ?? '(missing)'}`);
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

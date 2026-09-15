@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     body:    JSON.stringify({ app_id: appId, app_secret: secret }),
   });
   const appTokenData = await appTokenRes.json() as { code: number; app_access_token?: string; msg?: string };
-  console.log('app_access_token response:', appTokenData);
+  console.log('app_access_token response code:', appTokenData.code, appTokenData.msg ?? '');
   if (appTokenData.code !== 0 || !appTokenData.app_access_token) {
     console.error('Failed to get app_access_token:', appTokenData);
     return NextResponse.redirect(`${origin}/login?error=token_exchange`);
@@ -48,7 +48,6 @@ export async function GET(req: NextRequest) {
   });
   const tokenRaw = await tokenRes.text();
   console.log('user token response status:', tokenRes.status);
-  console.log('user token response body:', tokenRaw);
 
   let tokenData: Record<string, unknown>;
   try { tokenData = JSON.parse(tokenRaw) as Record<string, unknown>; }
