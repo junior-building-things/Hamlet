@@ -1,9 +1,8 @@
 import { generateText } from './llm';
 import { getPrompt, getPromptModel } from './prompts';
 import { getPromptDef, renderPrompt } from './prompt-registry';
-import { refreshUserToken, readDocContentWithToken, searchLarkDocs } from './lark';
+import { getLarkUserToken, readDocContentWithToken, searchLarkDocs } from './lark';
 import type { PrdScaffold } from './lark';
-import { loadDigestState, saveDigestState } from './digest-state';
 
 const MAX_RELATED_DOCS = 5;
 const MAX_DOC_CHARS = 6000;
@@ -17,18 +16,6 @@ async function renderRegistered(id: string, vars: Record<string, string>): Promi
 
 function parseJson<T>(raw: string): T {
   return JSON.parse(raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')) as T;
-}
-
-/** Thomas's user token (refresh tokens rotate, so persist the new one like the digest does). */
-async function getLarkUserToken(): Promise<string | undefined> {
-  const state = await loadDigestState();
-  const refresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-  if (!refresh) return undefined;
-  const result = await refreshUserToken(refresh);
-  if (!result) return undefined;
-  state.larkUserRefreshToken = result.refreshToken;
-  await saveDigestState(state);
-  return result.accessToken;
 }
 
 /** Search Lark for existing PRDs / tech designs / AB reports in the same area and return their text. */

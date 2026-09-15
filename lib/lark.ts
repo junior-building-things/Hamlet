@@ -1,3 +1,5 @@
+import { loadDigestState, saveDigestState } from './digest-state';
+
 
 const LARK_BASE_URL          = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 const WIKI_NODE_TOKEN        = 'RUOXwaQVaiPKAOkjoywcTRdynuf';
@@ -469,6 +471,39 @@ export async function grantBotEditAccess(
     console.warn('[lark] grantBotEditAccess error:', e);
     return false;
   }
+}
+
+/**
+ * Thomas's Lark user token. Refresh tokens rotate on use, so the new one is
+ * persisted to the same GCS state the digest pipeline reads.
+ */
+export async function getLarkUserToken(): Promise<string | undefined> {
+  const state = await loadDigestState();
+  const refresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
+  if (!refresh) return undefined;
+  const result = await refreshUserToken(refresh);
+  if (!result) return undefined;
+  state.larkUserRefreshToken = result.refreshToken;
+  await saveDigestState(state);
+  return result.accessToken;
+}
+
+/**
+ * Open link sharing to the whole tenant ("People in the organization with the
+ * link can view"). Needs the owner's token — the bot app has no permission
+ * scope for sharing settings.
+ */
+export async function setTenantLinkSharing(fileToken: string, userToken: string): Promise<void> {
+  const res = await fetch(
+    `${LARK_BASE_URL}/open-apis/drive/v2/permissions/${fileToken}/public?type=docx`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${userToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ link_share_entity: 'tenant_readable' }),
+    },
+  );
+  const data = await parseJson(res, 'link_sharing') as { code: number; msg?: string };
+  if (data.code !== 0) throw new Error(`link sharing error ${data.code}: ${data.msg}`);
 }
 
 // ─── Transfer doc ownership ─────────────────────────────────────────────────
@@ -2885,6 +2920,15 @@ export async function copyPrdTemplate(
       }
     })(),
   ]);
+
+  // Link sharing defaults to restricted; open it to the org (view) as the owner.
+  try {
+    const userToken = await getLarkUserToken();
+    if (userToken) await setTenantLinkSharing(fileToken, userToken);
+    else console.warn('[lark] no user token — PRD link sharing left restricted');
+  } catch (e) {
+    console.warn('[lark] PRD link sharing failed:', e);
+  }
 
   return data.data?.file?.url ?? `https://bytedance.sg.larkoffice.com/docx/${fileToken}`;
 }
