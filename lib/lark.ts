@@ -2662,16 +2662,17 @@ export async function fillUserInteractionDesignTable(
 // ─── Scaffold Requirement detail + A/B Testing Setup tables ─────────────────
 
 export interface PrdScaffold {
-  scenarios: string[];
+  requirements: Array<{ scenario: string; logic: string[] }>;
   abGroups: Array<{ group: string; treatment: string; traffic: string }>;
 }
 
 /**
  * Write `rows` (left-aligned cell values) into the first table under a heading
  * matching one of `headings`, growing or trimming the data rows to fit.
- * Columns not supplied in a row are left untouched.
+ * Columns not supplied in a row are left untouched. An array value renders as
+ * one bold "Label:" line per entry.
  */
-async function fillTableUnderHeading(docId: string, headings: string[], rows: string[][], token: string): Promise<void> {
+async function fillTableUnderHeading(docId: string, headings: string[], rows: Array<Array<string | string[]>>, token: string): Promise<void> {
   if (rows.length === 0) return;
   const blocks = await getDocBlocks(docId, token);
   const byId = new Map(blocks.map(b => [b.block_id, b]));
@@ -2713,14 +2714,17 @@ async function fillTableUnderHeading(docId: string, headings: string[], rows: st
     values.slice(0, colSize).forEach((value, c) => {
       const paraId = freshById.get(cellIds[(i + 1) * colSize + c])?.children?.[0];
       if (!paraId) return;
-      requests.push({ block_id: paraId, update_text_elements: { elements: [{ text_run: { content: value, text_element_style: {} } }] } });
+      const elements = typeof value === 'string'
+        ? [{ text_run: { content: value, text_element_style: {} } }]
+        : value.map((label, j) => ({ text_run: { content: `${label}:${j < value.length - 1 ? '\n' : ''}`, text_element_style: { bold: true } } }));
+      requests.push({ block_id: paraId, update_text_elements: { elements } });
     });
   });
   await batchUpdateBlocks(docId, requests, token);
 }
 
 export async function fillPrdScaffold(docId: string, scaffold: PrdScaffold, token: string): Promise<void> {
-  await fillTableUnderHeading(docId, ['requirement detail', 'user interaction'], scaffold.scenarios.map(s => [s]), token);
+  await fillTableUnderHeading(docId, ['requirement detail', 'user interaction'], scaffold.requirements.map(r => [r.scenario, r.logic]), token);
   await fillTableUnderHeading(docId, ['a/b testing setup', 'ab testing setup', 'a/b test setup'],
     scaffold.abGroups.map(g => [g.group, g.treatment, g.traffic]), token);
 }
