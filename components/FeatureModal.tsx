@@ -234,6 +234,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
     qa:              QA_OPTIONS()[0].value,
   });
   const [prdType, setPrdType]               = useState<'regular' | 'halfday'>('regular');
+  const [createChatGroup, setCreateChatGroup] = useState(false);
   const [featureDescription, setFeatureDescription] = useState('');
   const [rewritingName, setRewritingName]           = useState(false);
   const [rewritingDesc, setRewritingDesc]           = useState(false);
@@ -324,6 +325,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
           roles,
           featureDescription:      featureDescription.trim() || undefined,
           useHalfDayPrd:           prdType === 'halfday' ? true : undefined,
+          createChatGroup,
         }),
       });
       const data = await res.json() as { id?: string; meegoUrl?: string; prd?: string; prdError?: string; error?: string };
@@ -518,6 +520,22 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
                     <FormLabel>Social Component</FormLabel>
                     <CustomSelect options={SOCIAL_COMPONENTS.map(s => ({ value: s.id, label: s.label }))} value={form.socialComponent} onChange={v => setField('socialComponent', v)} />
                   </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <FormLabel>Chat Group</FormLabel>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={createChatGroup}
+                    onClick={() => setCreateChatGroup(v => !v)}
+                    className="flex items-center gap-2 w-fit py-1 text-[12.5px] text-[var(--text)]"
+                  >
+                    <span className={`relative inline-flex w-8 h-[18px] shrink-0 rounded-full transition-colors ${createChatGroup ? 'bg-[var(--ai)]' : 'bg-[var(--hairline)]'}`}>
+                      <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${createChatGroup ? 'translate-x-[14px]' : ''}`} />
+                    </span>
+                    Create a Meego chat group
+                  </button>
                 </div>
               </div>
 
