@@ -517,7 +517,7 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     name: 'Hamlet — Scaffold new PRD tables',
     service: 'hamlet',
     fileRef: 'lib/prd-scaffold.ts',
-    model: 'claude-sonnet-5',
+    model: 'claude-opus-5',
     description: 'Tightens the PRD description and proposes Requirement Detail scenarios (with Interactions/logic aspects) and an A/B setup, using related Lark docs as context',
     variables: ['featureName', 'description', 'relatedDocs'],
     default: HAMLET_PRD_SCAFFOLD,

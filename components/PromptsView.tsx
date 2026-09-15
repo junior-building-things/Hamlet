@@ -11,6 +11,7 @@ const THINKING_BUDGET_OPTIONS: ThinkingBudget[] = ['dynamic', 'off', 'minimal', 
 const MODEL_OPTIONS = [
   'claude-haiku-4-5',
   'claude-sonnet-5',
+  'claude-opus-5',
   // Junior (separate service) still runs its prompts on Gemini.
   'gemini-3.1-flash-lite-preview',
   'gemini-2.5-flash-lite',
