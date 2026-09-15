@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSession } from '@/lib/session';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 import {
   buildInteractiveCardContent,
@@ -54,7 +55,19 @@ const AB_OPEN_MENTION_OPEN_ID = 'ou_1e7fa98f1e46311d8a5e4554dc7a668e';
  * We re-derive postParagraphs from the new cardContent so the post stays
  * in sync with the visible card.
  */
+/** Junior calls this service-to-service with the shared secret; the Hamlet UI
+ *  calls it with a session cookie. The path is in middleware's PUBLIC list,
+ *  so the check has to live here. */
+async function authorized(req: NextRequest): Promise<boolean> {
+  const secret = process.env.AGENT_RUN_SECRET;
+  if (secret && req.headers.get('authorization') === `Bearer ${secret}`) return true;
+  return !!(await getSession());
+}
+
 export async function POST(req: NextRequest) {
+  if (!await authorized(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
   try {
     const body = await req.json() as {
       cardMsgId?: string;
