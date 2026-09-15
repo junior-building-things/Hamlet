@@ -31,11 +31,19 @@ const PRIORITIES = [
 ];
 
 const QUARTERLY_CYCLES = [
-  { id: 'xg717kfyx', label: '2025-Q4' },
   { id: '15axr3g7g', label: '2026-Q1' },
   { id: '5350il55y', label: '2026-Q2' },
   { id: '3y4d9_0oy', label: '2026-Q3' },
+  { id: '0rr91j6iz', label: '2026-Q4' },
+  { id: 'sy3uuo2o3', label: '2027-Q1' },
 ];
+
+// Default to the calendar quarter we're in; fall back to the latest option.
+function currentQuarterId(): string {
+  const d = new Date();
+  const label = `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
+  return (QUARTERLY_CYCLES.find(q => q.label === label) ?? QUARTERLY_CYCLES[QUARTERLY_CYCLES.length - 1]).id;
+}
 
 const BUSINESS_LINES = BUSINESS_LINE_OPTIONS;
 
@@ -46,8 +54,6 @@ const SOCIAL_COMPONENTS = [
   { id: 'vpw0ytamc',              label: 'Group chat' },
   { id: 'uyk6ev819',              label: 'Avatar' },
   { id: 'elnrsmb1h',              label: 'DM Camera' },
-  { id: 'hzxm3i0l3',              label: 'DM Growth' },
-  { id: 'vg3bccd0p',              label: 'Rich Message (sticker & camera)' },
   { id: 'Advanced message types', label: 'Advanced message types' },
   { id: 'DM tech Horizontal',     label: 'Tech Horizontal' },
   { id: 'ea3daoeps',              label: 'Streak' },
@@ -55,7 +61,6 @@ const SOCIAL_COMPONENTS = [
   { id: 'n9owpaqxm',              label: 'Inbox & Notice' },
   { id: 'f5hto66ka',              label: 'Relation' },
   { id: 'hyojgtl64',              label: 'Internal Share' },
-  { id: '4gvqfvw9l',              label: 'DM Push' },
   { id: '4u0yg974v',              label: 'IMSDK' },
   { id: 'g16xgcqb3',              label: 'Messaging Safety & Permission' },
   { id: 'dya1s1cea',              label: 'Platforms (Msg Management+SCP)' },
@@ -87,16 +92,6 @@ const SOCIAL_COMPONENTS = [
   { id: '5iqcrp5u9',              label: 'Double Column' },
   { id: '8my6m3q7x',              label: 'Interest Community' },
   { id: 'qvid_2qez',              label: 'Info Graphic & Text' },
-  { id: 'e0087agcz',              label: 'Foundation' },
-  { id: '7179p9d_n',              label: 'Photo-Text Feature' },
-  { id: 'pbpg1jn5m',              label: 'Standalone App (history)' },
-  { id: 'vrc2x3l2i',              label: 'Counter' },
-  { id: 'i_6pj4ua3',              label: 'Social Sort' },
-  { id: '_o5lg5h7o',              label: 'Collab' },
-  { id: '2y6v0lv_i',              label: 'Photo-Text Standalone' },
-  { id: 'zvmpr6qqk',              label: 'Now App' },
-  { id: 'kdy9b7vww',              label: 'Now' },
-  { id: 'cjvllclrm',              label: 'Profile' },
 ];
 
 // Role members with keys + avatars. Helper to look up the avatar URL fresh
@@ -224,7 +219,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
   const [form, setForm] = useState({
     name:            '',
     priority:        '1',           // P1 default
-    quarterlyCycle:  '5350il55y',   // 2026-Q2 default
+    quarterlyCycle:  currentQuarterId(),
     businessLine:    '5f105019a8b9a853da6476d1',   // Messaging default
     socialComponent: 'mz8vxxems',   // Sticker & Typing Rec default
     pm:              '',
