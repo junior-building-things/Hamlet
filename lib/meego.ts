@@ -1123,6 +1123,7 @@ export async function createFeature(params: CreateFeatureParams): Promise<{ id: 
   fields.push({ field_key: 'field_894cbf', field_value: 'true' }); // Need Content Design
   fields.push({ field_key: 'need_ab',      field_value: 'true' }); // Need AB Experiment
   fields.push({ field_key: 'field_391771', field_value: 'true' }); // Need UI/UX
+  fields.push({ field_key: 'group_type',   field_value: 'disabled' }); // Chat group = Do not create
 
   const raw = await callMeegoMcp('create_workitem', {
     project_key: TIKTOK_PROJECT_KEY,
