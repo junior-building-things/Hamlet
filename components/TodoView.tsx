@@ -314,7 +314,7 @@ export function TodoView({ features, setFeatures }: Props) {
 
       {/* Detail drawer */}
       <FeatureDrawer
-        feature={drawerFeature}
+        feature={drawerFeature ? features.find(f => f.id === drawerFeature.id) ?? drawerFeature : null}
         onClose={() => setDrawerFeature(null)}
         onEdit={feat => {
           setEditing(feat);

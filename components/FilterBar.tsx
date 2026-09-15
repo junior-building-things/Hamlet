@@ -185,8 +185,10 @@ function applyTheme(mode: ThemeMode) {
 export function ThemeToggle() {
   const [mode, setMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'system';
-    const s = localStorage.getItem('hamlet_theme');
-    return s === 'dark' || s === 'light' || s === 'system' ? s : 'system';
+    try {
+      const s = localStorage.getItem('hamlet_theme');
+      return s === 'dark' || s === 'light' || s === 'system' ? s : 'system';
+    } catch { return 'system'; }
   });
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -211,7 +213,7 @@ export function ThemeToggle() {
 
   function pick(next: ThemeMode) {
     setMode(next);
-    localStorage.setItem('hamlet_theme', next);
+    try { localStorage.setItem('hamlet_theme', next); } catch { /* ignore */ }
     applyTheme(next);
     setOpen(false);
   }

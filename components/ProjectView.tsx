@@ -97,6 +97,11 @@ interface Props {
   onDrawerOpened?: () => void;
 }
 
+/** localStorage throws where site data is blocked; preferences aren't worth a crash. */
+function persist(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch { /* ignore */ }
+}
+
 export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOpened }: Props) {
   const [search,         setSearch]         = useState('');
   const [statusFilter,   setStatusFilterState]   = useState<string[]>(() => {
@@ -107,8 +112,8 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
     if (typeof window === 'undefined') return [];
     try { return JSON.parse(localStorage.getItem(STORAGE_PRIORITY_FILTER) ?? '[]'); } catch { return []; }
   });
-  function setStatusFilter(v: string[])   { setStatusFilterState(v);  localStorage.setItem(STORAGE_STATUS_FILTER, JSON.stringify(v)); }
-  function setPriority(v: string[])       { setPriorityState(v);      localStorage.setItem(STORAGE_PRIORITY_FILTER, JSON.stringify(v)); }
+  function setStatusFilter(v: string[])   { setStatusFilterState(v);  persist(STORAGE_STATUS_FILTER, JSON.stringify(v)); }
+  function setPriority(v: string[])       { setPriorityState(v);      persist(STORAGE_PRIORITY_FILTER, JSON.stringify(v)); }
   const [loading,        setLoading]        = useState(features.length === 0);
   const [fetchError,     setFetchError]     = useState<string | null>(null);
   const [syncingAll,     setSyncingAll]     = useState(false);
@@ -129,6 +134,12 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
     setDrawerFeature(f);
   }, [markViewed]);
 
+  // Re-read the open feature from the list so a background sync's updates
+  // show up in the drawer instead of the snapshot taken when it opened.
+  const liveDrawerFeature = drawerFeature
+    ? features.find(f => f.id === drawerFeature.id) ?? drawerFeature
+    : null;
+
   // Page asks to pop the drawer for a specific feature (e.g. right
   // after New Feature create succeeded). Match by id; if the feature
   // is in the list, open + acknowledge.
@@ -144,23 +155,23 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
 
   const [groupBy, setGroupByState] = useState<GroupBy>(() => {
     if (typeof window === 'undefined') return 'none';
-    return (localStorage.getItem(STORAGE_GROUP_BY) as GroupBy) || 'none';
+    try { return (localStorage.getItem(STORAGE_GROUP_BY) as GroupBy) || 'none'; } catch { return 'none'; }
   });
   const [sortBy, setSortByState] = useState<SortBy>(() => {
     if (typeof window === 'undefined') return 'none';
-    return (localStorage.getItem(STORAGE_SORT_BY) as SortBy) || 'none';
+    try { return (localStorage.getItem(STORAGE_SORT_BY) as SortBy) || 'none'; } catch { return 'none'; }
   });
   const [sortDir, setSortDirState] = useState<SortDir>(() => {
     if (typeof window === 'undefined') return 'asc';
-    return (localStorage.getItem(STORAGE_SORT_DIR) as SortDir) || 'asc';
+    try { return (localStorage.getItem(STORAGE_SORT_DIR) as SortDir) || 'asc'; } catch { return 'asc'; }
   });
 
-  function setGroupBy(v: GroupBy)  { setGroupByState(v);  localStorage.setItem(STORAGE_GROUP_BY, v); }
-  function setSortBy(v: SortBy)    { setSortByState(v);   localStorage.setItem(STORAGE_SORT_BY, v); }
+  function setGroupBy(v: GroupBy)  { setGroupByState(v);  persist(STORAGE_GROUP_BY, v); }
+  function setSortBy(v: SortBy)    { setSortByState(v);   persist(STORAGE_SORT_BY, v); }
   function toggleSortDir() {
     const next: SortDir = sortDir === 'asc' ? 'desc' : 'asc';
     setSortDirState(next);
-    localStorage.setItem(STORAGE_SORT_DIR, next);
+    persist(STORAGE_SORT_DIR, next);
   }
 
   // ── Detail sync ────────────────────────────────────────────────────────────
@@ -746,8 +757,13 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
         if (!r.ok) throw new Error('Update failed');
       });
     } catch {
-      // Revert on error
-      setFeatures(fs => fs.map(f => f.id !== featureId ? f : prev));
+      // Revert only the fields this edit touched — a background sync may have
+      // refreshed others in the meantime, and those shouldn't be rolled back.
+      const reverted: Partial<Feature> = {};
+      for (const k of Object.keys(updates) as Array<keyof Feature>) {
+        (reverted as Record<string, unknown>)[k] = prev[k];
+      }
+      setFeatures(fs => fs.map(f => f.id !== featureId ? f : { ...f, ...reverted, manualEdits: prev.manualEdits }));
       toast.error('Failed to save changes');
     }
   }
@@ -849,7 +865,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
           Renders inside the main scroll container (which is `relative`)
           so the drawer + backdrop don't cover the sidebar. */}
       <FeatureDrawer
-        feature={drawerFeature}
+        feature={liveDrawerFeature}
         onClose={() => setDrawerFeature(null)}
         onEdit={feat => {
           setEditing(feat);
