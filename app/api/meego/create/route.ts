@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createFeature, updateFeatureFields, CreateFeatureParams } from '@/lib/meego';
 import { copyPrdTemplate } from '@/lib/lark';
+import { generatePrdScaffold } from '@/lib/prd-scaffold';
+
+export const maxDuration = 300;
 
 const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
 
@@ -16,6 +19,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
+    // Draft the PRD table scaffold in parallel with the Meego + Lark calls.
+    const description = body.featureDescription?.trim();
+    const scaffold = description ? generatePrdScaffold(body.name.trim(), description) : undefined;
+
     // 1. Create the Meego story
     const result = await createFeature(body);
 
@@ -26,6 +33,7 @@ export async function POST(req: NextRequest) {
       prd = await copyPrdTemplate(body.name.trim(), body.featureDescription, {
         useHalfDayPrd: body.useHalfDayPrd,
         meegoUrl: result.meegoUrl,
+        scaffold,
       });
       // 3. Write the PRD URL back to the Meego wiki field
       await updateFeatureFields(TIKTOK_PROJECT_KEY, result.id, { prd });

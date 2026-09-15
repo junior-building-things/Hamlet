@@ -127,6 +127,17 @@ Document content:
 const HAMLET_PRD_SECTION_AUTOGEN = `Write 2-4 sentences for a PRD section titled "\${section}". \${docContext}
 Return ONLY plain text.`;
 
+const HAMLET_PRD_SCAFFOLD = `You're drafting the skeleton of a TikTok PRD for a feature called "\${featureName}". The PM wrote this under "What we are building and why":
+
+\${description}
+
+Return ONLY a JSON object — no prose, no code fences:
+{"scenarios": string[], "abGroups": [{"group": string, "treatment": string, "traffic": string}]}
+
+scenarios: 3-7 short labels for the rows of the Requirement Detail table, i.e. the parts of the flow this PRD will need to specify, in the order a reader walks through it (e.g. "Entrance", "Initial state", "Recommendation logic", "Empty state", "Edge cases"). Labels only. Never invent behaviour, numbers, thresholds or copy the description doesn't state.
+
+abGroups: a proposed A/B setup. The first group is always {"group": "v0 (Control)", "treatment": "Online version", "traffic": "10%"}. Add one group per genuinely distinct treatment the description implies (usually one, at most three), named "v1", "v2", ... with a one-line treatment saying what differs from control. Give every group the same traffic.`;
+
 const HAMLET_PRD_COMMENT_REPLY = `You are a TikTok product manager replying to a comment on a PRD document.
 
 Comment quoted text: "\${quote}"
@@ -476,6 +487,16 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     description: 'Generates 2-4 sentences for a new PRD section',
     variables: ['section', 'docContext'],
     default: HAMLET_PRD_SECTION_AUTOGEN,
+  },
+  {
+    id: 'hamlet.prd_scaffold',
+    name: 'Hamlet — Scaffold new PRD tables',
+    service: 'hamlet',
+    fileRef: 'lib/prd-scaffold.ts',
+    model: 'claude-sonnet-5',
+    description: 'Proposes Requirement Detail scenario labels and an A/B setup for a newly created PRD',
+    variables: ['featureName', 'description'],
+    default: HAMLET_PRD_SCAFFOLD,
   },
   {
     id: 'hamlet.prd_comment_reply',
