@@ -7,7 +7,7 @@ Hamlet is a Next.js web app for TikTok PMs to track features, sync with Meego, c
 ## Stack
 
 - **Next.js 16** (App Router), React 19, TypeScript, Tailwind 4
-- **LLM calls** all go through [lib/llm.ts](lib/llm.ts) `generateText()`, which shells out to the `claude` CLI (`claude -p`). There is no API key and no second provider — Gemini was removed. Auth is the user's Claude subscription: an interactive login locally, `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) in the container. Never set `ANTHROPIC_API_KEY` — it would switch the CLI to per-token API billing. Model comes from the prompt registry (`opts.model`) → `CLAUDE_MODEL` → `claude-sonnet-5`; non-`claude-*` names are ignored so stale `gemini-*` overrides in GCS fall back instead of failing (that guard applies to `hamlet.*` prompts only — see `getPromptModel`). Every Hamlet prompt defaults to `claude-sonnet-5`; the exception is the Chat tab, a single conversational call ([app/api/chat/route.ts](app/api/chat/route.ts)) that reuses Junior's `junior.system_prompt` + its GCS context files and runs on `claude-opus-4-8` at `high` effort (`opts.effort`). The old intent-classify → [app/api/chat/execute/route.ts](app/api/chat/execute/route.ts) pipeline is retired; that route is unused. `@anthropic-ai/sdk` is a dependency but currently unused. **Junior is a separate service and still runs on Gemini** — the `junior.*` prompt-registry entries are stored by Hamlet but executed there.
+- **LLM calls** all go through [lib/llm.ts](lib/llm.ts) `generateText()`, which shells out to the `claude` CLI (`claude -p`). There is no API key and no second provider — Gemini was removed. Auth is the user's Claude subscription: an interactive login locally, `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) in the container. Never set `ANTHROPIC_API_KEY` — it would switch the CLI to per-token API billing. Model comes from the prompt registry (`opts.model`) → `CLAUDE_MODEL` → `claude-sonnet-5`; non-`claude-*` names are ignored so stale `gemini-*` overrides in GCS fall back instead of failing (that guard applies to `hamlet.*` prompts only — see `getPromptModel`). Most Hamlet prompts default to `claude-sonnet-5`; the exceptions are the Chat tab, a single conversational call ([app/api/chat/route.ts](app/api/chat/route.ts)) that reuses Junior's `junior.system_prompt` + its GCS context files and runs on `claude-opus-4-8` at `high` effort (`opts.effort`), `hamlet.prd_scaffold` on `claude-opus-5`, and `hamlet.prd_research_queries` on `claude-haiku-4-5`. The old intent-classify → [app/api/chat/execute/route.ts](app/api/chat/execute/route.ts) pipeline is retired; that route is unused. `@anthropic-ai/sdk` is a dependency but currently unused. **Junior is a separate service and still runs on Gemini** — the `junior.*` prompt-registry entries are stored by Hamlet but executed there.
 - **Lark** Open APIs (`LARK_APP_ID`, `LARK_APP_SECRET`, `LARK_BOT_OPEN_ID`)
 - **Meego** work items (`MEEGO_USER_TOKEN`, `MEEGO_PROJECT_KEY`)
 - **GCS** JSON state at `gs://tiktok-im-hamlet-state` (no `@google-cloud/storage` — REST + metadata token in [lib/gcs-state.ts](lib/gcs-state.ts))
@@ -27,6 +27,7 @@ This is **not** stock Next.js from training data. Before changing routing, data 
 | [components/](components/) | UI views (`ProjectView`, `ChatView`, `JuniorContextView`, …) |
 | [lib/prompt-registry.ts](lib/prompt-registry.ts) | All prompt IDs + defaults for Hamlet, Junior, Rio, Mia |
 | [lib/junior-context.ts](lib/junior-context.ts) | GCS-backed markdown Junior loads at chat time (`junior/context/*.md`) |
+| [lib/prd-scaffold.ts](lib/prd-scaffold.ts) | New-PRD drafting: Lark doc research + the scaffold the create-PRD route fills in |
 | [tools/](tools/) | Deterministic Python scripts invoked by workflows (WAT framework) |
 | [workflows/](workflows/) | Markdown SOPs that define automation processes for the WAT framework |
 
@@ -35,8 +36,10 @@ Client routes use `history.pushState` (e.g. `/projects`, `/chat`); rewrites in [
 ## Services and boundaries
 
 - **Hamlet (this repo)** — UI, feature cache, digest crons, prompt overrides UI, proxies to Junior (`JUNIOR_URL` + `JUNIOR_CRON_SECRET`).
-- **Junior** — Lark bot, tool calling, PRD flows; deployed separately (e.g. Cloud Run). Hamlet must not assume Junior code lives here except via HTTP APIs.
+- **Junior** — Lark bot, tool calling, PRD flows; deployed separately (e.g. Cloud Run). Hamlet must not assume Junior code lives here except via HTTP APIs. Junior calls Hamlet's `/api/cards/edit-section` with `Authorization: Bearer $AGENT_RUN_SECRET`, so that secret must hold the same value on both services.
 - **Rio / Mia** — Lark app credentials in [lib/agents.ts](lib/agents.ts); webhooks at [app/api/agents/webhook/route.ts](app/api/agents/webhook/route.ts).
+
+Creating a feature is two calls, so the modal doesn't wait on the PRD: [app/api/meego/create](app/api/meego/create/route.ts) makes the Meego story (409 if one with the same name appeared in the last 10 min), then the client calls [app/api/meego/create-prd](app/api/meego/create-prd/route.ts), which researches related Lark docs, copies the template, fills the tables, links Meego + the auto-created legal ticket, and opens org link sharing. While that runs the feature carries client-only `prdPending` / `prdFailed` flags; the retry chip re-runs it via a `hamlet:retry-prd` window event handled in [app/[[...slug]]/page.tsx](app/[[...slug]]/page.tsx).
 
 When adding prompts: register in [lib/prompt-registry.ts](lib/prompt-registry.ts), call `getPrompt(id, default)` from [lib/prompts.ts](lib/prompts.ts) at runtime. Overrides live in GCS `hamlet/prompts.json` (30s in-memory cache).
 
@@ -48,7 +51,9 @@ When adding prompts: register in [lib/prompt-registry.ts](lib/prompt-registry.ts
   - The Job needs the same env as the service; CI mirrors it automatically via `--env-vars-file` (see [deploy.yml](.github/workflows/deploy.yml)) so the two can't drift — don't hand-maintain a second copy. Note Cloud Run Jobs set `CLOUD_RUN_JOB`, **not** `K_SERVICE`; [lib/gcs-state.ts](lib/gcs-state.ts) checks both before falling back to gcloud ADC.
   - [tools/launchd/](tools/launchd/) is the retired Mac LaunchAgent setup this replaced; the installed plists are renamed `.disabled`. Don't re-enable them alongside the Job — both would run and double-post cards.
 - Junior context files: `gs://tiktok-im-hamlet-state/junior/context/<name>.md`.
-- Auth: Lark OAuth + session cookie ([lib/session.ts](lib/session.ts), [app/api/auth/](app/api/auth/)). Access limited to configured users.
+- Auth: Lark OAuth + session cookie ([lib/session.ts](lib/session.ts), [app/api/auth/](app/api/auth/)). Access limited to configured users. Anything in [middleware.ts](middleware.ts)'s `PUBLIC` list bypasses that check, so **those routes must authenticate themselves and fail closed** — Lark callbacks by rejecting unencrypted payloads, the Meego AI node by requiring its `source_plugin_id`, service-to-service calls by bearer token or session. Never log a token.
+- GCS state writes: `updateDigestState()` ([lib/digest-state.ts](lib/digest-state.ts)) applies a narrow change under a generation precondition and is the default for request-path writes, since a digest pass holds a whole-file snapshot for 10-26 minutes. `saveDigestState()` overwrites the entire document — pass-level saves only.
+- Thomas's Lark user token: `getLarkUserToken()` ([lib/lark.ts](lib/lark.ts)) refreshes from `larkUserRefreshToken` in GCS state and persists the rotated token. Needed for anything the bot app has no scope for — doc search and link-sharing settings. It expires; when it does, those steps degrade with a warning and he re-logs into Hamlet.
 
 ## Commands
 
@@ -99,58 +104,7 @@ Rules:
 ---
 
 ## Behavioral Guardrails
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with the project-specific instructions above as needed.
 
-**Tradeoff:** these guidelines bias toward caution over speed. For trivial tasks, use judgment.
-
-### 1. Think Before Coding
-Don't assume. Don't hide confusion. Surface tradeoffs.
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them — don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-### 2. Simplicity First
-Minimum code that solves the problem. Nothing speculative.
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-### 3. Surgical Changes
-Touch only what you must. Clean up only your own mess.
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it — don't delete it.
-
-When your changes create orphans:
-- Remove imports / variables / functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: every changed line should trace directly to the user's request.
-
-### 4. Goal-Driven Execution
-Define success criteria. Loop until verified.
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+The general working rules — think before coding, simplicity first, surgical changes, goal-driven
+execution — live in `~/.claude/CLAUDE.md` and apply here. They bias toward caution over speed; for
+trivial tasks, use judgment. Everything above this line is what's specific to Hamlet.
