@@ -125,6 +125,7 @@ const IOS_OWNERS = (): AvatarOption[] => [
 const UIUX_OWNERS = (): AvatarOption[] => [
   opt('7205032929586593796', 'Tao Zhu'),
   opt('7493184335885942785', 'Hazel Li'),
+  opt('7329451058114183171', 'Janice Wang'),
 ];
 const DA_OPTIONS = (): AvatarOption[] => [
   opt('7107489609088647170', 'Lionel Lew'),
@@ -134,6 +135,7 @@ const CONTENT_OPTIONS = (): AvatarOption[] => [
 ];
 const QA_OPTIONS = (): AvatarOption[] => [
   opt('7242202760668643331', 'Xiaobo Tian'),
+  opt('7182859175200964609', 'Tong Jiao'),
 ];
 const PM_OPTIONS: AvatarOption[] = [
   { value: 'thomas.oefverstroem', label: 'Thomas', avatarUrl: AV['Thomas'] },
@@ -362,6 +364,8 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
           socialComponentLabel:    SOCIAL_COMPONENTS.find(s => s.id === form.socialComponent)?.label,
           roles,
           createChatGroup,
+          featureDescription:      featureDescription.trim() || undefined,
+          useHalfDayPrd:           prdType === 'halfday' ? true : undefined,
       });
       const res = await postCreate();
       const data = await res.json() as { id?: string; meegoUrl?: string; error?: string; reused?: boolean; minutesAgo?: number };

@@ -156,6 +156,42 @@ async function finishPass(ran: boolean): Promise<void> {
   await saveDigestState(state);
 }
 
+// Hamlet's New Feature flow records each story in state.pendingPrds and the
+// browser creates the PRD straight away. Anything still pending well after the
+// create-prd route's 5-min limit was never requested or failed — finish it here.
+const PENDING_PRD_GRACE_MS = 8 * 60 * 1000;
+const PENDING_PRD_GIVE_UP_MS = 24 * 60 * 60 * 1000;
+const PENDING_PRD_MAX_ATTEMPTS = 3;
+
+async function finishPendingPrds(): Promise<void> {
+  const { loadDigestState, updateDigestState } = await import('../lib/digest-state');
+  const pending = (await loadDigestState()).pendingPrds ?? {};
+  for (const [id, request] of Object.entries(pending)) {
+    const age = Date.now() - Date.parse(request.createdAt);
+    if (age < PENDING_PRD_GRACE_MS) continue;
+    if (age > PENDING_PRD_GIVE_UP_MS || (request.attempts ?? 0) >= PENDING_PRD_MAX_ATTEMPTS) {
+      console.warn(`[run-digests] giving up on the PRD for ${id} ("${request.name}")`);
+      await updateDigestState(s => {
+        const next = { ...(s.pendingPrds ?? {}) };
+        delete next[id];
+        s.pendingPrds = next;
+      });
+      continue;
+    }
+    try {
+      const { createPrdForStory } = await import('../lib/prd-create');
+      const prd = await createPrdForStory(id, request);
+      console.log(`[run-digests] finished PRD for ${id} ("${request.name}"): ${prd}`);
+    } catch (e) {
+      console.error(`[run-digests] PRD for ${id} failed:`, e);
+      await updateDigestState(s => {
+        const entry = s.pendingPrds?.[id];
+        if (entry) s.pendingPrds = { ...s.pendingPrds, [id]: { ...entry, attempts: (entry.attempts ?? 0) + 1 } };
+      });
+    }
+  }
+}
+
 async function main(): Promise<void> {
   await loadDotEnv();
 
@@ -171,6 +207,7 @@ async function main(): Promise<void> {
   // pass ONLY when the Cron Jobs UI has queued a manual-trigger request.
   // Exits immediately otherwise, so it's safe to fire frequently.
   if (mode === 'watch-trigger') {
+    await finishPendingPrds();
     const pending = await pendingTriggers();
     if (pending.length === 0) {
       console.log(`[run-digests] ${ts()} watch-trigger: no pending requests`);

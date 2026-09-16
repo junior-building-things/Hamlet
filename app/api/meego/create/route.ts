@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createFeature, findRecentStoryByName, CreateFeatureParams } from '@/lib/meego';
+import { updateDigestState } from '@/lib/digest-state';
 
 // A second submit of the same name inside this window reuses the existing story.
 const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
@@ -8,7 +9,7 @@ const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
 // the New Feature modal can close without waiting on the PRD.
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as CreateFeatureParams;
+    const body = await req.json() as CreateFeatureParams & { featureDescription?: string; useHalfDayPrd?: boolean };
     const name = body.name?.trim();
     if (!name) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
@@ -28,7 +29,24 @@ export async function POST(req: NextRequest) {
       console.warn('[meego/create] duplicate check failed, creating anyway:', e);
     }
 
-    return NextResponse.json(await createFeature({ ...body, name }));
+    const created = await createFeature({ ...body, name });
+
+    // Record everything needed to finish the PRD, so the digest Job can do it
+    // if the browser never asks (dropped connection, stale tab) or it fails.
+    await updateDigestState(s => {
+      s.pendingPrds = {
+        ...(s.pendingPrds ?? {}),
+        [created.id]: {
+          name,
+          meegoUrl: created.meegoUrl,
+          featureDescription: body.featureDescription?.trim() || undefined,
+          useHalfDayPrd: body.useHalfDayPrd,
+          quarterlyCycleOptionId: body.quarterlyCycleOptionId,
+          createdAt: new Date().toISOString(),
+        },
+      };
+    });
+    return NextResponse.json(created);
   } catch (err) {
     console.error('Meego create error:', err);
     return NextResponse.json(

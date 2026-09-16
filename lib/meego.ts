@@ -1211,6 +1211,29 @@ export async function getStoryPrdUrl(workItemId: string): Promise<string> {
   return getStoryField(workItemId, 'wiki');
 }
 
+/**
+ * Make sure the story's Quarterly Cycle (季度规划) is the option picked in Hamlet.
+ * A Meego automation resets it to the current quarter a few seconds after a
+ * story is created, so this runs after that has had time to fire.
+ */
+export async function ensureQuarterlyCycle(workItemId: string, optionId: string): Promise<boolean> {
+  const raw = await callMeegoMcp('get_workitem_brief', {
+    project_key: TIKTOK_PROJECT_KEY,
+    work_item_id: workItemId,
+    fields: ['field_675419'],
+  });
+  const brief = JSON.parse(raw) as { work_item_fields?: Array<{ key: string; value?: unknown }> };
+  const value = brief.work_item_fields?.find(f => f.key === 'field_675419')?.value;
+  const current = Array.isArray(value) ? value.map(v => (v as { value?: string }).value) : [];
+  if (current.length === 1 && current[0] === optionId) return false;
+  await callMeegoMcp('update_field', {
+    project_key: TIKTOK_PROJECT_KEY,
+    work_item_id: workItemId,
+    fields: [{ field_key: 'field_675419', field_value: JSON.stringify([{ option_id: optionId }]) }],
+  });
+  return true;
+}
+
 export async function updateFeatureFields(
   projectKey: string,
   workItemId: string,

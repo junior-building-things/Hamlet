@@ -70,6 +70,18 @@ export interface JuniorChatsCache {
   chats: JuniorChatCacheEntry[];
 }
 
+/** What's needed to create (or finish) the PRD for a Hamlet-created story. */
+export interface PendingPrd {
+  name: string;
+  meegoUrl: string;
+  featureDescription?: string;
+  useHalfDayPrd?: boolean;
+  /** The Quarterly Cycle picked in Hamlet — a Meego automation overwrites it after create. */
+  quarterlyCycleOptionId?: string;
+  createdAt: string;
+  attempts?: number;
+}
+
 export interface DigestStateFile {
   updatedAt: string;
   /** ISO timestamps of recent digest runs, oldest first. Used as activity-log cutoff. */
@@ -124,6 +136,13 @@ export interface DigestStateFile {
    */
   larkUserAccessToken?: string;
   larkUserAccessTokenExpiresAt?: number;
+  /**
+   * Stories created from Hamlet's New Feature modal whose PRD isn't confirmed
+   * yet, keyed by Meego work item id. The browser asks for the PRD right away;
+   * the digest Job's 10-minute watch-trigger poll finishes any the browser
+   * never requested or that failed. Cleared once the PRD exists.
+   */
+  pendingPrds?: Record<string, PendingPrd>;
   /**
    * Meego work item IDs that have already received an AB-open notification
    * card. Used so the backfill (notify every feature currently in 实验中)
@@ -425,6 +444,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const larkUserAccessTokenExpiresAt = typeof obj.larkUserAccessTokenExpiresAt === 'number'
     ? obj.larkUserAccessTokenExpiresAt
     : undefined;
+  const pendingPrds = (obj.pendingPrds && typeof obj.pendingPrds === 'object')
+    ? (obj.pendingPrds as DigestStateFile['pendingPrds'])
+    : undefined;
   const abOpenNotified = Array.isArray(obj.abOpenNotified)
     ? (obj.abOpenNotified as unknown[]).map(String)
     : undefined;
@@ -485,6 +507,7 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     larkUserRefreshToken,
     larkUserAccessToken,
     larkUserAccessTokenExpiresAt,
+    pendingPrds,
     abOpenNotified,
     abConcludedNotified,
     lineReviewNotified,

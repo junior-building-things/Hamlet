@@ -1,73 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateFeatureFields, getComplianceUrl, getStoryPrdUrl } from '@/lib/meego';
-import { copyPrdTemplate, updatePrdBasicInfo, getLarkBotToken, resolveDocIdFromUrl } from '@/lib/lark';
-import { generatePrdScaffold } from '@/lib/prd-scaffold';
+import { loadDigestState, type PendingPrd } from '@/lib/digest-state';
+import { createPrdForStory } from '@/lib/prd-create';
 
 export const maxDuration = 300;
 
-const TIKTOK_PROJECT_KEY = '5f105019a8b9a853da64767f';
-
-/** Meego creates the legal ticket a few seconds after the story; wait up to a minute for it. */
-async function waitForComplianceUrl(workItemId: string): Promise<string> {
-  for (let attempt = 0; attempt < 12; attempt++) {
-    try {
-      const url = await getComplianceUrl(workItemId);
-      if (url) return url;
-    } catch (e) {
-      console.warn('[create-prd] legal ticket lookup failed:', e);
-    }
-    await new Promise(r => setTimeout(r, 5000));
-  }
-  return '';
-}
-
-/** Create the PRD for a just-created Meego story and link it back to the story. */
+/** Create the PRD for a just-created Meego story (see lib/prd-create.ts). */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as {
-      id?: string; name?: string; meegoUrl?: string; featureDescription?: string; useHalfDayPrd?: boolean;
+    const body = await req.json() as Partial<PendingPrd> & { id?: string };
+    if (!body.id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+    // The create route recorded the full request; the browser may only know part of it.
+    const stored = (await loadDigestState()).pendingPrds?.[body.id];
+    const name = body.name?.trim() || stored?.name;
+    if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    const request: PendingPrd = {
+      name,
+      meegoUrl: body.meegoUrl || stored?.meegoUrl || '',
+      featureDescription: body.featureDescription ?? stored?.featureDescription,
+      useHalfDayPrd: body.useHalfDayPrd ?? stored?.useHalfDayPrd,
+      quarterlyCycleOptionId: stored?.quarterlyCycleOptionId,
+      createdAt: stored?.createdAt ?? new Date().toISOString(),
     };
-    const name = body.name?.trim();
-    if (!body.id || !name) return NextResponse.json({ error: 'id and name are required' }, { status: 400 });
 
-    // A retry (or a reused story) must not produce a second PRD doc.
-    try {
-      const existing = await getStoryPrdUrl(body.id);
-      if (existing) {
-        console.log(`[create-prd] ${body.id} already has a PRD — returning it`);
-        return NextResponse.json({ prd: existing, reused: true });
-      }
-    } catch (e) {
-      console.warn('[create-prd] existing-PRD check failed, creating anyway:', e);
-    }
-
-    // Research + drafting and the legal-ticket lookup run alongside the template copy.
-    const legalTicket = waitForComplianceUrl(body.id);
-    const description = body.featureDescription?.trim();
-    const scaffold = description ? generatePrdScaffold(name, description) : undefined;
-    const prd = await copyPrdTemplate(name, description, {
-      useHalfDayPrd: body.useHalfDayPrd,
-      meegoUrl: body.meegoUrl,
-      scaffold,
-    });
-
-    try {
-      await updateFeatureFields(TIKTOK_PROJECT_KEY, body.id, { prd });
-    } catch (e) {
-      console.warn('PRD link-back to Meego failed:', e);
-    }
-
-    const complianceUrl = await legalTicket;
-    if (complianceUrl) {
-      try {
-        await updatePrdBasicInfo(await resolveDocIdFromUrl(prd), { complianceUrl }, await getLarkBotToken());
-      } catch (e) {
-        console.warn('PRD legal ticket link failed:', e);
-      }
-    } else {
-      console.warn(`[create-prd] no legal ticket on ${body.id} after 60s — PRD left without it`);
-    }
-    return NextResponse.json({ prd });
+    return NextResponse.json({ prd: await createPrdForStory(body.id, request) });
   } catch (err) {
     console.error('PRD create error:', err);
     return NextResponse.json(
