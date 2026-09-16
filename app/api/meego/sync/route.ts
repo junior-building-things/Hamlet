@@ -3,7 +3,7 @@ import { syncFeatureStatus } from '@/lib/meego';
 import { batchFetchAvatars, refreshUserToken, searchLibraInChat, getLarkBotToken } from '@/lib/lark';
 import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
 import { cookies } from 'next/headers';
-import { loadDigestState, saveDigestState, updateDigestState } from '@/lib/digest-state';
+import { loadDigestState, updateDigestState } from '@/lib/digest-state';
 import { updateFeatureInCache, markFeatureDeleted, readFeatureCache } from '@/lib/feature-cache';
 
 // Cache refreshed tokens in memory to avoid refreshing on every sync call
