@@ -3,7 +3,7 @@ import { syncFeatureStatus } from '@/lib/meego';
 import { batchFetchAvatars, refreshUserToken, searchLibraInChat, getLarkBotToken } from '@/lib/lark';
 import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
 import { cookies } from 'next/headers';
-import { loadDigestState, saveDigestState } from '@/lib/digest-state';
+import { loadDigestState, saveDigestState, updateDigestState } from '@/lib/digest-state';
 import { updateFeatureInCache, markFeatureDeleted, readFeatureCache } from '@/lib/feature-cache';
 
 // Cache refreshed tokens in memory to avoid refreshing on every sync call
@@ -74,9 +74,13 @@ async function getFreshUserToken(): Promise<string | undefined> {
   // Also persist to GCS state so the digest pipeline and future sync
   // instances can use the rotated token even after this instance dies.
   try {
-    const state = await loadDigestState();
-    state.larkUserRefreshToken = refreshed.refreshToken;
-    await saveDigestState(state);
+    // Publish the access token too, so every other caller reuses it via
+    // getLarkUserToken instead of refreshing (which would invalidate this one).
+    await updateDigestState(state => {
+      state.larkUserRefreshToken = refreshed.refreshToken;
+      state.larkUserAccessToken = refreshed.accessToken;
+      state.larkUserAccessTokenExpiresAt = Date.now() + 100 * 60 * 1000;
+    });
   } catch (e) {
     console.warn('[sync] GCS state token persist failed:', e);
   }

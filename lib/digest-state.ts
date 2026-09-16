@@ -118,6 +118,13 @@ export interface DigestStateFile {
    */
   larkUserRefreshToken?: string;
   /**
+   * Last Lark user access token + when it expires (ms). Shared across
+   * instances so every caller reuses one token: each refresh invalidates the
+   * previous refresh token, so concurrent refreshes break the chain.
+   */
+  larkUserAccessToken?: string;
+  larkUserAccessTokenExpiresAt?: number;
+  /**
    * Meego work item IDs that have already received an AB-open notification
    * card. Used so the backfill (notify every feature currently in 实验中)
    * fires exactly once per feature, even though the same features stay in
@@ -412,6 +419,12 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const larkUserRefreshToken = typeof obj.larkUserRefreshToken === 'string'
     ? obj.larkUserRefreshToken
     : undefined;
+  const larkUserAccessToken = typeof obj.larkUserAccessToken === 'string'
+    ? obj.larkUserAccessToken
+    : undefined;
+  const larkUserAccessTokenExpiresAt = typeof obj.larkUserAccessTokenExpiresAt === 'number'
+    ? obj.larkUserAccessTokenExpiresAt
+    : undefined;
   const abOpenNotified = Array.isArray(obj.abOpenNotified)
     ? (obj.abOpenNotified as unknown[]).map(String)
     : undefined;
@@ -470,6 +483,8 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     watchlist,
     featureLinks,
     larkUserRefreshToken,
+    larkUserAccessToken,
+    larkUserAccessTokenExpiresAt,
     abOpenNotified,
     abConcludedNotified,
     lineReviewNotified,

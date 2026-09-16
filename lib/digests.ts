@@ -9,7 +9,7 @@ import {
   joinFeatureChat,
   listJuniorChats,
   getLarkBotToken,
-  refreshUserToken,
+  getLarkUserToken,
   searchAbReport,
   extractFigmaUrlFromPrd,
   readDocContent,
@@ -3477,16 +3477,7 @@ export async function sendAbConcludedDigestCard(
   }
   let userAccessToken: string | undefined;
   try {
-    const state = await loadDigestState();
-    const userRefreshToken = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-    if (userRefreshToken) {
-      const result = await refreshUserToken(userRefreshToken);
-      if (result) {
-        userAccessToken = result.accessToken;
-        state.larkUserRefreshToken = result.refreshToken;
-        await saveDigestState(state);
-      }
-    }
+    userAccessToken = await getLarkUserToken();
   } catch (e) {
     console.warn('[digests] AB-concluded: user token refresh failed:', e);
   }
@@ -3580,17 +3571,7 @@ export async function sendAbOpenDigestCard(
   // downloads succeed (the bot lacks docs:document.media:download).
   let userAccessToken: string | undefined;
   try {
-    const state = await loadDigestState();
-    const userRefreshToken = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-    if (userRefreshToken) {
-      const result = await refreshUserToken(userRefreshToken);
-      if (result) {
-        userAccessToken = result.accessToken;
-        // Persist the rotated refresh token so the next run can chain.
-        state.larkUserRefreshToken = result.refreshToken;
-        await saveDigestState(state);
-      }
-    }
+    userAccessToken = await getLarkUserToken();
   } catch (e) {
     console.warn('[digests] AB-open: user token refresh failed (image download may fail):', e);
   }
@@ -3937,14 +3918,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     // Get user access token (for granting bot access to PRDs on permission errors)
     let userAccessTokenForPrd: string | undefined;
     try {
-      const userRefreshToken = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-      if (userRefreshToken) {
-        const result = await refreshUserToken(userRefreshToken);
-        if (result) {
-          userAccessTokenForPrd = result.accessToken;
-          state.larkUserRefreshToken = result.refreshToken;
-        }
-      }
+      userAccessTokenForPrd = await getLarkUserToken();
     } catch { /* ignore */ }
     let prdScanned = 0;
     let prdChanged = 0;
@@ -4410,25 +4384,13 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // var and rotated into the GCS state on each successful refresh.
   let userAccessToken = '';
   {
-    const storedRefresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-    if (storedRefresh) {
-      try {
-        const result = await refreshUserToken(storedRefresh);
-        if (result) {
-          userAccessToken = result.accessToken;
-          // Persist the rotated refresh token IMMEDIATELY so it's not lost
-          // if the link-fetch loop times out before the final state save.
-          state.larkUserRefreshToken = result.refreshToken;
-          await saveDigestState(state);
-          console.log('[digests] user token refreshed for Drive search (state saved with rotated token)');
-        } else {
-          console.warn('[digests] user token refresh returned null — Drive search will use bot token (limited scope)');
-        }
-      } catch (e) {
-        console.warn('[digests] user token refresh failed:', e);
+    try {
+      userAccessToken = (await getLarkUserToken()) ?? '';
+      if (!userAccessToken) {
+        console.warn('[digests] no usable user token — Drive search will use bot token (limited scope)');
       }
-    } else {
-      console.log('[digests] no user refresh token available — Drive search will use bot token (limited scope)');
+    } catch (e) {
+      console.warn('[digests] user token refresh failed:', e);
     }
   }
 

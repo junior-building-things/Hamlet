@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { batchFetchAvatars, refreshUserToken } from '@/lib/lark';
-import { loadDigestState } from '@/lib/digest-state';
+import { batchFetchAvatars, getLarkUserToken } from '@/lib/lark';
 import { callMeegoMcp } from '@/lib/meego';
 
 export const dynamic = 'force-dynamic';
@@ -47,12 +46,7 @@ export async function POST(req: NextRequest) {
   // Use the PM's user token if available (broader scope than bot tenant).
   let userAccessToken: string | undefined;
   try {
-    const state = await loadDigestState();
-    const refresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-    if (refresh) {
-      const result = await refreshUserToken(refresh);
-      if (result) userAccessToken = result.accessToken;
-    }
+    userAccessToken = await getLarkUserToken();
   } catch { /* ignore */ }
 
   try {

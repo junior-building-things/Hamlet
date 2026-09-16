@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refreshUserToken } from '@/lib/lark';
-import { loadDigestState, saveDigestState } from '@/lib/digest-state';
+import { getLarkUserToken } from '@/lib/lark';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -50,18 +49,11 @@ export async function POST(req: NextRequest) {
   // tokens can't create owned-by-user docs that show up in the UI.
   let userToken = '';
   try {
-    const state = await loadDigestState();
-    const refresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-    if (!refresh) {
-      return NextResponse.json({ error: 'no LARK_USER_REFRESH_TOKEN' }, { status: 500 });
+    const token = await getLarkUserToken();
+    if (!token) {
+      return NextResponse.json({ error: 'no usable Lark user token — re-login to Hamlet' }, { status: 500 });
     }
-    const result = await refreshUserToken(refresh);
-    if (!result) {
-      return NextResponse.json({ error: 'user token refresh failed' }, { status: 500 });
-    }
-    userToken = result.accessToken;
-    state.larkUserRefreshToken = result.refreshToken;
-    await saveDigestState(state);
+    userToken = token;
   } catch (e) {
     return NextResponse.json({ error: `token refresh threw: ${e instanceof Error ? e.message : e}` }, { status: 500 });
   }

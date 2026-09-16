@@ -474,17 +474,40 @@ export async function grantBotEditAccess(
 }
 
 /**
- * Thomas's Lark user token. Refresh tokens rotate on use, so the new one is
- * persisted to the same GCS state the digest pipeline reads.
+ * Thomas's Lark user token — the ONLY place that refreshes it. Every refresh
+ * invalidates the previous refresh token, so callers must come through here
+ * rather than refreshing their own; the access token is cached in GCS state
+ * (and in-process) and reused until it nears expiry.
  */
+let cachedUserToken = '';
+let cachedUserTokenExpiresAt = 0;
+const USER_TOKEN_TTL_MS = 100 * 60 * 1000; // Lark user tokens last ~2h
+const USER_TOKEN_SKEW_MS = 5 * 60 * 1000;
+
 export async function getLarkUserToken(): Promise<string | undefined> {
+  if (cachedUserToken && Date.now() < cachedUserTokenExpiresAt - USER_TOKEN_SKEW_MS) return cachedUserToken;
+
   const state = await loadDigestState();
+  const stored = state.larkUserAccessToken;
+  const storedExpiry = state.larkUserAccessTokenExpiresAt ?? 0;
+  if (stored && Date.now() < storedExpiry - USER_TOKEN_SKEW_MS) {
+    cachedUserToken = stored;
+    cachedUserTokenExpiresAt = storedExpiry;
+    return cachedUserToken;
+  }
+
   const refresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
   if (!refresh) return undefined;
   const result = await refreshUserToken(refresh);
   if (!result) return undefined;
-  await updateDigestState(s => { s.larkUserRefreshToken = result.refreshToken; });
-  return result.accessToken;
+  cachedUserToken = result.accessToken;
+  cachedUserTokenExpiresAt = Date.now() + USER_TOKEN_TTL_MS;
+  await updateDigestState(s => {
+    s.larkUserRefreshToken = result.refreshToken;
+    s.larkUserAccessToken = result.accessToken;
+    s.larkUserAccessTokenExpiresAt = cachedUserTokenExpiresAt;
+  });
+  return cachedUserToken;
 }
 
 /**

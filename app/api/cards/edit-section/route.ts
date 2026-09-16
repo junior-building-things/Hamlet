@@ -8,7 +8,7 @@ import {
   extractSectionImageTokens,
   uploadDocImageForMessage,
   resolveDocIdFromUrl,
-  refreshUserToken,
+  getLarkUserToken,
   CardSection,
   CardButton,
   PostParagraph,
@@ -112,15 +112,9 @@ export async function POST(req: NextRequest) {
         ? [body.attachImageSection.trim().toLowerCase()]
         : IMAGE_SECTION_ALIASES;
       let userAccessToken: string | undefined;
-      if (state.larkUserRefreshToken) {
-        try {
-          const refreshed = await refreshUserToken(state.larkUserRefreshToken);
-          if (refreshed) {
-            userAccessToken = refreshed.accessToken;
-            state.larkUserRefreshToken = refreshed.refreshToken; // rotate + persist below
-          }
-        } catch { /* fall back to bot token for the media download */ }
-      }
+      try {
+        userAccessToken = await getLarkUserToken();
+      } catch { /* fall back to bot token for the media download */ }
       const tokens = await extractSectionImageTokens(attachImageDocUrl, aliases);
       if (tokens.length === 0) {
         return NextResponse.json({ error: 'no image found under the requested section of that doc' }, { status: 404 });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat, refreshUserToken, sendPostToChat, replyToMessage, readDocContent, PostParagraph } from '@/lib/lark';
+import { sendInteractiveCardToChat, getLarkBotToken, addBotToChat, getLarkUserToken, sendPostToChat, replyToMessage, readDocContent, PostParagraph } from '@/lib/lark';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
 import { generateText } from '@/lib/llm';
 import crypto from 'crypto';
@@ -115,16 +115,7 @@ export async function POST(req: NextRequest) {
       // Ensure the bot is a member of the chat before sending.
       let userAccessToken: string | undefined;
       try {
-        const state = await loadDigestState();
-        const refresh = state.larkUserRefreshToken || process.env.LARK_USER_REFRESH_TOKEN;
-        if (refresh) {
-          const result = await refreshUserToken(refresh);
-          if (result) {
-            userAccessToken = result.accessToken;
-            state.larkUserRefreshToken = result.refreshToken;
-            await saveDigestState(state);
-          }
-        }
+        userAccessToken = await getLarkUserToken();
       } catch { /* ignore */ }
       await addBotToChat(chatId, userAccessToken);
       const msgId = await sendInteractiveCardToChat(chatId, '', 'blue', sections, token);
