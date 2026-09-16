@@ -2746,25 +2746,31 @@ export interface PrdScaffold {
 }
 
 /**
- * Write `rows` (left-aligned cell values) into the first table under a heading
- * matching one of `headings`, growing or trimming the data rows to fit.
- * Columns not supplied in a row are left untouched. An array value renders as
- * a numbered list, one item per entry.
+ * Write `rows` into the first table under a heading matching one of `headings`
+ * (sub-headings are allowed in between), growing or trimming data rows to fit.
+ * Each row maps a keyword to a value; the keyword picks the column whose header
+ * contains it, so the half-day and full templates' different column orders both
+ * work. Unmatched columns are left untouched. An array value becomes a numbered list.
  */
-async function fillTableUnderHeading(docId: string, headings: string[], rows: Array<Array<string | string[]>>, token: string): Promise<void> {
+async function fillTableUnderHeading(
+  docId: string,
+  headings: string[],
+  rows: Array<Record<string, string | string[]>>,
+  token: string,
+): Promise<void> {
   if (rows.length === 0) return;
   const blocks = await getDocBlocks(docId, token);
   const byId = new Map(blocks.map(b => [b.block_id, b]));
   const page = blocks.find(b => b.block_type === 1);
-  let found = false;
+  let headingLevel = 0;
   let tableId = '';
   for (const id of page?.children ?? []) {
     const b = byId.get(id);
     if (!b) continue;
     if (HEADING_BLOCK_TYPES.has(b.block_type)) {
-      if (found) break;
-      found = headings.some(h => blockText(b).toLowerCase().includes(h));
-    } else if (found && b.block_type === 31) {
+      if (headingLevel && b.block_type <= headingLevel) break; // next section at the same level
+      if (!headingLevel && headings.some(h => blockText(b).toLowerCase().includes(h))) headingLevel = b.block_type;
+    } else if (headingLevel && b.block_type === 31) {
       tableId = b.block_id;
       break;
     }
@@ -2774,7 +2780,15 @@ async function fillTableUnderHeading(docId: string, headings: string[], rows: Ar
     return;
   }
 
-  const rowSize = (byId.get(tableId)?.table as { property?: { row_size?: number } })?.property?.row_size ?? 1;
+  const table = byId.get(tableId);
+  const props = (table?.table as { property?: { row_size?: number; column_size?: number } })?.property;
+  const rowSize = props?.row_size ?? 1;
+  const colSize = props?.column_size ?? 1;
+  const cellText = (cellId?: string) => (byId.get(cellId ?? '')?.children ?? [])
+    .map(c => blockText(byId.get(c) as LarkBlock)).join(' ').toLowerCase();
+  const headers = Array.from({ length: colSize }, (_, c) => cellText(table?.children?.[c]));
+  const columnFor = (key: string) => headers.findIndex(h => h.includes(key));
+
   const wanted = rows.length + 1; // + header row
   for (let r = rowSize; r < wanted; r++) {
     await batchUpdateBlocks(docId, [{ block_id: tableId, insert_table_row: { row_index: r } }], token);
@@ -2785,22 +2799,22 @@ async function fillTableUnderHeading(docId: string, headings: string[], rows: Ar
 
   const fresh = rowSize === wanted ? blocks : await getDocBlocks(docId, token);
   const freshById = new Map(fresh.map(b => [b.block_id, b]));
-  const table = freshById.get(tableId);
-  const colSize = (table?.table as { property?: { column_size?: number } })?.property?.column_size ?? 1;
-  const cellIds = table?.children ?? [];
+  const cellIds = freshById.get(tableId)?.children ?? [];
   const requests: UpdateRequest[] = [];
   const lists: Array<{ cellId: string; items: string[] }> = [];
-  rows.forEach((values, i) => {
-    values.slice(0, colSize).forEach((value, c) => {
+  rows.forEach((row, i) => {
+    for (const [key, value] of Object.entries(row)) {
+      const c = columnFor(key);
+      if (c < 0) continue;
       const cellId = cellIds[(i + 1) * colSize + c];
       const paraId = freshById.get(cellId)?.children?.[0];
-      if (!paraId) return;
+      if (!paraId) continue;
       if (typeof value === 'string') {
         requests.push({ block_id: paraId, update_text_elements: { elements: [{ text_run: { content: value, text_element_style: {} } }] } });
       } else if (value.length > 0) {
         lists.push({ cellId, items: value });
       }
-    });
+    }
   });
   await batchUpdateBlocks(docId, requests, token);
 
@@ -2824,9 +2838,10 @@ async function fillTableUnderHeading(docId: string, headings: string[], rows: Ar
 }
 
 export async function fillPrdScaffold(docId: string, scaffold: PrdScaffold, token: string): Promise<void> {
-  await fillTableUnderHeading(docId, ['requirement detail', 'user interaction'], scaffold.requirements.map(r => [r.scenario, r.logic]), token);
+  await fillTableUnderHeading(docId, ['requirement detail', 'user interaction'],
+    scaffold.requirements.map(r => ({ scenario: r.scenario, interaction: r.logic })), token);
   await fillTableUnderHeading(docId, ['a/b testing setup', 'ab testing setup', 'a/b test setup'],
-    scaffold.abGroups.map(g => [g.group, g.treatment, g.traffic]), token);
+    scaffold.abGroups.map(g => ({ group: g.group, treatment: g.treatment, traffic: g.traffic })), token);
 }
 
 // ─── Fill "What are we building" section ──────────────────────────────────────
