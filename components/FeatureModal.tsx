@@ -340,10 +340,19 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
     setCreating(true);
     setCreateError(null);
     try {
-      const res = await fetch('/api/meego/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // The create response occasionally never reaches the browser ("Failed to
+      // fetch") even though Meego made the story; the route is idempotent within
+      // 10 minutes, so one retry adopts that story instead of orphaning it.
+      const postCreate = async (): Promise<Response> => {
+        try {
+          return await fetch('/api/meego/create', { method: 'POST', headers, body });
+        } catch {
+          await new Promise(r => setTimeout(r, 2000));
+          return fetch('/api/meego/create', { method: 'POST', headers, body });
+        }
+      };
+      const headers = { 'Content-Type': 'application/json' };
+      const body = JSON.stringify({
           name:                    form.name.trim(),
           priority,
           quarterlyCycleOptionId:  form.quarterlyCycle  || undefined,
@@ -353,10 +362,13 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
           socialComponentLabel:    SOCIAL_COMPONENTS.find(s => s.id === form.socialComponent)?.label,
           roles,
           createChatGroup,
-        }),
       });
-      const data = await res.json() as { id?: string; meegoUrl?: string; error?: string };
+      const res = await postCreate();
+      const data = await res.json() as { id?: string; meegoUrl?: string; error?: string; reused?: boolean; minutesAgo?: number };
       if (!res.ok) throw new Error(data.error ?? 'Create failed');
+      if (data.reused) {
+        toast.info(`Reused the "${form.name.trim()}" story created ${data.minutesAgo ?? 0} min ago`);
+      }
       // Look up the human-readable label for each selected option so the
       // post-create modal renders Project Details / POC Details exactly
       // like the "click an existing feature" view (which gets these

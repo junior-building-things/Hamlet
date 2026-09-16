@@ -1189,16 +1189,26 @@ export async function findRecentStoryByName(
   return null;
 }
 
-/** The legal / compliance ticket URL Meego auto-creates for a story ('' until it exists). */
-export async function getComplianceUrl(workItemId: string): Promise<string> {
+/** Read one string field off a story ('' when unset). */
+async function getStoryField(workItemId: string, key: string): Promise<string> {
   const raw = await callMeegoMcp('get_workitem_brief', {
     project_key: TIKTOK_PROJECT_KEY,
     work_item_id: workItemId,
-    fields: ['field_due3fb'],
+    fields: [key],
   });
   const brief = JSON.parse(raw) as { work_item_fields?: Array<{ key: string; value?: unknown }> };
-  const value = brief.work_item_fields?.find(f => f.key === 'field_due3fb')?.value;
+  const value = brief.work_item_fields?.find(f => f.key === key)?.value;
   return typeof value === 'string' ? value : '';
+}
+
+/** The legal / compliance ticket URL Meego auto-creates for a story ('' until it exists). */
+export async function getComplianceUrl(workItemId: string): Promise<string> {
+  return getStoryField(workItemId, 'field_due3fb');
+}
+
+/** The PRD doc already linked on a story ('' when none) — guards against a second PRD. */
+export async function getStoryPrdUrl(workItemId: string): Promise<string> {
+  return getStoryField(workItemId, 'wiki');
 }
 
 export async function updateFeatureFields(

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateFeatureFields, getComplianceUrl } from '@/lib/meego';
+import { updateFeatureFields, getComplianceUrl, getStoryPrdUrl } from '@/lib/meego';
 import { copyPrdTemplate, updatePrdBasicInfo, getLarkBotToken, resolveDocIdFromUrl } from '@/lib/lark';
 import { generatePrdScaffold } from '@/lib/prd-scaffold';
 
@@ -29,6 +29,17 @@ export async function POST(req: NextRequest) {
     };
     const name = body.name?.trim();
     if (!body.id || !name) return NextResponse.json({ error: 'id and name are required' }, { status: 400 });
+
+    // A retry (or a reused story) must not produce a second PRD doc.
+    try {
+      const existing = await getStoryPrdUrl(body.id);
+      if (existing) {
+        console.log(`[create-prd] ${body.id} already has a PRD — returning it`);
+        return NextResponse.json({ prd: existing, reused: true });
+      }
+    } catch (e) {
+      console.warn('[create-prd] existing-PRD check failed, creating anyway:', e);
+    }
 
     // Research + drafting and the legal-ticket lookup run alongside the template copy.
     const legalTicket = waitForComplianceUrl(body.id);
