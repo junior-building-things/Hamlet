@@ -656,6 +656,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
     cols.push('80px');                           // Team avatars (2 shown + overflow/add)
     cols.push('80px');                           // Risk dot + label ("Delayed" longest)
     cols.push('minmax(200px,1fr)');              // Notes — gets the leftover
+    cols.push('90px');                           // PRD change log toggle
     if (!hideAction) cols.push('80px');          // Action button
     cols.push('40px');                           // Sync icon
     return cols.join(' ');
@@ -789,6 +790,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
         hideStatus={hideStatus}
         hidePriority={hidePriority}
         hideAction={hideAction}
+        showChangeLog
         gridTemplateColumns={gridTemplateColumns} />
     ));
   }
@@ -843,7 +845,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
         ) : groups ? (
           // ── Grouped list view ──────────────────────────────────────────────
           <div className={listGridCls}>
-            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} hideAction={hideAction} gridTemplateColumns={gridTemplateColumns} />
+            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} hideAction={hideAction} showChangeLog gridTemplateColumns={gridTemplateColumns} />
             {groups.map((group, gi) => (
               <React.Fragment key={group.key}>
                 <GroupHeader label={group.label} count={group.items.length} first={gi === 0} groupBy={groupBy} />
@@ -854,7 +856,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
         ) : (
           // ── Plain list view ────────────────────────────────────────────────
           <div className={listGridCls}>
-            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} hideAction={hideAction} gridTemplateColumns={gridTemplateColumns} />
+            <FeatureListHeader hideStatus={hideStatus} hidePriority={hidePriority} hideAction={hideAction} showChangeLog gridTemplateColumns={gridTemplateColumns} />
             {renderListRows(sorted)}
           </div>
         )}

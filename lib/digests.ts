@@ -3922,6 +3922,11 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     } catch { /* ignore */ }
     let prdScanned = 0;
     let prdChanged = 0;
+    const changeLogOff = new Set(
+      ((await readFeatureCache())?.features ?? [])
+        .filter(c => c.prdChangeLogEnabled === false)
+        .map(c => c.meegoIssueId ?? c.id),
+    );
 
     for (const f of features) {
       if (!f.prd || f.overallStatusKey === 'end') continue;
@@ -3986,6 +3991,8 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           const isOwnerPm = !!ownerEmail && (f.roles['PM'] ?? []).some(n => f.roleEmails[n]?.toLowerCase() === ownerEmail);
           if (!isOwnerPm) {
             console.log(`[digests] not PM on "${f.name}" — skipping PRD change log write`);
+          } else if (changeLogOff.has(f.workItemId)) {
+            console.log(`[digests] PRD change log turned off for "${f.name}" — skipping write`);
           } else {
             try {
               await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Thomas Jr.' }]);

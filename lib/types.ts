@@ -173,4 +173,6 @@ export interface Feature {
   notesEditedAt?: string;
   // Fields manually edited in the UI — protected from sync overwrites
   manualEdits?: string[];
+  // PRD Change Log auto-update toggle (Changelog column); unset means on.
+  prdChangeLogEnabled?: boolean;
 }
