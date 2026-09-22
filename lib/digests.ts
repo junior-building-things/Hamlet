@@ -3980,24 +3980,32 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             continue;
           }
           prdChanged++;
-          try {
-            await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Thomas Jr.' }]);
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            // Retry: if forbidden, grant bot access via user token then retry
-            if ((msg.includes('forBidden') || msg.includes('1770032') || msg.includes('forbidden')) && userAccessTokenForPrd) {
-              console.log(`[digests] PRD forbidden for "${f.name}" — granting bot access via user token`);
-              const granted = await grantBotEditAccess(f.prd, userAccessTokenForPrd);
-              if (granted) {
-                try {
-                  await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Thomas Jr.' }]);
-                  console.log(`[digests] PRD changelog written after access grant for "${f.name}"`);
-                } catch (retryErr) {
-                  console.warn(`[digests] append PRD changelog retry failed for "${f.name}":`, retryErr);
+          // The feature list also pulls in todo-only and Junior-chat features,
+          // so only write to PRDs where Thomas is a listed PM.
+          const ownerEmail = process.env.OWNER_EMAIL?.toLowerCase();
+          const isOwnerPm = !!ownerEmail && (f.roles['PM'] ?? []).some(n => f.roleEmails[n]?.toLowerCase() === ownerEmail);
+          if (!isOwnerPm) {
+            console.log(`[digests] not PM on "${f.name}" — skipping PRD change log write`);
+          } else {
+            try {
+              await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Thomas Jr.' }]);
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              // Retry: if forbidden, grant bot access via user token then retry
+              if ((msg.includes('forBidden') || msg.includes('1770032') || msg.includes('forbidden')) && userAccessTokenForPrd) {
+                console.log(`[digests] PRD forbidden for "${f.name}" — granting bot access via user token`);
+                const granted = await grantBotEditAccess(f.prd, userAccessTokenForPrd);
+                if (granted) {
+                  try {
+                    await appendPrdChangeLog(f.prd, [{ date: today, detail: summary, by: '@Thomas Jr.' }]);
+                    console.log(`[digests] PRD changelog written after access grant for "${f.name}"`);
+                  } catch (retryErr) {
+                    console.warn(`[digests] append PRD changelog retry failed for "${f.name}":`, retryErr);
+                  }
                 }
+              } else {
+                console.warn(`[digests] append PRD changelog failed for "${f.name}":`, e);
               }
-            } else {
-              console.warn(`[digests] append PRD changelog failed for "${f.name}":`, e);
             }
           }
           // Collect POC emails (Tech Owner, Server, Android, iOS, QA, DA), deduped
