@@ -108,7 +108,13 @@ export async function GET(req: NextRequest) {
   // a 20026 "refresh token is invalid" error in those flows.
   if (refreshToken) {
     try {
-      await updateDigestState(state => { state.larkUserRefreshToken = refreshToken; });
+      // Seed the shared access token too, so nothing needs to refresh for ~2h after login.
+      const expiresIn = typeof inner.expires_in === 'number' ? inner.expires_in : 7200;
+      await updateDigestState(state => {
+        state.larkUserRefreshToken = refreshToken;
+        state.larkUserAccessToken = accessToken;
+        state.larkUserAccessTokenExpiresAt = Date.now() + expiresIn * 1000;
+      });
     } catch (e) {
       console.warn('[auth/callback] failed to persist refresh token to digest state:', e);
     }

@@ -1,91 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncFeatureStatus } from '@/lib/meego';
-import { batchFetchAvatars, refreshUserToken, searchLibraInChat, getLarkBotToken } from '@/lib/lark';
-import { getSession, createSession, COOKIE_NAME, COOKIE_MAX_AGE } from '@/lib/session';
-import { cookies } from 'next/headers';
-import { loadDigestState, updateDigestState } from '@/lib/digest-state';
+import { batchFetchAvatars, getLarkUserToken, searchLibraInChat, getLarkBotToken } from '@/lib/lark';
+import { loadDigestState } from '@/lib/digest-state';
 import { updateFeatureInCache, markFeatureDeleted, readFeatureCache } from '@/lib/feature-cache';
 
-// Cache refreshed tokens in memory to avoid refreshing on every sync call
-let cachedUserToken = '';
-let cachedRefreshToken = '';
-let cachedUserTokenExp = 0;
-
-/** Get a fresh user access token, always refreshing proactively. */
+/**
+ * Thomas's Lark user token, via the one shared refresher. This route used to
+ * keep its own chain (in-memory + session cookie + GCS) and replay stale refresh
+ * tokens, which Lark rejects and can revoke the whole login for.
+ */
 async function getFreshUserToken(): Promise<string | undefined> {
-  // Return in-memory cached token if still fresh (cache for 90 min, token lasts ~2h)
-  if (cachedUserToken && Date.now() < cachedUserTokenExp) {
-    return cachedUserToken;
-  }
-
-  const session = await getSession();
-  // Try refresh tokens in order: in-memory cache → session cookie → GCS state.
-  // The digest pipeline rotates the token and stores it in GCS, so the cookie
-  // may have a stale (consumed) token after a digest run.
-  const tokenSources = [
-    cachedRefreshToken,
-    session?.larkRefreshToken,
-  ].filter(Boolean) as string[];
-
-  // Also try the GCS state token as a last resort.
-  let gcsToken: string | undefined;
-  try {
-    const state = await loadDigestState();
-    if (state.larkUserRefreshToken) gcsToken = state.larkUserRefreshToken;
-  } catch { /* ignore GCS errors */ }
-  if (gcsToken) tokenSources.push(gcsToken);
-
-  // Deduplicate (same token may appear in multiple sources).
-  const uniqueTokens = [...new Set(tokenSources)];
-
-  let refreshed: { accessToken: string; refreshToken: string } | null = null;
-  for (const token of uniqueTokens) {
-    refreshed = await refreshUserToken(token);
-    if (refreshed) break;
-  }
-
-  if (!refreshed) {
-    console.warn('[sync] token refresh failed (tried session + GCS) — skipping user-token features (re-login needed)');
-    return undefined;
-  }
-
-  // Cache in memory (survives across requests within the same server process)
-  cachedUserToken = refreshed.accessToken;
-  cachedRefreshToken = refreshed.refreshToken;
-  cachedUserTokenExp = Date.now() + 90 * 60 * 1000; // 90 min
-
-  // Persist the new tokens in the session cookie (best-effort)
-  try {
-    const jar = await cookies();
-    const newSession = await createSession({
-      ...(session ?? { userId: '', name: '', email: '', avatarUrl: '' }),
-      larkAccessToken: refreshed.accessToken,
-      larkRefreshToken: refreshed.refreshToken,
-    });
-    jar.set(COOKIE_NAME, newSession, {
-      httpOnly: true, sameSite: 'lax',
-      maxAge: COOKIE_MAX_AGE, path: '/',
-      secure: process.env.NODE_ENV === 'production',
-    });
-  } catch (e) {
-    console.warn('[sync] cookie write failed (token still cached in memory):', e);
-  }
-
-  // Also persist to GCS state so the digest pipeline and future sync
-  // instances can use the rotated token even after this instance dies.
-  try {
-    // Publish the access token too, so every other caller reuses it via
-    // getLarkUserToken instead of refreshing (which would invalidate this one).
-    await updateDigestState(state => {
-      state.larkUserRefreshToken = refreshed.refreshToken;
-      state.larkUserAccessToken = refreshed.accessToken;
-      state.larkUserAccessTokenExpiresAt = Date.now() + 100 * 60 * 1000;
-    });
-  } catch (e) {
-    console.warn('[sync] GCS state token persist failed:', e);
-  }
-
-  return refreshed.accessToken;
+  const token = await getLarkUserToken();
+  if (!token) console.warn('[sync] no usable Lark user token — skipping user-token features (re-login needed)');
+  return token;
 }
 
 export async function POST(req: NextRequest) {
