@@ -1,9 +1,11 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useSync } from '@/components/SyncContext';
 import { AV } from '@/lib/avatars';
+import { Switch } from '@/components/Switch';
 import { X, AlertTriangle, Activity, FileText, MessageCircleQuestion, Loader2, RotateCw } from 'lucide-react';
 import Image from 'next/image';
 
@@ -348,6 +350,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
               <Key>Quarterly Cycle</Key>    <Val>{feature.quarterlyCycle ?? '—'}</Val>
               <Key>Business Line</Key>      <Val>{feature.businessLine ?? '—'}</Val>
               <Key>Social Component</Key>   <Val>{feature.socialComponent ?? '—'}</Val>
+              <Key>Proactive Updates</Key>  <ProactiveToggle feature={feature} />
             </div>
           </Section>
 
@@ -456,6 +459,38 @@ function CalloutTag({ tone, children }: { tone: 'rose' | 'amber' | 'blue'; child
       {children}
     </span>
   );
+}
+
+/** Per-feature switch for Junior's Proactive updates DMs (state lives in GCS, see lib/proactive.ts). */
+function ProactiveToggle({ feature }: { feature: Feature }) {
+  const id = feature.meegoIssueId ?? '';
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    fetch(`/api/proactive?id=${encodeURIComponent(id)}`)
+      .then(r => r.json() as Promise<{ enabled?: boolean }>)
+      .then(d => { if (alive) setEnabled(!!d.enabled); })
+      .catch(() => { if (alive) setEnabled(false); });
+    return () => { alive = false; };
+  }, [id]);
+
+  if (!id || !feature.meegoUrl) return <Val>—</Val>;
+  async function change(next: boolean) {
+    setEnabled(next);
+    try {
+      const r = await fetch('/api/proactive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, enabled: next, name: feature.name, meegoUrl: feature.meegoUrl }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } catch {
+      setEnabled(!next);
+      toast.error('Could not update Proactive updates');
+    }
+  }
+  return <Switch checked={!!enabled} disabled={enabled === null} onChange={change} label={enabled ? 'On' : 'Off'} />;
 }
 
 function PocRow({ role, name, grad, avatars }: {

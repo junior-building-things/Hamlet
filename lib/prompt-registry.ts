@@ -127,6 +127,17 @@ Document content:
 const HAMLET_PRD_SECTION_AUTOGEN = `Write 2-4 sentences for a PRD section titled "\${section}". \${docContext}
 Return ONLY plain text.`;
 
+const HAMLET_PROACTIVE_CHAT = `You're watching the Lark group chat for the TikTok feature "\${featureName}" on behalf of its PM, Thomas. These messages were posted since the last check (oldest first):
+
+\${messages}
+
+Decide whether any of it is worth interrupting Thomas for. Worth it: decisions made or needed, blockers, risks, schedule or scope changes, and questions or requests aimed at Thomas. Not worth it: small talk, thanks, routine progress updates, and automated bot messages.
+
+Return ONLY a JSON object — no prose, no code fences:
+{"notable": boolean, "summary": string}
+
+summary: when notable, 1-2 short sentences saying who raised what; otherwise "".`;
+
 const HAMLET_PRD_RESEARCH_QUERIES = `A PM is creating a PRD for a TikTok feature called "\${featureName}":
 
 \${description}
@@ -501,6 +512,16 @@ export const PROMPT_REGISTRY: PromptDef[] = [
     description: 'Generates 2-4 sentences for a new PRD section',
     variables: ['section', 'docContext'],
     default: HAMLET_PRD_SECTION_AUTOGEN,
+  },
+  {
+    id: 'hamlet.proactive_chat',
+    name: 'Hamlet — Proactive updates: group chat',
+    service: 'hamlet',
+    fileRef: 'lib/proactive.ts',
+    model: 'claude-sonnet-5',
+    description: 'Decides whether new feature-group messages are worth a Proactive update DM, and summarises them',
+    variables: ['featureName', 'messages'],
+    default: HAMLET_PROACTIVE_CHAT,
   },
   {
     id: 'hamlet.prd_research_queries',

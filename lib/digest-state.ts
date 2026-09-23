@@ -82,6 +82,16 @@ export interface PendingPrd {
   attempts?: number;
 }
 
+/** A feature Junior watches for Proactive updates. */
+export interface ProactiveWatch {
+  name: string;
+  meegoUrl: string;
+  chatId?: string;
+  /** Last values seen; unset until the first check records a baseline. */
+  snapshot?: { status: string; iosVersion: string };
+  lastCheckedAt?: string;
+}
+
 export interface DigestStateFile {
   updatedAt: string;
   /** ISO timestamps of recent digest runs, oldest first. Used as activity-log cutoff. */
@@ -143,6 +153,11 @@ export interface DigestStateFile {
    * never requested or that failed. Cleared once the PRD exists.
    */
   pendingPrds?: Record<string, PendingPrd>;
+  /**
+   * Features with Proactive updates on, keyed by Meego work item id. The Job's
+   * 10-minute poll diffs each against its snapshot and DMs Thomas on changes.
+   */
+  proactiveWatch?: Record<string, ProactiveWatch>;
   /**
    * Meego work item IDs that have already received an AB-open notification
    * card. Used so the backfill (notify every feature currently in 实验中)
@@ -447,6 +462,9 @@ function migrateLegacy(raw: unknown): DigestStateFile {
   const pendingPrds = (obj.pendingPrds && typeof obj.pendingPrds === 'object')
     ? (obj.pendingPrds as DigestStateFile['pendingPrds'])
     : undefined;
+  const proactiveWatch = (obj.proactiveWatch && typeof obj.proactiveWatch === 'object')
+    ? (obj.proactiveWatch as DigestStateFile['proactiveWatch'])
+    : undefined;
   const abOpenNotified = Array.isArray(obj.abOpenNotified)
     ? (obj.abOpenNotified as unknown[]).map(String)
     : undefined;
@@ -508,6 +526,7 @@ function migrateLegacy(raw: unknown): DigestStateFile {
     larkUserAccessToken,
     larkUserAccessTokenExpiresAt,
     pendingPrds,
+    proactiveWatch,
     abOpenNotified,
     abConcludedNotified,
     lineReviewNotified,

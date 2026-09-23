@@ -208,6 +208,12 @@ async function main(): Promise<void> {
   // Exits immediately otherwise, so it's safe to fire frequently.
   if (mode === 'watch-trigger') {
     await finishPendingPrds();
+    try {
+      const { runProactiveUpdates } = await import('../lib/proactive');
+      await runProactiveUpdates();
+    } catch (e) {
+      console.error('[run-digests] proactive updates failed:', e);
+    }
     const pending = await pendingTriggers();
     if (pending.length === 0) {
       console.log(`[run-digests] ${ts()} watch-trigger: no pending requests`);

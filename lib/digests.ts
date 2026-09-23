@@ -2296,7 +2296,7 @@ function findLaterThreadMessages(question: ChatMessage, all: ChatMessage[]): Cha
   return out;
 }
 
-function chatMessageText(m: ChatMessage): string {
+export function chatMessageText(m: ChatMessage): string {
   const raw = m.body?.content ?? '';
   if (!raw) return '';
   try {

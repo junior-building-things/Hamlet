@@ -3679,6 +3679,18 @@ export async function readChatMessages(
 /**
  * Send a text message to a chat, optionally as a thread reply.
  */
+/** Send a plain-text DM from the bot to one user, by open_id. */
+export async function sendTextToUser(openId: string, text: string, token: string): Promise<boolean> {
+  const res = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/messages?receive_id_type=open_id`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ receive_id: openId, msg_type: 'text', content: JSON.stringify({ text }) }),
+  });
+  const data = await parseJson(res, 'send_dm') as { code: number; msg?: string };
+  if (data.code !== 0) console.warn('[lark] DM failed:', data.code, data.msg);
+  return data.code === 0;
+}
+
 export async function sendTextMessage(
   chatId: string, text: string, token: string, replyToMsgId?: string,
 ): Promise<string | null> {

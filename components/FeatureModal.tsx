@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { AvatarSelect, CustomSelect, AvatarOption, UserAvatar } from './AvatarSelect';
 import { PackageModal } from './PackageModal';
 import { AV } from '@/lib/avatars';
+import { Switch } from './Switch';
 import { BUSINESS_LINE_OPTIONS } from '@/lib/meego';
 
 interface Props {
@@ -247,6 +248,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
   });
   const [prdType, setPrdType]               = useState<'regular' | 'halfday'>('regular');
   const [createChatGroup, setCreateChatGroup] = useState(false);
+  const [proactiveUpdates, setProactiveUpdates] = useState(false);
   const [avatarByKey, setAvatarByKey] = useState<Record<string, string>>({});
   useEffect(() => {
     if (mode !== 'add') return;
@@ -364,6 +366,7 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
           socialComponentLabel:    SOCIAL_COMPONENTS.find(s => s.id === form.socialComponent)?.label,
           roles,
           createChatGroup,
+          proactiveUpdates,
           featureDescription:      featureDescription.trim() || undefined,
           useHalfDayPrd:           prdType === 'halfday' ? true : undefined,
       });
@@ -573,20 +576,15 @@ export function FeatureModal({ mode, feature: featureProp, onSave, onClose, onNo
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <FormLabel>Chat Group</FormLabel>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={createChatGroup}
-                    onClick={() => setCreateChatGroup(v => !v)}
-                    className="flex items-center gap-2 w-fit py-1 text-[12.5px] text-[var(--text)]"
-                  >
-                    <span className={`relative inline-flex w-8 h-[18px] shrink-0 rounded-full transition-colors ${createChatGroup ? 'bg-[var(--ai)]' : 'bg-[var(--hairline)]'}`}>
-                      <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${createChatGroup ? 'translate-x-[14px]' : ''}`} />
-                    </span>
-                    Create a Meego chat group
-                  </button>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Chat Group</FormLabel>
+                    <Switch checked={createChatGroup} onChange={setCreateChatGroup} label="Create a Meego chat group" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <FormLabel>Proactive Updates</FormLabel>
+                    <Switch checked={proactiveUpdates} onChange={setProactiveUpdates} label="Junior messages me on changes" />
+                  </div>
                 </div>
               </div>
 

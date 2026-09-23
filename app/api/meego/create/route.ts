@@ -9,7 +9,7 @@ const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
 // the New Feature modal can close without waiting on the PRD.
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as CreateFeatureParams & { featureDescription?: string; useHalfDayPrd?: boolean };
+    const body = await req.json() as CreateFeatureParams & { featureDescription?: string; useHalfDayPrd?: boolean; proactiveUpdates?: boolean };
     const name = body.name?.trim();
     if (!name) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
@@ -45,6 +45,9 @@ export async function POST(req: NextRequest) {
           createdAt: new Date().toISOString(),
         },
       };
+      if (body.proactiveUpdates) {
+        s.proactiveWatch = { ...(s.proactiveWatch ?? {}), [created.id]: { name, meegoUrl: created.meegoUrl } };
+      }
     });
     return NextResponse.json(created);
   } catch (err) {
