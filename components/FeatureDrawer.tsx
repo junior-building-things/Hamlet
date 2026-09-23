@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Feature } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useSync } from '@/components/SyncContext';
+import { AV } from '@/lib/avatars';
 import { X, AlertTriangle, Activity, FileText, MessageCircleQuestion, Loader2, RotateCw } from 'lucide-react';
 import Image from 'next/image';
 
@@ -355,7 +356,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
             <Section title="POC Details">
               <div className="grid grid-cols-[140px_1fr] gap-y-2 gap-x-3.5 text-[12px]">
                 {pocs.map((p, i) => (
-                  <PocRow key={p.role} role={p.role} name={p.name} grad={GRADIENTS[i % GRADIENTS.length]} />
+                  <PocRow key={p.role} role={p.role} name={p.name} grad={GRADIENTS[i % GRADIENTS.length]} avatars={feature.avatars} />
                 ))}
               </div>
             </Section>
@@ -457,18 +458,34 @@ function CalloutTag({ tone, children }: { tone: 'rose' | 'amber' | 'blue'; child
   );
 }
 
-function PocRow({ role, name, grad }: { role: string; name: string; grad: string }) {
+function PocRow({ role, name, grad, avatars }: {
+  role: string; name: string; grad: string; avatars?: Record<string, string>;
+}) {
+  // A role can hold several people ("Lionel Lew, 赵干"); each gets their own photo.
+  const people = name.split(',').map(n => n.trim()).filter(Boolean);
   return (
     <>
       <Key>{role}</Key>
-      <div className="flex items-center gap-2 text-[var(--text)]">
-        <span
-          className="w-5 h-5 rounded-full grid place-items-center font-mono text-[8.5px] text-white shrink-0"
-          style={{ background: grad }}
-        >
-          {initials(name)}
-        </span>
-        <span>{name}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[var(--text)]">
+        {people.map(person => {
+          const url = avatars?.[person] || AV[person];
+          return (
+            <span key={person} className="flex items-center gap-2">
+              {url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={url} alt={person} className="w-5 h-5 rounded-full object-cover shrink-0" />
+              ) : (
+                <span
+                  className="w-5 h-5 rounded-full grid place-items-center font-mono text-[8.5px] text-white shrink-0"
+                  style={{ background: grad }}
+                >
+                  {initials(person)}
+                </span>
+              )}
+              <span>{person}</span>
+            </span>
+          );
+        })}
       </div>
     </>
   );

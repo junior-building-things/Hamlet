@@ -816,28 +816,36 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
       const avatar = emailToAvatar.get(email);
       if (avatar) meegoAvatars[name] = avatar;
     }
-    // Fallback: search_user_info for remaining names
-    const missingKeys = Object.entries(pocEmails)
+    // Fallback: search_user_info for the rest. It takes emails directly and
+    // echoes them back — matching on user_key missed nearly everyone, since
+    // Meego returns a numeric key rather than the email's local part.
+    const missingEmails = Object.entries(pocEmails)
       .filter(([name]) => !meegoAvatars[name])
-      .map(([, email]) => email.split('@')[0]);
-    if (missingKeys.length > 0) {
+      .map(([, email]) => email);
+    for (let i = 0; i < missingEmails.length; i += 20) { // search_user_info takes at most 20
       try {
         const avatarRaw = await callMeegoMcp('search_user_info', {
           project_key: TIKTOK_PROJECT_KEY,
-          user_keys: missingKeys,
+          user_keys: missingEmails.slice(i, i + 20),
         });
-        let avatarList: Array<{ user_key: string; avatar_url?: string }>;
+        let avatarList: Array<{ user_key?: string; username?: string; email?: string; avatar_url?: string }>;
         try { avatarList = JSON.parse(avatarRaw); } catch { avatarList = []; }
+        const byEmail = new Map<string, string>();
         for (const u of avatarList) {
           if (!u.avatar_url) continue;
-          for (const [name, email] of Object.entries(pocEmails)) {
-            if (email.split('@')[0] === u.user_key && !meegoAvatars[name]) {
-              meegoAvatars[name] = u.avatar_url;
-            }
+          for (const id of [u.email, u.username, u.user_key]) {
+            if (id) byEmail.set(id.toLowerCase(), u.avatar_url);
           }
         }
-      } catch { /* ignore */ }
+        for (const [name, email] of Object.entries(pocEmails)) {
+          const avatar = byEmail.get(email.toLowerCase()) ?? byEmail.get(email.split('@')[0].toLowerCase());
+          if (avatar && !meegoAvatars[name]) meegoAvatars[name] = avatar;
+        }
+      } catch (e) {
+        console.warn('[meego] search_user_info avatar lookup failed:', e);
+      }
     }
+    console.log(`[meego] avatars resolved: ${Object.keys(meegoAvatars).length} / ${Object.keys(pocEmails).length}`);
   } catch (e) {
     console.warn('[meego] avatar fetch failed:', e);
   }
