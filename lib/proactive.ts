@@ -6,6 +6,7 @@ import { generateText } from './llm';
 import { getPrompt, getPromptModel } from './prompts';
 import { getPromptDef, renderPrompt } from './prompt-registry';
 import { loadDigestState, updateDigestState, type ProactiveWatch } from './digest-state';
+import { readFeatureCache } from './feature-cache';
 
 // Thomas — recipient of every Proactive update. Same id as digests.ts AB_OPEN_MENTION_OPEN_ID.
 const OWNER_OPEN_ID = 'ou_1e7fa98f1e46311d8a5e4554dc7a668e';
@@ -52,7 +53,13 @@ async function summariseChat(featureName: string, messages: ChatMessage[]): Prom
 export async function checkFeature(watch: ProactiveWatch, now = Date.now()): Promise<{ lines: string[]; next: ProactiveWatch }> {
   const synced = await syncFeatureStatus(watch.meegoUrl, undefined, watch.chatId);
   const current = { status: synced.status ?? '', iosVersion: synced.iosVersion ?? '' };
-  const chatId = synced.chatId || watch.chatId;
+  // syncFeatureStatus can't always find the group without Thomas's token; the
+  // feature cache already knows it for most features.
+  let chatId = synced.chatId || watch.chatId;
+  if (!chatId) {
+    const id = watch.meegoUrl.match(/detail\/(\d+)/)?.[1];
+    chatId = (await readFeatureCache().catch(() => null))?.features.find(f => (f.meegoIssueId ?? f.id) === id)?.chatId;
+  }
   const next: ProactiveWatch = { ...watch, name: synced.name || watch.name, chatId, snapshot: current, lastCheckedAt: new Date(now).toISOString() };
   if (!watch.snapshot || !watch.lastCheckedAt) return { lines: [], next };
 
