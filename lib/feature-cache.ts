@@ -69,7 +69,7 @@ export async function writeFeatureCache(features: StoredFeature[]): Promise<void
   try {
     await writeJsonState(FEATURES_PATH, {
       updatedAt: new Date().toISOString(),
-      features,
+      features: features.map(toStored),
     } satisfies FeatureCache);
   } catch (e) {
     console.warn('[feature-cache] write failed:', e);
@@ -92,7 +92,7 @@ export async function updateFeatureInCache(
       if (!cache) return { updatedAt: new Date().toISOString(), features: [] };
       const idx = cache.features.findIndex(f => f.id === featureId);
       if (idx !== -1) {
-        cache.features[idx] = { ...cache.features[idx], ...updates };
+        cache.features[idx] = toStored({ ...cache.features[idx], ...updates });
       }
       cache.updatedAt = new Date().toISOString();
       return cache;
@@ -119,7 +119,7 @@ export async function patchFeaturesInCache(
       for (const [id, delta] of deltas) {
         const idx = cache.features.findIndex(f => (f.meegoIssueId ?? f.id) === id || f.id === id);
         if (idx !== -1) {
-          cache.features[idx] = { ...cache.features[idx], ...delta };
+          cache.features[idx] = toStored({ ...cache.features[idx], ...delta });
         }
       }
       cache.updatedAt = new Date().toISOString();
