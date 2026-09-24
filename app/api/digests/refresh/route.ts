@@ -5,7 +5,7 @@ import { withCronRun } from '@/lib/cron-runs';
 const AGENT_RUN_SECRET = process.env.AGENT_RUN_SECRET;
 
 // Refresh: full Meego pull + transition detection + queue cards into
-// DigestState + write feature-snapshots.json. Sends NO digest cards —
+// DigestState + update last-statuses.json. Sends NO digest cards —
 // per-section crons (POST /api/digests/section/<id>) consume the queues.
 export const maxDuration = 900;
 export const dynamic = 'force-dynamic';

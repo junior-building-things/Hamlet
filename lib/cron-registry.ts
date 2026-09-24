@@ -87,7 +87,7 @@ export const CRON_REGISTRY: CronJobDef[] = [
     name: 'Refresh feature cache',
     description:
       'Pulls Meego state for every PM-owned feature, detects status transitions + PRD changes, ' +
-      'updates the GCS feature cache and writes feature-snapshots.json. Queues per-section cards ' +
+      'updates the GCS feature cache and last-statuses.json. Queues per-section cards ' +
       'into DigestState. Sends NO cards itself — the per-section crons below send.',
     schedule: '30 9 * * 1-5',
     scheduleTime: '9:30am SGT',

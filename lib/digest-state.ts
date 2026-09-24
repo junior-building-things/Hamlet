@@ -352,9 +352,8 @@ export interface DigestStateFile {
 
   /**
    * Pending AB-open cards queued by the refresh job. Consumed + cleared
-   * by the `digest-ab-open` cron, which loads the full MeegoFeature
-   * from the feature-snapshots file by workItemId before sending the
-   * aggregate card.
+   * by the `digest-ab-open` cron, which fetches each feature live from
+   * Meego by workItemId before sending the aggregate card.
    */
   pendingAbOpenCards?: Array<{
     workItemId: string;

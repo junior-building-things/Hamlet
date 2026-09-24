@@ -237,7 +237,7 @@ function shouldSendSection(
  * Run mode for runDailyDigests.
  *  - 'full' (default, back-compat): pull Meego, detect transitions/PRD changes, send all cards.
  *    Used by the manual /api/digests/run endpoint and the legacy hamlet-daily-digest cron.
- *  - 'refresh': pull Meego, detect transitions/PRD changes, write feature-snapshots.json,
+ *  - 'refresh': pull Meego, detect transitions/PRD changes,
  *    QUEUE cards into DigestState (don't send). Used by refresh-feature-cache cron.
  *  - 'sections-only': skip Meego pull (load from snapshots), skip detection (refresh did it),
  *    only send the section in `sectionFilter`. Used by the per-section crons.
@@ -3720,13 +3720,9 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   const abOpenTransitions: Array<{ feature: MeegoFeature; libraUrl: string }> = [];
   try {
     const prevCache = await readFeatureCache();
-    // Last run's status comes from the previous refresh's snapshot, not the
-    // Hamlet store (which doesn't hold Meego fields).
-    const prevStatusMap = new Map<string, string>();
-    const { loadFeatureSnapshots: loadPrevSnapshots } = await import('./feature-snapshots');
-    for (const [id, snap] of Object.entries((await loadPrevSnapshots())?.features ?? {})) {
-      prevStatusMap.set(id, resolveDisplayStatus(snap.overallStatusName));
-    }
+    // Last run's status per feature (digests/last-statuses.json), saved below.
+    const { loadLastStatuses, saveLastStatuses } = await import('./last-statuses');
+    const prevStatusMap = await loadLastStatuses();
 
     // Detect transitions to Line Review and send notification cards.
     // Hard guardrails — this card may trigger compliance review downstream,
@@ -3842,6 +3838,10 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     } else if (abOpenTransitions.length > 0) {
       console.log('[digests] AB-open digest skipped (paused or section-filtered)');
     }
+
+    const nextStatuses = new Map(prevStatusMap);
+    for (const f of features) nextStatuses.set(f.workItemId, resolveDisplayStatus(f.overallStatusName));
+    await saveLastStatuses(nextStatuses);
 
     // MERGE into the existing GCS cache — update features the digest knows
     // about, add new ones, but NEVER remove features. Only Sync All (the UI's
@@ -4216,20 +4216,6 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // Skip Steps 4-8 (risk eval, link auto-fetch, Q&A scan, AB-concluded scan,
   // version-delay cache patch, sends) — those belong to the per-section crons.
   if (opts.mode === 'refresh') {
-    try {
-      const { saveFeatureSnapshots } = await import('./feature-snapshots');
-      const snapshotMap: Record<string, MeegoFeature> = {};
-      for (const f of features) snapshotMap[f.workItemId] = f;
-      await saveFeatureSnapshots({
-        refreshedAtIso: new Date().toISOString(),
-        features: snapshotMap,
-        inDevIds: inDev.map(f => f.workItemId),
-        juniorChats,
-      });
-      console.log(`[digests] feature-snapshots.json written: ${features.length} features, ${inDev.length} inDev, ${juniorChats.length} juniorChats`);
-    } catch (e) {
-      console.warn('[digests] saveFeatureSnapshots failed:', e);
-    }
     // Cache writeback for version-slip detection + slip-reason inference.
     // Doesn't depend on Step 4's chat-risk findings, so it's safe to run
     // in refresh mode. The full-mode Step 6b later re-runs version
@@ -4857,14 +4843,14 @@ export type { Feature };
 // The legacy daily digest pulls Meego + sends every card in one cron.
 // We now split that into:
 //   1. refresh-feature-cache cron → runDailyDigests({ mode: 'refresh' })
-//      Pulls Meego, queues line_review/ab_open/prd_changes cards, writes
-//      feature-snapshots.json. Sends NO cards.
+//      Pulls Meego, queues line_review/ab_open/prd_changes cards, updates
+//      last-statuses.json. Sends NO cards.
 //   2. Per-section crons → runDigestSection(<id>)
 //      Each section is its own Cloud Scheduler job.
 //      - Queue-based (line_review, ab_open, prd_changes): drain queue, send card.
 //      - Scan-based (risk, unanswered, ab_concluded): delegate to
-//        runDailyDigests({ mode: 'full', sectionFilter: id }) which still
-//        pulls Meego (for now — Phase B+ will switch to snapshot reads).
+//        runDailyDigests({ mode: 'full', sectionFilter: id }), which pulls
+//        Meego live.
 
 export interface DigestSectionResult {
   sectionId: string;
@@ -4878,210 +4864,20 @@ export async function runDigestSection(sectionId: string): Promise<DigestSection
     case 'digest.line_review': return drainLineReviewQueue();
     case 'digest.ab_open': return drainAbOpenQueue();
     case 'digest.prd_changes': return drainPrdChangesQueue();
-    case 'digest.unanswered': return runUnansweredFromSnapshots();
     case 'digest.risk':
+    case 'digest.unanswered':
     case 'digest.ab_concluded': {
       // Scan-based sections still on the legacy path: re-use
       // runDailyDigests with a sectionFilter so we get the same scan +
-      // send logic, but only this card actually fires. (digest.unanswered
-      // has its own snapshot-based fast path above.)
+      // send logic, but only this card actually fires.
       const result = await runDailyDigests({ mode: 'full', sectionFilter: sectionId });
       const sent = sectionId === 'digest.risk' ? result.riskSent
+        : sectionId === 'digest.unanswered' ? result.unansweredSent
         : false; // ab_concluded is fire-and-forget; can't tell from result
       return { sectionId, sent, count: 1, note: 'scan-based' };
     }
     default:
       throw new Error(`unknown digest section: ${sectionId}`);
-  }
-}
-
-/**
- * Fast path for digest.unanswered: read inDev features + juniorChats from
- * the snapshot file written by `refresh-feature-cache`, run ONLY the Q&A
- * scan (chat + PRD comments), build + send the card. Skips Meego pull,
- * link extraction, PRD diff, risk eval, and AB-concluded scan — all
- * irrelevant to this section.
- *
- * Trade-off: depends on snapshots being fresh. If the file is missing or
- * stale (>24h), falls back to the legacy full-pipeline path so the card
- * still fires.
- */
-async function runUnansweredFromSnapshots(): Promise<DigestSectionResult> {
-  const t0 = Date.now();
-  const { loadFeatureSnapshots } = await import('./feature-snapshots');
-  const snapshots = await loadFeatureSnapshots();
-  if (!snapshots) {
-    console.warn('[digests:unanswered] no feature-snapshots.json — falling back to full pipeline');
-    const result = await runDailyDigests({ mode: 'full', sectionFilter: 'digest.unanswered' });
-    return { sectionId: 'digest.unanswered', sent: result.unansweredSent, count: 1, note: 'fallback: snapshots missing' };
-  }
-  const refreshAgeH = (Date.now() - new Date(snapshots.refreshedAtIso).getTime()) / (60 * 60 * 1000);
-  if (refreshAgeH > 24) {
-    console.warn(`[digests:unanswered] snapshots are ${refreshAgeH.toFixed(1)}h old — falling back to full pipeline`);
-    const result = await runDailyDigests({ mode: 'full', sectionFilter: 'digest.unanswered' });
-    return { sectionId: 'digest.unanswered', sent: result.unansweredSent, count: 1, note: 'fallback: snapshots stale' };
-  }
-
-  // Don't restrict to inDevIds — that's filtered by RISK_DIGEST_STATUSES
-  // (Tech Design / Development / QA Testing) which excludes AB Testing,
-  // Merged, and earlier statuses. The legacy Q&A scan iterated all
-  // features minus those whose overallStatusKey === 'end'; do the same.
-  const scannableById = new Map<string, MeegoFeature>();
-  for (const [id, f] of Object.entries(snapshots.features)) {
-    if (f.overallStatusKey === 'end') continue;
-    scannableById.set(id, f);
-  }
-  const juniorChats = snapshots.juniorChats ?? [];
-  console.log(`[digests:unanswered] using snapshots refreshed ${refreshAgeH.toFixed(1)}h ago — ${scannableById.size} scannable features (non-ended), ${juniorChats.length} junior chats`);
-
-  // Resolve owner open_id (required for the @-mention filter).
-  const botToken = await getLarkBotToken();
-  if (!botToken) {
-    console.warn('[digests:unanswered] no bot token — cannot scan or send');
-    return { sectionId: 'digest.unanswered', sent: false, count: 0, note: 'no bot token' };
-  }
-  const ownerEmail = process.env.OWNER_EMAIL;
-  let ownerOpenId = '';
-  if (ownerEmail) {
-    try {
-      const map = await resolveOpenIds([ownerEmail], botToken);
-      ownerOpenId = map[ownerEmail] ?? '';
-    } catch (e) {
-      console.warn('[digests:unanswered] failed to resolve owner open_id:', e);
-    }
-  }
-  if (!ownerOpenId) {
-    console.warn('[digests:unanswered] owner open_id not resolved — cannot scan');
-    return { sectionId: 'digest.unanswered', sent: false, count: 0, note: 'no owner open_id' };
-  }
-
-  const sinceMs = Date.now() - UNANSWERED_WINDOW_MS;
-  const unansweredByFeature = new Map<string, UnansweredFinding>();
-
-  // Step A: chat scan — iterate juniorChats, look up the matching MeegoFeature
-  // from snapshots, run collectUnansweredForFeature.
-  let chatScanned = 0;
-  for (const chat of juniorChats) {
-    const feature = scannableById.get(chat.meegoId);
-    if (!feature) continue;
-    if (feature.overallStatusKey === 'end') continue;
-    chatScanned++;
-    try {
-      const finding = await collectUnansweredForFeature(
-        feature, chat.chatId, sinceMs, ownerOpenId, botToken,
-      );
-      if (finding) {
-        finding.feature.chatId = chat.chatId;
-        unansweredByFeature.set(feature.workItemId, finding);
-      }
-    } catch (e) {
-      console.warn(`[digests:unanswered] chat scan failed for "${feature.name}":`, e);
-    }
-  }
-  console.log(`[digests:unanswered] chat scan: ${chatScanned} chats, ${unansweredByFeature.size} with unanswered`);
-
-  // Step B: PRD-comment scan. Pull cached features (for PRD URLs) and
-  // iterate ones that have a snapshot match.
-  try {
-    const cache = await readFeatureCache();
-    if (cache) {
-      let prdScanned = 0;
-      let prdWithUnanswered = 0;
-      for (const cached of cache.features) {
-        const fId = cached.meegoIssueId ?? cached.id;
-        const meegoFeature = scannableById.get(fId);
-        if (!meegoFeature) continue;
-        if (meegoFeature.overallStatusKey === 'end') continue;
-        if (!cached.prd && !meegoFeature.prd) continue;
-        prdScanned++;
-        try {
-          const commentQs = await collectUnansweredCommentsForFeature(
-            meegoFeature, ownerOpenId, sinceMs,
-          );
-          if (commentQs.length === 0) continue;
-          prdWithUnanswered++;
-          const existing = unansweredByFeature.get(fId);
-          if (existing) {
-            existing.questions = [...existing.questions, ...commentQs]
-              .sort((a, b) => b.timestamp - a.timestamp)
-              .slice(0, MAX_QUESTIONS_PER_FEATURE);
-          } else {
-            unansweredByFeature.set(fId, { feature: meegoFeature, questions: commentQs });
-          }
-        } catch (e) {
-          console.warn(`[digests:unanswered] PRD-comment scan failed for "${meegoFeature.name}":`, e);
-        }
-      }
-      console.log(`[digests:unanswered] PRD-comment scan: ${prdScanned} scanned, ${prdWithUnanswered} with unanswered`);
-    }
-  } catch (e) {
-    console.warn('[digests:unanswered] PRD-comment scan errored:', e);
-  }
-
-  const findings = [...unansweredByFeature.values()];
-  if (findings.length === 0) {
-    console.log(`[digests:unanswered] no findings (took ${((Date.now() - t0) / 1000).toFixed(1)}s) — skipping send`);
-    return { sectionId: 'digest.unanswered', sent: false, count: 0, note: 'no findings' };
-  }
-
-  // Persist findings into the UI feature cache so the FeatureDrawer
-  // can surface them in the OPEN QUESTIONS callout + activity feed.
-  // Capped at the last 10 entries per feature, deduped by messageId so
-  // re-running the digest doesn't multiply the same question.
-  try {
-    const cache = await readFeatureCache();
-    if (cache) {
-      const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Singapore' });
-      const deltas = new Map<string, Partial<Feature>>();
-      for (const finding of findings) {
-        const fId = finding.feature.workItemId;
-        const cached = cache.features.find(cf => cf.id === fId || cf.meegoIssueId === fId);
-        if (!cached) continue;
-        const existing = cached.unansweredQuestions ?? [];
-        const seenIds = new Set(existing.map(e => e.messageId));
-        const additions = finding.questions
-          .filter(q => !seenIds.has(q.messageId))
-          .map(q => ({
-            date: today,
-            // Prefer the original message create_time (q.timestamp is
-            // ms-since-epoch). Fall back to "now" if absent so the
-            // Activity row always has a time to render.
-            iso: q.timestamp && Number.isFinite(q.timestamp)
-              ? new Date(q.timestamp).toISOString()
-              : new Date().toISOString(),
-            sender: q.senderName || 'Unknown',
-            text: q.text,
-            source: (q.source ?? 'chat') as 'chat' | 'prd_comment',
-            messageId: q.messageId,
-          }));
-        if (additions.length === 0) continue;
-        const next = [...existing, ...additions].slice(-10);
-        deltas.set(fId, { unansweredQuestions: next });
-      }
-      if (deltas.size > 0) {
-        await patchFeaturesInCache(deltas);
-        console.log(`[digests:unanswered] persisted to UI cache: ${deltas.size} features patched with new questions`);
-      }
-    }
-  } catch (e) {
-    console.warn('[digests:unanswered] feature-cache persist failed:', e);
-  }
-
-  // Send to PM group, same as the legacy path.
-  const card = buildUnansweredDigestCard(findings);
-  const preview = [card.title, ...card.sections.map(s => s.content)].join('\n---\n');
-  console.log('[digests:unanswered] card preview:\n' + preview);
-  try {
-    const id = await sendInteractiveCardToChat(
-      PM_GROUP_CHAT_ID, card.title, card.template, card.sections, botToken,
-    );
-    const sent = id !== null;
-    const totalQs = findings.reduce((sum, f) => sum + f.questions.length, 0);
-    console.log(`[digests:unanswered] ${sent ? 'sent' : 'send returned no id'} — ${findings.length} features, ${totalQs} questions, took ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-    return { sectionId: 'digest.unanswered', sent, count: totalQs };
-  } catch (e) {
-    console.warn('[digests:unanswered] send failed:', e);
-    return { sectionId: 'digest.unanswered', sent: false, count: 0, note: 'send failed' };
   }
 }
 
@@ -5121,22 +4917,16 @@ async function drainAbOpenQueue(): Promise<DigestSectionResult> {
     console.log('[digests:ab_open] queue empty');
     return { sectionId: 'digest.ab_open', sent: false, count: 0, note: 'empty queue' };
   }
-  // Hydrate full MeegoFeatures from the snapshots file.
-  const { loadFeatureSnapshots } = await import('./feature-snapshots');
-  const snapshots = await loadFeatureSnapshots();
-  if (!snapshots) {
-    console.warn('[digests:ab_open] no feature-snapshots.json — cannot hydrate; leaving queue intact for next refresh');
-    return { sectionId: 'digest.ab_open', sent: false, count: 0, note: 'snapshots missing' };
-  }
+  // Fetch each queued feature live from Meego.
   const transitions: Array<{ feature: MeegoFeature; libraUrl: string }> = [];
   const missing: string[] = [];
   for (const item of queue) {
-    const feature = snapshots.features[item.workItemId];
+    const feature = await fetchMeegoFeature(item.workItemId, '', TIKTOK_PROJECT_KEY);
     if (!feature) { missing.push(item.workItemId); continue; }
     transitions.push({ feature, libraUrl: item.libraUrl });
   }
   if (missing.length > 0) {
-    console.warn(`[digests:ab_open] ${missing.length} queued items missing from snapshots: ${missing.join(',')}`);
+    console.warn(`[digests:ab_open] ${missing.length} queued items not found in Meego: ${missing.join(',')}`);
   }
   if (transitions.length === 0) {
     console.log('[digests:ab_open] no hydratable transitions');
