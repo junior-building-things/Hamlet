@@ -10,6 +10,7 @@ import { readFeatureCache } from './feature-cache';
 
 // Thomas — recipient of every Proactive update. Same id as digests.ts AB_OPEN_MENTION_OPEN_ID.
 const OWNER_OPEN_ID = 'ou_1e7fa98f1e46311d8a5e4554dc7a668e';
+const LARK_BASE_URL = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 const MAX_CHAT_MESSAGES = 60;
 
 /** "45.10" > "45.8": compare dotted versions numerically. */
@@ -34,15 +35,43 @@ async function readGroupSince(chatId: string, sinceMs: number): Promise<ChatMess
   return messages.filter(m => m.sender?.sender_type !== 'app' && senderOpenIdOf(m) !== OWNER_OPEN_ID);
 }
 
-async function summariseChat(featureName: string, messages: ChatMessage[]): Promise<string> {
-  const lines = messages.slice(-MAX_CHAT_MESSAGES).map(chatMessageText).filter(t => t.trim());
+/** open_id → display name for a group's members (the bot has no contact scope, but can list its chats' members). */
+async function memberNames(chatId: string, token: string): Promise<Record<string, string>> {
+  const names: Record<string, string> = {};
+  let pageToken = '';
+  try {
+    for (let page = 0; page < 10; page++) {
+      const res = await fetch(`${LARK_BASE_URL}/open-apis/im/v1/chats/${chatId}/members?member_id_type=open_id&page_size=100${pageToken ? `&page_token=${pageToken}` : ''}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json() as { code: number; data?: { items?: Array<{ member_id?: string; name?: string }>; has_more?: boolean; page_token?: string } };
+      for (const m of data.data?.items ?? []) if (m.member_id && m.name) names[m.member_id] = m.name;
+      if (!data.data?.has_more || !data.data.page_token) break;
+      pageToken = data.data.page_token;
+    }
+  } catch { /* bare @-mentions still render */ }
+  return names;
+}
+
+async function summariseChat(featureName: string, chatId: string, messages: ChatMessage[]): Promise<string> {
+  const recent = messages.slice(-MAX_CHAT_MESSAGES);
+  const lines = recent
+    .map(m => ({ sender: senderOpenIdOf(m), text: chatMessageText(m).trim() }))
+    .filter(l => l.text)
+    .map(l => `{${l.sender || 'unknown'}} ${l.text}`);
   if (lines.length === 0) return '';
   const def = getPromptDef('hamlet.proactive_chat');
   const tmpl = await getPrompt('hamlet.proactive_chat', def?.default ?? '');
   const model = await getPromptModel('hamlet.proactive_chat', def?.model ?? 'claude-sonnet-5');
   const raw = await generateText(renderPrompt(tmpl, { featureName, messages: lines.join('\n') }), { model, label: 'proactive-chat' });
   const json = JSON.parse(raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')) as { notable?: boolean; summary?: string };
-  return json.notable && json.summary?.trim() ? json.summary.trim() : '';
+  const summary = json.notable ? json.summary?.trim() ?? '' : '';
+  if (!summary) return '';
+
+  // Turn {ou_…} tokens into real Lark @-mentions.
+  const ids = [...new Set([...summary.matchAll(/\{(ou_[A-Za-z0-9]+)\}/g)].map(m => m[1]))];
+  const names = ids.length ? await memberNames(chatId, await getLarkBotToken()) : {};
+  return summary.replace(/\{(ou_[A-Za-z0-9]+)\}/g, (_, id: string) => `<at user_id="${id}">${names[id] ?? ''}</at>`);
 }
 
 /**
@@ -75,7 +104,7 @@ export async function checkFeature(watch: ProactiveWatch, now = Date.now()): Pro
   if (chatId) {
     try {
       const messages = await readGroupSince(chatId, Date.parse(watch.lastCheckedAt));
-      const summary = messages.length ? await summariseChat(next.name, messages) : '';
+      const summary = messages.length ? await summariseChat(next.name, chatId, messages) : '';
       if (summary) lines.push(`• Group chat: ${summary}`);
     } catch (e) {
       console.warn(`[proactive] chat check failed for "${next.name}":`, e);

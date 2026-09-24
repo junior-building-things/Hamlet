@@ -127,16 +127,16 @@ Document content:
 const HAMLET_PRD_SECTION_AUTOGEN = `Write 2-4 sentences for a PRD section titled "\${section}". \${docContext}
 Return ONLY plain text.`;
 
-const HAMLET_PROACTIVE_CHAT = `You're watching the Lark group chat for the TikTok feature "\${featureName}" on behalf of its PM, Thomas. These messages were posted since the last check (oldest first):
+const HAMLET_PROACTIVE_CHAT = `You're watching the Lark group chat for the TikTok feature "\${featureName}" and writing a short heads-up to its PM, who will read it as a direct message. These messages were posted since the last check (oldest first); each starts with the sender's id in braces:
 
 \${messages}
 
-Decide whether any of it is worth interrupting Thomas for. Worth it: decisions made or needed, blockers, risks, schedule or scope changes, and questions or requests aimed at Thomas. Not worth it: small talk, thanks, routine progress updates, and automated bot messages.
+Decide whether any of it is worth interrupting the PM for. Worth it: decisions made or needed, blockers, risks, schedule or scope changes, and questions or requests aimed at the PM. Not worth it: small talk, thanks, routine progress updates, and automated bot messages.
 
 Return ONLY a JSON object — no prose, no code fences:
 {"notable": boolean, "summary": string}
 
-summary: when notable, 1-2 short sentences saying who raised what; otherwise "".`;
+summary: when notable, 1-2 short sentences; otherwise "". Address the PM as "you" — never by name, and never say "the PM". Refer to every other person by their id token exactly as given, e.g. {ou_abc123} asked whether…, never by name or as "a teammate". If something needs the PM's call, say it needs your decision.`;
 
 const HAMLET_PRD_RESEARCH_QUERIES = `A PM is creating a PRD for a TikTok feature called "\${featureName}":
 
