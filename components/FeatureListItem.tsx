@@ -527,22 +527,23 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
       {/* PRD Change Log auto-update toggle */}
       {showChangeLog && (
         <div className="hidden sm:flex items-center py-2.5 pl-4" onClick={e => e.stopPropagation()}>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={changeLogOn}
-            aria-label="PRD change log auto-update"
-            aria-disabled={changeLogLocked}
-            title={!isPm
-              ? 'Only the PM of the feature can enable change log updates'
-              : changeLogOn ? 'PRD change log updates on' : 'PRD change log updates off'}
-            onClick={() => { if (!changeLogLocked) onFieldUpdate?.(feature.id, { prdChangeLogEnabled: !changeLogOn }); }}
-            className={changeLogLocked ? 'opacity-40 cursor-not-allowed' : ''}
-          >
-            <span className={`relative inline-flex w-8 h-[18px] shrink-0 rounded-full transition-colors ${changeLogOn ? 'bg-[var(--ai)]' : 'bg-[var(--hairline)]'}`}>
-              <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${changeLogOn ? 'translate-x-[14px]' : ''}`} />
-            </span>
-          </button>
+          <Tip content={!isPm
+            ? 'Only the PM of the feature can enable change log updates'
+            : changeLogOn ? 'PRD change log updates on' : 'PRD change log updates off'}>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={changeLogOn}
+              aria-label="PRD change log auto-update"
+              aria-disabled={changeLogLocked}
+              onClick={() => { if (!changeLogLocked) onFieldUpdate?.(feature.id, { prdChangeLogEnabled: !changeLogOn }); }}
+              className={changeLogLocked ? 'opacity-40 cursor-not-allowed' : ''}
+            >
+              <span className={`relative inline-flex w-8 h-[18px] shrink-0 rounded-full transition-colors ${changeLogOn ? 'bg-[var(--ai)]' : 'bg-[var(--hairline)]'}`}>
+                <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${changeLogOn ? 'translate-x-[14px]' : ''}`} />
+              </span>
+            </button>
+          </Tip>
         </div>
       )}
 
