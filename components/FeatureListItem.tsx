@@ -35,6 +35,8 @@ interface Props {
   /** Skip the Action cell (Ongoing Features hides it; To Dos shows it). */
   hideAction?: boolean;
   showChangeLog?: boolean;
+  /** Logged-in user's email; the change log can only be on when they're a listed PM. */
+  userEmail?: string;
   /** Same gridTemplateColumns the header renders with so each row
    *  shares identical column tracks. */
   gridTemplateColumns?: string;
@@ -340,13 +342,16 @@ function FeatureNameTip({ feature }: { feature: Feature }) {
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, hasUpdate, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, hideAction, showChangeLog, gridTemplateColumns }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, hasUpdate, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, hideAction, showChangeLog, userEmail, gridTemplateColumns }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
   // Row clicks open the drawer (Phase C). Falls back to onEdit when no
   // drawer handler was provided (e.g. TodoView reuse without wiring it).
   const openRow = (f: Feature) => (onOpenDetail ?? onEdit)(f);
-  const changeLogOn = feature.prdChangeLogEnabled !== false;
+  const isPm = !!userEmail && (feature.pmOwner ?? '').split(',')
+    .some(n => feature.pocEmails?.[n.trim()]?.toLowerCase() === userEmail.toLowerCase());
+  const changeLogOn = isPm && feature.prdChangeLogEnabled !== false;
+  const changeLogLocked = !isPm || !onFieldUpdate;
 
   function handleLinkUpdate(linkKey: string, newUrl: string) {
     if (!onFieldUpdate) return;
@@ -527,10 +532,12 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
             role="switch"
             aria-checked={changeLogOn}
             aria-label="PRD change log auto-update"
-            title={changeLogOn ? 'PRD change log updates on' : 'PRD change log updates off'}
-            disabled={!onFieldUpdate}
-            onClick={() => onFieldUpdate?.(feature.id, { prdChangeLogEnabled: !changeLogOn })}
-            className="disabled:opacity-40"
+            aria-disabled={changeLogLocked}
+            title={!isPm
+              ? 'Only the PM of the feature can enable change log updates'
+              : changeLogOn ? 'PRD change log updates on' : 'PRD change log updates off'}
+            onClick={() => { if (!changeLogLocked) onFieldUpdate?.(feature.id, { prdChangeLogEnabled: !changeLogOn }); }}
+            className={changeLogLocked ? 'opacity-40 cursor-not-allowed' : ''}
           >
             <span className={`relative inline-flex w-8 h-[18px] shrink-0 rounded-full transition-colors ${changeLogOn ? 'bg-[var(--ai)]' : 'bg-[var(--hairline)]'}`}>
               <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${changeLogOn ? 'translate-x-[14px]' : ''}`} />

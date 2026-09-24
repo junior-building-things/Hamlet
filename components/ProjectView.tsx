@@ -118,6 +118,13 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
   const [fetchError,     setFetchError]     = useState<string | null>(null);
   const [syncingAll,     setSyncingAll]     = useState(false);
   const [syncingIds,     setSyncingIds]      = useState<Set<string>>(new Set());
+  const [userEmail, setUserEmail] = useState<string>();
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { email?: string } | null) => { if (d?.email) setUserEmail(d.email); })
+      .catch(() => {});
+  }, []);
   const [detailSyncCount, setDetailSyncCount] = useState(0);
   const [detailSyncTotal, setDetailSyncTotal] = useState(0);
   const { setSyncState, registerSyncAll, markSynced } = useSync();
@@ -791,6 +798,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
         hidePriority={hidePriority}
         hideAction={hideAction}
         showChangeLog
+        userEmail={userEmail}
         gridTemplateColumns={gridTemplateColumns} />
     ));
   }
