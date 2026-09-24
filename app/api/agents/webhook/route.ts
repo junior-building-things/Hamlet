@@ -5,7 +5,7 @@ import {
   extractFigmaUrlFromPrd, searchLibraInChat, readDocContent,
   joinFeatureChat,
 } from '@/lib/lark';
-import { readFeatureCache } from '@/lib/feature-cache';
+import { getLiveFeature, getLiveFeatureList } from '@/lib/live-features';
 import { callMeegoMcp } from '@/lib/digests';
 import { generateText } from '@/lib/llm';
 import { Feature } from '@/lib/types';
@@ -141,18 +141,18 @@ async function handleMessage(body: LarkEvent) {
   const chatType = message.chat_type === 'p2p' ? 'direct message' : 'group chat';
 
   // ── Feature lookup: 5-tier data resolution ──────────────────────────────
-  // 1. GCS cache (instant)
-  // 2. Meego MCP (live brief for missing fields)
+  // 1. Meego, live (feature list, then the matched feature's full detail)
+  // 2. Meego MCP brief (version fields not in the detail)
   // 3. Lark Drive search (AB reports, docs)
   // 4. PRD doc content (Figma, design details)
   // 5. Lark group chat (Libra, recent discussions)
   let featureContext = '';
   try {
-    const cache = await readFeatureCache();
-    if (cache && cache.features.length > 0) {
+    const liveFeatures = await getLiveFeatureList();
+    if (liveFeatures.length > 0) {
       // Ask the model to identify which feature + what info is needed.
       // Include status so it can prioritize ongoing features over done ones.
-      const featureList = cache.features
+      const featureList = liveFeatures
         .map(f => `${f.name} [${f.status || 'Unknown'}]`)
         .join('\n');
       const matchRaw = (await generateText(
@@ -164,7 +164,7 @@ async function handleMessage(body: LarkEvent) {
 
       // Fuzzy match from Gemini's response
       let feature = matchedName && matchedName !== 'NONE'
-        ? cache.features.find(f =>
+        ? liveFeatures.find(f =>
             f.name === matchedName ||
             f.name.toLowerCase().includes(matchedName.toLowerCase()) ||
             matchedName.toLowerCase().includes(f.name.toLowerCase())
@@ -179,7 +179,7 @@ async function handleMessage(body: LarkEvent) {
         const words = userText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
         if (words.length > 0) {
           let bestScore = 0;
-          for (const f of cache.features) {
+          for (const f of liveFeatures) {
             const nameLower = f.name.toLowerCase();
             let score = words.filter(w => nameLower.includes(w)).length;
             // Tiebreaker: prefer active features over Done
@@ -194,6 +194,7 @@ async function handleMessage(body: LarkEvent) {
       }
 
       if (feature) {
+          feature = (await getLiveFeature(feature.meegoIssueId ?? feature.id)) ?? feature;
           console.log(`[webhook] matched feature: "${feature.name}", info: "${infoType}"`);
 
           // Tier 1: start with cached data
@@ -298,13 +299,13 @@ async function handleMessage(body: LarkEvent) {
       // General queries (no specific feature)
       if (!featureContext && /how many|list|all|summary|overview/i.test(userText)) {
         const statusCounts: Record<string, number> = {};
-        for (const f of cache.features) {
+        for (const f of liveFeatures) {
           statusCounts[f.status] = (statusCounts[f.status] ?? 0) + 1;
         }
         const summary = Object.entries(statusCounts)
           .map(([s, n]) => `${s}: ${n}`)
           .join(', ');
-        featureContext = `\n\nYou have access to ${cache.features.length} features. Status breakdown: ${summary}`;
+        featureContext = `\n\nYou have access to ${liveFeatures.length} features. Status breakdown: ${summary}`;
       }
     }
   } catch (e) {

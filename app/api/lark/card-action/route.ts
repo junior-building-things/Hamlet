@@ -169,11 +169,12 @@ export async function POST(req: NextRequest) {
         if (match) {
           featureWorkItemId = match.workItemId;
           featureName = match.featureName;
-          // Find the prdUrl from Hamlet feature cache by workItemId.
+          // A hand-set PRD link is stored in Hamlet; otherwise ask Meego.
           const { readFeatureCache } = await import('@/lib/feature-cache');
           const featureCache = await readFeatureCache();
           const feature = featureCache?.features.find(f => (f.meegoIssueId ?? f.id) === featureWorkItemId);
-          prdUrl = feature?.prd ?? '';
+          const { getStoryPrdUrl } = await import('@/lib/meego');
+          prdUrl = feature?.prd || await getStoryPrdUrl(featureWorkItemId);
         }
       }
     } catch (e) {
@@ -252,10 +253,9 @@ export async function POST(req: NextRequest) {
       const { readFeatureCache } = await import('@/lib/feature-cache');
       const featureCache = await readFeatureCache();
       const feature = featureCache?.features.find(f => (f.meegoIssueId ?? f.id) === featureWorkItemId);
-      if (feature) {
-        targetChatId = feature.chatId ?? '';
-        prdUrl = feature.prd ?? '';
-      }
+      targetChatId = feature?.chatId ?? '';
+      const { getStoryPrdUrl } = await import('@/lib/meego');
+      prdUrl = feature?.prd || await getStoryPrdUrl(featureWorkItemId);
     } catch (e) {
       console.warn('[card-action] feature lookup failed:', e);
     }
@@ -483,11 +483,11 @@ export async function POST(req: NextRequest) {
         let pmOpenId = '';
         let pmName = '';
         try {
-          const { readFeatureCache } = await import('@/lib/feature-cache');
-          const cache = await readFeatureCache();
-          const f = cache?.features.find(c =>
+          const { getLiveFeature, getLiveFeatureList } = await import('@/lib/live-features');
+          const match = (await getLiveFeatureList()).find(c =>
             (prdUrl && c.prd === prdUrl) || (chatId && c.chatId === chatId),
           );
+          const f = match ? (await getLiveFeature(match.meegoIssueId ?? match.id)) ?? match : undefined;
           if (f) {
             featureContext = formatFeatureContext(f);
             if (f.pmOwner) {

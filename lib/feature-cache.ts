@@ -1,9 +1,11 @@
 /**
- * Server-side feature cache backed by GCS.
+ * Hamlet's own per-feature data, backed by GCS at
+ * gs://tiktok-im-hamlet-state/hamlet/features.json.
  *
- * Stores the full Feature[] list at gs://tiktok-im-hamlet-state/hamlet/features.json
- * so the Hamlet UI doesn't need browser localStorage for feature data. The cache
- * is shared across browsers/devices and survives page refreshes.
+ * Only fields Meego doesn't have are stored here (see HAMLET_FIELDS): notes,
+ * toggles, hand-edited links, and slow lookups like Libra / packages / chat.
+ * Name, status, node, priority, roles and version come from Meego live
+ * (lib/live-features.ts) and are never read from this file.
  */
 
 import { readJsonState, writeJsonState, updateJsonState } from './gcs-state';
@@ -11,11 +13,40 @@ import { Feature } from './types';
 
 const FEATURES_PATH = 'hamlet/features.json';
 const DELETED_IDS_PATH = 'hamlet/deleted-ids.json';
-const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+/** Fields Hamlet owns. Everything else on a Feature is Meego's and is fetched live. */
+const HAMLET_FIELDS = [
+  'id', 'meegoIssueId', 'meegoUrl', 'description', 'tasks', 'manualEdits',
+  'notes', 'notesEditedAt', 'prdChangeLogEnabled', 'agents', 'agentLastRun',
+  'chatId', 'avatars', 'figmaUrl', 'abReportUrl', 'libraUrl',
+  'bitsAndroidUrl', 'bitsIosUrl',
+  'packageQrUrl', 'packageDownloadUrl', 'packageName', 'packageBuildTime',
+  'iosPackageQrUrl', 'iosPackageDownloadUrl', 'iosPackageName', 'iosPackageBuildTime',
+  'commentSummary', 'riskLevel', 'riskNotes', 'riskHistory',
+  'versionHistory', 'versionChanges', 'versionChangesScannedThroughIso',
+  'prdUpdates', 'unansweredQuestions',
+] as const satisfies readonly (keyof Feature)[];
+
+type HamletField = typeof HAMLET_FIELDS[number];
+/** A stored entry: Hamlet-owned fields, plus Meego fields only where hand-edited (listed in manualEdits). */
+export type StoredFeature = Pick<Feature, 'id'> & Partial<Pick<Feature, HamletField>> & Partial<Feature>;
 
 interface FeatureCache {
   updatedAt: string;
-  features: Feature[];
+  features: StoredFeature[];
+}
+
+/** Drop every Meego-owned field, keeping ones the user edited by hand. */
+export function toStored(f: Partial<Feature> & { id: string }): StoredFeature {
+  const out: Record<string, unknown> = {};
+  const keep = new Set<string>([...HAMLET_FIELDS, ...(f.manualEdits ?? [])]);
+  for (const [k, v] of Object.entries(f)) if (keep.has(k) && v !== undefined) out[k] = v;
+  return out as StoredFeature;
+}
+
+/** Stored Hamlet fields laid over live Meego data; hand-edited fields win. */
+export function overlayStored(live: Feature, stored: StoredFeature | undefined): Feature {
+  return stored ? { ...live, ...toStored(stored) } : live;
 }
 
 /**
@@ -34,7 +65,7 @@ export async function readFeatureCache(): Promise<FeatureCache | null> {
 /**
  * Write the feature list to the GCS cache with the current timestamp.
  */
-export async function writeFeatureCache(features: Feature[]): Promise<void> {
+export async function writeFeatureCache(features: StoredFeature[]): Promise<void> {
   try {
     await writeJsonState(FEATURES_PATH, {
       updatedAt: new Date().toISOString(),
@@ -97,14 +128,6 @@ export async function patchFeaturesInCache(
   } catch (e) {
     console.warn('[feature-cache] patch failed:', e);
   }
-}
-
-/**
- * Check if the cache is fresh (< CACHE_TTL_MS old).
- */
-export function isCacheFresh(cache: FeatureCache): boolean {
-  const age = Date.now() - Date.parse(cache.updatedAt);
-  return !isNaN(age) && age < CACHE_TTL_MS;
 }
 
 // ─── Deleted feature IDs ────────────────────────────────────────────────────

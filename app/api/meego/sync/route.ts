@@ -16,7 +16,8 @@ async function getFreshUserToken(): Promise<string | undefined> {
 }
 
 export async function POST(req: NextRequest) {
-  const { meegoUrl, chatId } = await req.json() as { meegoUrl?: string; chatId?: string };
+  // meegoOnly: refresh Meego fields only, skipping the slow Lark / Libra / package lookups.
+  const { meegoUrl, chatId, meegoOnly = false } = await req.json() as { meegoUrl?: string; chatId?: string; meegoOnly?: boolean };
 
   if (!meegoUrl) {
     return NextResponse.json({ error: 'meegoUrl is required' }, { status: 400 });
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const userToken = await getFreshUserToken();
-    const result = await syncFeatureStatus(meegoUrl, userToken, chatId);
+    const result = await syncFeatureStatus(meegoUrl, userToken, chatId, { meegoOnly });
 
     // Use Meego avatars first, then try Lark as fallback
     let pocAvatars: Record<string, string> = { ...result.meegoAvatars };
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
     // look it up from the digest pipeline's Junior chat cache (GCS). The
     // cache matches by Meego ID in the chat description, which is more
     // reliable than name-based search.
-    if (!result.chatId || !result.libraUrl) {
+    if (!meegoOnly && (!result.chatId || !result.libraUrl)) {
       try {
         const meegoId = meegoUrl.match(/\/detail\/(\d+)/)?.[1] ?? '';
         if (meegoId) {
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest) {
         ...(versionHistory ? { versionHistory } : {}),
         abReportUrl: keep('abReportUrl', result.abReportUrl, existing?.abReportUrl),
         libraUrl: keep('libraUrl', result.libraUrl, existing?.libraUrl),
-        chatId: result.chatId,
+        ...(meegoOnly ? {} : { chatId: result.chatId }),
         // Project Details fields — populated by syncFeatureStatus from
         // the Meego brief's work_item_fields. Were previously returned
         // in the sync response (so the client's local state showed
@@ -129,10 +130,12 @@ export async function POST(req: NextRequest) {
         uiuxOwner: result.uiuxOwner,
         contentDesigner: result.contentDesigner,
         // Package QR codes (fetched as part of the chat join flow).
-        packageQrUrl: result.packageQrUrl,
-        packageDownloadUrl: result.packageDownloadUrl,
-        iosPackageQrUrl: result.iosPackageQrUrl,
-        iosPackageDownloadUrl: result.iosPackageDownloadUrl,
+        ...(meegoOnly ? {} : {
+          packageQrUrl: result.packageQrUrl,
+          packageDownloadUrl: result.packageDownloadUrl,
+          iosPackageQrUrl: result.iosPackageQrUrl,
+          iosPackageDownloadUrl: result.iosPackageDownloadUrl,
+        }),
         avatars: pocAvatars,
         pocEmails: result.pocEmails,
         meegoComments: result.meegoComments,
@@ -145,7 +148,7 @@ export async function POST(req: NextRequest) {
     const juniorUrl = process.env.JUNIOR_URL;
     const cronSecret = process.env.JUNIOR_CRON_SECRET;
     const projectKey = meegoUrl.match(/meego\.larkoffice\.com\/([^/]+)\/story/)?.[1];
-    if (juniorUrl && cronSecret && projectKey && meegoId) {
+    if (!meegoOnly && juniorUrl && cronSecret && projectKey && meegoId) {
       fetch(`${juniorUrl}/api/check-prd-ready`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cronSecret}` },

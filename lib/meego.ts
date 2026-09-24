@@ -518,7 +518,13 @@ export async function fetchTicketComments(
   });
 }
 
-export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: string, cachedChatId?: string): Promise<{
+export async function syncFeatureStatus(
+  meegoUrl: string,
+  userAccessToken?: string,
+  cachedChatId?: string,
+  // Meego fields only: skips the slow Figma / AB-report / chat / package / Libra lookups.
+  opts: { meegoOnly?: boolean } = {},
+): Promise<{
   status: string;
   name: string;
   owner: string;
@@ -927,7 +933,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Extract Figma URL from the PRD (best-effort)
   let figmaUrl = '';
-  if (!isDone && prd) {
+  if (!isDone && prd && !opts.meegoOnly) {
     try {
       figmaUrl = await extractFigmaUrlFromPrd(prd);
     } catch { /* ignore — Figma link is optional */ }
@@ -941,7 +947,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
 
   // Search for AB report on Lark Drive (best-effort) — also extracts Libra URL as fallback
   let abReportUrl = '';
-  if (!isDone && workItemName) {
+  if (!isDone && workItemName && !opts.meegoOnly) {
     try {
       const abResult = await searchAbReport(workItemName, userAccessToken, prd);
       abReportUrl = abResult.abReportUrl;
@@ -987,7 +993,7 @@ export async function syncFeatureStatus(meegoUrl: string, userAccessToken?: stri
   let iosPackageQrUrl = '';
   let iosPackageDownloadUrl = '';
   let chatId = cachedChatId ?? '';
-  if (!isDone && workItemName) {
+  if (!isDone && workItemName && !opts.meegoOnly) {
     try {
       if (!chatId) {
         chatId = (await joinFeatureChat(workItemName, userAccessToken, meegoUrl, createdYear < 2026)) ?? '';

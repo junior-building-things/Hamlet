@@ -20,6 +20,7 @@ const STORAGE_SORT_BY         = 'hamlet_sort_by';
 const STORAGE_SORT_DIR        = 'hamlet_sort_dir';
 const STORAGE_STATUS_FILTER   = 'hamlet_status_filter';
 const STORAGE_PRIORITY_FILTER = 'hamlet_priority_filter';
+const STORAGE_FEATURES_SNAPSHOT = 'hamlet_features_snapshot';
 const SYNC_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
@@ -183,7 +184,8 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
 
   // ── Detail sync ────────────────────────────────────────────────────────────
 
-  const syncAllDetails = useCallback(async (list: Feature[]) => {
+  // meegoOnly: refresh Meego fields only (page open); full syncs also redo the Lark / Libra / package lookups.
+  const syncAllDetails = useCallback(async (list: Feature[], meegoOnly = false) => {
     const withUrl = list.filter(f => f.meegoUrl);
     if (withUrl.length === 0) return;
     // Sort: most progressed first (excluding Done), then Done last.
@@ -212,7 +214,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
         try {
           const res  = await fetch('/api/meego/sync', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ meegoUrl: f.meegoUrl, chatId: f.chatId }),
+            body: JSON.stringify({ meegoUrl: f.meegoUrl, chatId: f.chatId, meegoOnly }),
           });
           const d = await res.json() as Record<string, unknown>;
           // Remove deleted features from list and GCS cache
@@ -356,72 +358,33 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
   // ── Initial load ───────────────────────────────────────────────────────────
 
   useEffect(() => {
+    // Paint the list this browser last saw, then refresh it from Meego. Meego
+    // is the source of truth; the snapshot only exists so the page isn't blank.
     async function init() {
-      // Load cached data from GCS — this is the single source of truth on
-      // page load. The cache is kept authoritative by Sync All (which
-      // replaces the full list) and the daily digest pipeline.
-      // No live Meego fetch on refresh — that would be slow and cause
-      // status flicker (MQL returns node-level status, not overall status).
-      try {
-        const cacheRes = await fetch('/api/features/cache');
-        if (cacheRes.ok) {
-          const cacheData = await cacheRes.json() as { features?: Feature[] };
-          if (cacheData.features && cacheData.features.length > 0) {
-            // Seed the global AV map from every cached feature's
-            // per-feature avatars so the FeatureModal's people
-            // dropdowns can render proper images for team members
-            // even before any of those features get synced this
-            // session. Without this, opening "New Feature" right
-            // after page load shows "AL" / "KC" initials only.
-            for (const f of cacheData.features) {
-              if (f.avatars) Object.assign(AV, f.avatars);
-            }
-            setFeatures(cacheData.features);
-            setLoading(false);
-            markSynced();
-            // Backfill avatars for people who only show up in
-            // pocEmails but never had their avatar written into
-            // any feature.avatars (PMs / DAs / TPMs). Sends one
-            // batched request per page load so the Lark contact
-            // API is hit just once.
-            const missing: Record<string, string> = {};
-            for (const f of cacheData.features) {
-              const pocEmails = f.pocEmails ?? {};
-              for (const [name, email] of Object.entries(pocEmails)) {
-                if (!AV[name] && email && !missing[name]) missing[name] = email;
-              }
-            }
-            if (Object.keys(missing).length > 0) {
-              fetch('/api/avatars/resolve', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ emails: missing }),
-              })
-                .then(r => r.ok ? r.json() : null)
-                .then((d: { avatars?: Record<string, string> } | null) => {
-                  if (d?.avatars && Object.keys(d.avatars).length > 0) {
-                    Object.assign(AV, d.avatars);
-                    // Force a re-render so FeatureModal options
-                    // pick up the new avatars on next open.
-                    setFeatures(prev => [...prev]);
-                  }
-                })
-                .catch(() => {});
-            }
-            return;
-          }
-        }
-      } catch { /* fall through */ }
-
-      // No cache available — do a live Meego fetch as fallback
-      await fetchFromMeego(true);
+      let snapshot: Feature[] = [];
+      try { snapshot = JSON.parse(localStorage.getItem(STORAGE_FEATURES_SNAPSHOT) ?? '[]') as Feature[]; } catch { /* none */ }
+      if (snapshot.length > 0) {
+        for (const f of snapshot) if (f.avatars) Object.assign(AV, f.avatars);
+        setFeatures(snapshot);
+        setLoading(false);
+      }
+      setSyncingAll(true);
+      const list = await fetchFromMeego();
+      setSyncingAll(false);
       setLoading(false);
+      if (list) syncAllDetails(list, true);
     }
 
     if (features.length === 0) init();
     else setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the snapshot current for the next page open.
+  useEffect(() => {
+    if (loading || features.length === 0) return;
+    try { localStorage.setItem(STORAGE_FEATURES_SNAPSHOT, JSON.stringify(features)); } catch { /* quota */ }
+  }, [features, loading]);
 
   // ── Periodic auto-sync every 2 hours ──────────────────────────────────────
   useEffect(() => {

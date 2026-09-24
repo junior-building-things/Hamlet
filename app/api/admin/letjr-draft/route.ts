@@ -6,7 +6,7 @@ import {
   sendTextMessage,
 } from '@/lib/lark';
 import { loadDigestState, saveDigestState } from '@/lib/digest-state';
-import { readFeatureCache } from '@/lib/feature-cache';
+import { getLiveFeature, getLiveFeatureList } from '@/lib/live-features';
 import { generateText } from '@/lib/llm';
 
 export const dynamic = 'force-dynamic';
@@ -84,10 +84,10 @@ export async function POST(req: NextRequest) {
     let pmOpenId = '';
     let pmName = '';
     try {
-      const cache = await readFeatureCache();
-      const f = cache?.features.find(c =>
+      const match = (await getLiveFeatureList()).find(c =>
         (prdUrl && c.prd === prdUrl) || (chatId && c.chatId === chatId),
       );
+      const f = match ? (await getLiveFeature(match.meegoIssueId ?? match.id)) ?? match : undefined;
       if (f) {
         featureContext = formatFeatureContext(f);
         if (f.pmOwner) {

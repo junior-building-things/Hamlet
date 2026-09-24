@@ -30,15 +30,14 @@ export async function POST(req: NextRequest) {
 
     const cache = await readFeatureCache();
     const cached = cache?.features.find(f => (f.meegoIssueId ?? f.id) === workItemId);
-    if (!cached) return NextResponse.json({ error: 'feature not found in cache' }, { status: 404 });
 
-    const feature = await fetchMeegoFeature(workItemId, cached.name, TIKTOK_PROJECT_KEY);
+    const feature = await fetchMeegoFeature(workItemId, '', TIKTOK_PROJECT_KEY);
     if (!feature) return NextResponse.json({ error: 'meego fetch failed' }, { status: 500 });
 
     await sendAbConcludedDigestCard([{
       feature,
-      abReportUrl: cached.abReportUrl ?? '',
-      libraUrl: cached.libraUrl ?? '',
+      abReportUrl: cached?.abReportUrl ?? '',
+      libraUrl: cached?.libraUrl ?? '',
     }]);
 
     return NextResponse.json({ ok: true, sent: feature.name });

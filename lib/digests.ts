@@ -1668,7 +1668,7 @@ export async function inferVersionSlipReason(
  * pair, it's carried forward verbatim.
  */
 async function computeNextVersionChanges(
-  cached: import('./types').Feature,
+  cached: import('./feature-cache').StoredFeature & { name: string },
   meegoUrl: string,
   botToken: string,
 ): Promise<{
@@ -1869,13 +1869,13 @@ async function patchVersionChangesInCache(
   let changed = 0;
   for (const cached of featureCache.features) {
     const fId = cached.meegoIssueId ?? cached.id;
-    if (cached.status === 'Done' || cached.status === '已完成') continue;
     const meegoFeature = featureByWorkItemId.get(fId);
+    if (meegoFeature?.overallStatusKey === 'end') continue;
     const meegoUrl = meegoFeature?.meegoUrl ?? cached.meegoUrl;
     if (!meegoUrl) continue;
     scanned++;
     const { nextVersionChanges, changed: vcChanged, nextScannedThroughIso } =
-      await computeNextVersionChanges(cached, meegoUrl, botToken);
+      await computeNextVersionChanges({ ...cached, name: meegoFeature?.name ?? fId }, meegoUrl, botToken);
     const scannedAdvanced = nextScannedThroughIso !== cached.versionChangesScannedThroughIso;
     if (vcChanged || scannedAdvanced) {
       const delta: Partial<import('./types').Feature> = {};
@@ -3720,11 +3720,12 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   const abOpenTransitions: Array<{ feature: MeegoFeature; libraUrl: string }> = [];
   try {
     const prevCache = await readFeatureCache();
+    // Last run's status comes from the previous refresh's snapshot, not the
+    // Hamlet store (which doesn't hold Meego fields).
     const prevStatusMap = new Map<string, string>();
-    if (prevCache) {
-      for (const f of prevCache.features) {
-        if (f.meegoIssueId || f.id) prevStatusMap.set(f.meegoIssueId ?? f.id, f.status);
-      }
+    const { loadFeatureSnapshots: loadPrevSnapshots } = await import('./feature-snapshots');
+    for (const [id, snap] of Object.entries((await loadPrevSnapshots())?.features ?? {})) {
+      prevStatusMap.set(id, resolveDisplayStatus(snap.overallStatusName));
     }
 
     // Detect transitions to Line Review and send notification cards.
@@ -4548,7 +4549,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           // MeegoFeature for the card link metadata).
           if (!meegoFeature) continue;
           if (meegoFeature.overallStatusKey === 'end') continue;
-          if (!cached.prd) continue;
+          if (!cached.prd && !meegoFeature.prd) continue;
           prdScanned++;
           try {
             const commentQs = await collectUnansweredCommentsForFeature(
@@ -4652,7 +4653,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
       // risk) intentionally doesn't call this — undefined means "keep".
       function trackRiskTransition(
         delta: Partial<import('./types').Feature>,
-        cached: import('./types').Feature,
+        cached: import('./feature-cache').StoredFeature,
       ) {
         const prev = cached.riskLevel ?? 'none';
         const next = delta.riskLevel ?? 'none';
@@ -4679,7 +4680,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         // detection (the RiskBadge UI hides for Done features anyway).
         // Skipping them keeps Step 6b within the route's maxDuration
         // when the cache holds 100+ features.
-        if (statusKey === 'end' || cached.status === 'Done' || cached.status === '已完成') {
+        if (statusKey === 'end') {
           deltas.set(fId, { riskLevel: undefined, riskNotes: undefined });
           continue;
         }
@@ -4692,7 +4693,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         let nextScannedThroughIso: string | undefined = cached.versionChangesScannedThroughIso;
         if (meegoUrl) {
           versionScanned++;
-          const result = await computeNextVersionChanges(cached, meegoUrl, botToken);
+          const result = await computeNextVersionChanges({ ...cached, name: meegoFeature?.name ?? fId }, meegoUrl, botToken);
           nextVersionChanges = result.nextVersionChanges;
           versionChangesChanged = result.changed;
           nextScannedThroughIso = result.nextScannedThroughIso;
@@ -4991,7 +4992,7 @@ async function runUnansweredFromSnapshots(): Promise<DigestSectionResult> {
         const meegoFeature = scannableById.get(fId);
         if (!meegoFeature) continue;
         if (meegoFeature.overallStatusKey === 'end') continue;
-        if (!cached.prd) continue;
+        if (!cached.prd && !meegoFeature.prd) continue;
         prdScanned++;
         try {
           const commentQs = await collectUnansweredCommentsForFeature(
