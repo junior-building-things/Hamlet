@@ -85,17 +85,17 @@ export const CRON_REGISTRY: CronJobDef[] = [
     service: 'hamlet',
     name: 'Hamlet — Daily digest',
     description:
-      'The daily batch pass: pulls Meego live, detects transitions, PRD changes, risk and ' +
-      'version slips, and sends every section\'s card. Pausing it skips the whole pass.',
+      'The daily batch pass: pulls Meego live and records risk, version slips and PRD change ' +
+      'logs for Hamlet and Proactive updates. Sends no cards. Pausing it skips the whole pass.',
     schedule: '30 9 * * 1-5',
     scheduleTime: '9:30am SGT',
     scheduleFrequency: 'Weekdays',
-    target: 'Personal digest chat (oc_d1f9b0ad…)',
+    target: 'Hamlet (feature risk, version slips, PRD change logs)',
     kind: 'cloud_scheduler',
     runsInJob: true,
     cloudSchedulerJobId: HAMLET_DAILY,
     cloudSchedulerService: 'hamlet',
-    destinations: [{ kind: 'team_thomas', label: 'Team Thomas' }],
+    destinations: [{ kind: 'hamlet', label: 'Hamlet' }],
   },
   {
     id: 'poll-prd-ready',
@@ -117,126 +117,6 @@ export const CRON_REGISTRY: CronJobDef[] = [
   // ── Per-section digest crons ──────────────────────────────────────────────
   // Each is its own Cloud Scheduler job hitting POST /api/digests/section/<id>.
   // Refresh-feature-cache (above) populates queues / snapshots; these consume.
-  {
-    id: 'digest.risk',
-    service: 'junior',
-    name: 'Daily risk digest',
-    description:
-      'For each in-flight feature, runs a Gemini risk evaluation over the last 24h of chat + ' +
-      'Meego comments and surfaces anything flagged 🔴 / 🟡 in a single aggregate card.',
-    schedule: '30 9 * * 1-5',
-    scheduleTime: '9:30am SGT',
-    scheduleFrequency: 'Weekdays',
-    target: 'Personal digest chat',
-    kind: 'cloud_scheduler',
-    runsInJob: true,
-    cloudSchedulerJobId: 'digest-risk',
-    cloudSchedulerService: 'hamlet',
-    sectionKey: 'risk',
-    destinations: [{ kind: 'team_thomas', label: 'Team Thomas' }],
-  },
-  {
-    id: 'digest.prd_changes',
-    service: 'junior',
-    name: 'PRD change-log digest',
-    description:
-      'Sends the queue of PRD changes detected by the refresh job (Gemini-summarised diffs ' +
-      'appended to each PRD\'s Change Log section).',
-    schedule: '30 9 * * 1-5',
-    scheduleTime: '9:30am SGT',
-    scheduleFrequency: 'Weekdays',
-    target: 'Personal digest chat',
-    kind: 'cloud_scheduler',
-    runsInJob: true,
-    cloudSchedulerJobId: 'digest-prd-changes',
-    cloudSchedulerService: 'hamlet',
-    sectionKey: 'prd_changes',
-    destinations: [
-      { kind: 'team_thomas', label: 'Team Thomas' },
-      { kind: 'feature_group', label: 'Feature group' },
-    ],
-  },
-  {
-    id: 'digest.unanswered',
-    service: 'junior',
-    name: 'Outstanding Q&A digest',
-    description:
-      'Scans chat @-mentions of the owner + open PRD comment threads for questions Thomas hasn\'t ' +
-      'addressed yet. Asks Gemini to gate "is this actually a question?" and surfaces only the real ones.',
-    schedule: '30 9 * * 1-5',
-    scheduleTime: '9:30am SGT',
-    scheduleFrequency: 'Weekdays',
-    target: 'Personal digest chat',
-    kind: 'cloud_scheduler',
-    runsInJob: true,
-    cloudSchedulerJobId: 'digest-unanswered',
-    cloudSchedulerService: 'hamlet',
-    sectionKey: 'unanswered',
-    destinations: [
-      { kind: 'team_thomas', label: 'Team Thomas' },
-      { kind: 'feature_group', label: 'Feature group' },
-    ],
-  },
-  {
-    id: 'digest.ab_open',
-    service: 'junior',
-    name: 'AB-open digest',
-    description:
-      'Sends the queue of features whose Meego status transitioned to 实验中 (AB Testing) ' +
-      'since the last refresh. One aggregate card with per-feature Send-to-PM-Group + Edit buttons.',
-    schedule: '30 9 * * 1-5',
-    scheduleTime: '9:30am SGT',
-    scheduleFrequency: 'Weekdays',
-    target: 'Personal digest chat',
-    kind: 'cloud_scheduler',
-    runsInJob: true,
-    cloudSchedulerJobId: 'digest-ab-open',
-    cloudSchedulerService: 'hamlet',
-    sectionKey: 'ab_open',
-    destinations: [
-      { kind: 'team_thomas', label: 'Team Thomas' },
-      { kind: 'progress_update', label: 'Progress update' },
-    ],
-  },
-  {
-    id: 'digest.ab_concluded',
-    service: 'junior',
-    name: 'AB-concluded digest',
-    description:
-      'For each feature chat where an "AB Brief" calendar invite has landed, drafts an AB-concluded ' +
-      'card via Gemini (results summary + Next Steps from the AB report) for review + Send-to-PM-Group.',
-    schedule: '30 9 * * 1-5',
-    scheduleTime: '9:30am SGT',
-    scheduleFrequency: 'Weekdays',
-    target: 'Personal digest chat',
-    kind: 'cloud_scheduler',
-    runsInJob: true,
-    cloudSchedulerJobId: 'digest-ab-concluded',
-    cloudSchedulerService: 'hamlet',
-    sectionKey: 'ab_concluded',
-    destinations: [
-      { kind: 'team_thomas', label: 'Team Thomas' },
-      { kind: 'progress_update', label: 'Progress update' },
-    ],
-  },
-  {
-    id: 'digest.line_review',
-    service: 'junior',
-    name: 'Line Review (PRD Ready) cards',
-    description:
-      'Sends the queue of features whose Meego status just transitioned to 待线内评审 ' +
-      '(Line Review). One feature card per transition, sent to the feature\'s group chat.',
-    schedule: '30 9 * * 1-5',
-    scheduleTime: '9:30am SGT',
-    scheduleFrequency: 'Weekdays',
-    target: 'Per-feature group chat',
-    kind: 'cloud_scheduler',
-    runsInJob: true,
-    cloudSchedulerJobId: 'digest-line-review',
-    cloudSchedulerService: 'hamlet',
-    sectionKey: 'line_review',
-    destinations: [{ kind: 'feature_group', label: 'Feature group' }],
-  },
 ];
 
 export function getCronById(id: string): CronJobDef | undefined {
@@ -246,9 +126,5 @@ export function getCronById(id: string): CronJobDef | undefined {
 /** Ids of all crons that run inside the hamlet-digests batch Job pass. */
 export const JOB_CRON_IDS: string[] = CRON_REGISTRY.filter(c => c.runsInJob).map(c => c.id);
 
-/**
- * The master cron. Pausing it stops the whole pass (the `all` run is
- * monolithic: refresh + send in one go). The per-section `digest.*` ids
- * only gate their own card via cronPaused.
- */
+/** The master cron. Pausing it stops the whole pass. */
 export const JOB_MASTER_CRON_IDS: string[] = [HAMLET_DAILY];

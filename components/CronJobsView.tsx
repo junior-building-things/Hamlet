@@ -68,19 +68,12 @@ export function CronJobsView() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Display order is hand-curated: the daily digest pass first, then its
-  // sections roughly in workflow order (line review → AB → PRD changes →
-  // Q&A → risk). Ids not in this list fall through alphabetically so a new
-  // job doesn't disappear silently.
+  // Display order is hand-curated: the daily digest pass first. Ids not in
+  // this list fall through alphabetically so a new job doesn't disappear
+  // silently.
   const ORDER: string[] = [
     'hamlet-daily-digest',
-    'digest.line_review',
     'poll-prd-ready',
-    'digest.ab_open',
-    'digest.ab_concluded',
-    'digest.prd_changes',
-    'digest.unanswered',
-    'digest.risk',
   ];
   const orderIndex = (id: string) => {
     const i = ORDER.indexOf(id);

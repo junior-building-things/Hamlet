@@ -235,6 +235,15 @@ function shouldSendSection(
   return true;
 }
 
+// Digest cards are off: Thomas relies on per-feature Proactive updates
+// (lib/proactive.ts) instead. The pass still does its data work — risk,
+// version slips, PRD change log entries, last-seen statuses.
+const DIGEST_CARDS_ENABLED = false;
+
+function shouldSendCard(state: DigestStateFile, opts: DigestRunOptions, id: string): boolean {
+  return DIGEST_CARDS_ENABLED && shouldSendSection(state, opts, id);
+}
+
 /**
  * Run mode for runDailyDigests.
  *  - 'full' (default, back-compat): pull Meego, detect transitions/PRD changes, send all cards.
@@ -3766,7 +3775,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           ];
           continue;
         }
-        if (!shouldSendSection(state, opts, 'digest.line_review')) {
+        if (!shouldSendCard(state, opts, 'digest.line_review')) {
           console.log(`[digests] Line Review card skipped (paused or section-filtered): "${f.name}"`);
           continue;
         }
@@ -3831,7 +3840,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
       } else if (abOpenTransitions.length > 0) {
         console.log('[digests] AB-open queue skipped (paused)');
       }
-    } else if (abOpenTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_open')) {
+    } else if (abOpenTransitions.length > 0 && shouldSendCard(state, opts, 'digest.ab_open')) {
       try {
         await sendAbOpenDigestCard(abOpenTransitions);
       } catch (e) {
@@ -4101,6 +4110,8 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     } else if (prdChanges.length > 0) {
       console.log('[digests] PRD changes queue skipped (paused)');
     }
+  } else if (prdChanges.length > 0 && !DIGEST_CARDS_ENABLED) {
+    console.log(`[digests] PRD changes digest card off (${prdChanges.length} change(s) still logged to the PRDs)`);
   } else if (prdChanges.length > 0 && !shouldSendSection(state, opts, 'digest.prd_changes')) {
     // We're in full mode but the section is filtered out (e.g. user
     // triggered digest.risk, which re-runs the data scan but should
@@ -4483,7 +4494,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // question, per chat and per PRD comment). Gating only the card meant a
   // paused section still cost full runtime and subscription quota. Nothing
   // but the card consumes unansweredFindings, so skipping is side-effect free.
-  const scanUnanswered = shouldSendSection(state, opts, 'digest.unanswered');
+  const scanUnanswered = shouldSendCard(state, opts, 'digest.unanswered');
   if (!scanUnanswered) {
     console.log('[digests] unanswered scan skipped (paused or section-filtered)');
   }
@@ -4617,7 +4628,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
     }
     console.log(`[digests] AB-concluded scan: ${scanned} chats scanned, ${matched} matched`);
     if (abConcludedChanged) state.abConcludedNotified = [...abConcluded];
-    if (abConcludedTransitions.length > 0 && shouldSendSection(state, opts, 'digest.ab_concluded')) {
+    if (abConcludedTransitions.length > 0 && shouldSendCard(state, opts, 'digest.ab_concluded')) {
       try {
         await sendAbConcludedDigestCard(abConcludedTransitions);
       } catch (e) {
@@ -4800,7 +4811,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // Step 7: Send risk digest (always) — interactive card with per-feature
   // buttons, posted to the PM group chat.
   let riskSent = false;
-  if (rioToken && !shouldSendSection(state, opts, 'digest.risk')) {
+  if (rioToken && !shouldSendCard(state, opts, 'digest.risk')) {
     console.log('[digests] risk digest skipped (paused or section-filtered)');
   } else if (rioToken) {
     const card = await buildRiskDigestCard(riskFindings);
@@ -4817,7 +4828,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
   // Hamlet/Junior bot identity so card-action button clicks
   // (Let me Reply) route to Hamlet's `/api/lark/card-action`.
   let unansweredSent = false;
-  if (unansweredFindings.length > 0 && !shouldSendSection(state, opts, 'digest.unanswered')) {
+  if (unansweredFindings.length > 0 && !shouldSendCard(state, opts, 'digest.unanswered')) {
     console.log('[digests] unanswered digest skipped (paused or section-filtered)');
   } else if (unansweredFindings.length > 0) {
     const sendToken = botToken || rioToken;
