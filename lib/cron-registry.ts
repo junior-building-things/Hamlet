@@ -77,35 +77,16 @@ export interface CronDestination {
 }
 
 const HAMLET_DAILY = 'hamlet-daily-digest';
-const REFRESH_FEATURE_CACHE = 'refresh-feature-cache';
 
 export const CRON_REGISTRY: CronJobDef[] = [
   // ── Cloud Scheduler jobs ──────────────────────────────────────────────────
   {
-    id: REFRESH_FEATURE_CACHE,
-    service: 'hamlet',
-    name: 'Refresh feature cache',
-    description:
-      'Pulls Meego state for every PM-owned feature, detects status transitions + PRD changes, ' +
-      'updates the GCS feature cache and last-statuses.json. Queues per-section cards ' +
-      'into DigestState. Sends NO cards itself — the per-section crons below send.',
-    schedule: '30 9 * * 1-5',
-    scheduleTime: '9:30am SGT',
-    scheduleFrequency: 'Weekdays',
-    target: 'GCS cache + DigestState queues',
-    kind: 'cloud_scheduler',
-    runsInJob: true,
-    cloudSchedulerJobId: REFRESH_FEATURE_CACHE,
-    cloudSchedulerService: 'hamlet',
-    destinations: [{ kind: 'hamlet', label: 'Hamlet' }],
-  },
-  {
     id: HAMLET_DAILY,
     service: 'hamlet',
-    name: 'Hamlet — Daily digest (legacy)',
+    name: 'Hamlet — Daily digest',
     description:
-      'Legacy bundled run kept for manual triggers. Sub-sections now have their own crons; ' +
-      'this fires the unified pipeline (data fetch + every card) end-to-end.',
+      'The daily batch pass: pulls Meego live, detects transitions, PRD changes, risk and ' +
+      'version slips, and sends every section\'s card. Pausing it skips the whole pass.',
     schedule: '30 9 * * 1-5',
     scheduleTime: '9:30am SGT',
     scheduleFrequency: 'Weekdays',
@@ -266,8 +247,8 @@ export function getCronById(id: string): CronJobDef | undefined {
 export const JOB_CRON_IDS: string[] = CRON_REGISTRY.filter(c => c.runsInJob).map(c => c.id);
 
 /**
- * The two "master" local crons. Pausing either one stops the whole local
- * pass (the local `all` run is monolithic: refresh + send in one go). The
- * per-section `digest.*` ids only gate their own card via cronPaused.
+ * The master cron. Pausing it stops the whole pass (the `all` run is
+ * monolithic: refresh + send in one go). The per-section `digest.*` ids
+ * only gate their own card via cronPaused.
  */
-export const JOB_MASTER_CRON_IDS: string[] = [HAMLET_DAILY, REFRESH_FEATURE_CACHE];
+export const JOB_MASTER_CRON_IDS: string[] = [HAMLET_DAILY];

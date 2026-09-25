@@ -100,7 +100,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
 
   // ── Freshness for "Updated Xh ago" ────────────────────────────────────────
   // Prefer the most recent of:
-  //   (a) refresh-feature-cache cron's last run (only counts if within 24h)
+  //   (a) the daily digest's last run (only counts if within 24h)
   //   (b) the user's last manual Sync All / individual sync (lastSyncedAt)
   //   (c) the feature's own lastUpdated (Meego sync timestamp)
   const cronWithin24h = (() => {

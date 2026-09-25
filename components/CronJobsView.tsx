@@ -68,12 +68,12 @@ export function CronJobsView() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Display order is hand-curated: refresh first, then sections roughly in
-  // their workflow order (line review → AB → PRD changes → Q&A → risk),
-  // with the legacy bundled run last. Ids not in this list fall through
-  // alphabetically so a new job doesn't disappear silently.
+  // Display order is hand-curated: the daily digest pass first, then its
+  // sections roughly in workflow order (line review → AB → PRD changes →
+  // Q&A → risk). Ids not in this list fall through alphabetically so a new
+  // job doesn't disappear silently.
   const ORDER: string[] = [
-    'refresh-feature-cache',
+    'hamlet-daily-digest',
     'digest.line_review',
     'poll-prd-ready',
     'digest.ab_open',
@@ -81,7 +81,6 @@ export function CronJobsView() {
     'digest.prd_changes',
     'digest.unanswered',
     'digest.risk',
-    'hamlet-daily-digest',
   ];
   const orderIndex = (id: string) => {
     const i = ORDER.indexOf(id);

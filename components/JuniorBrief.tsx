@@ -191,8 +191,7 @@ export function JuniorBrief({ mode, features, onCompleteAll, completeAllRunning,
     // Split items into "new since yesterday" (most-recent transition
     // into red/yellow OR a fresh version slip in the last 36h) vs
     // "ongoing" (already at-risk in earlier briefs). The 36h window
-    // covers a Mon→Tue overnight gap and the 12h between the two
-    // refresh-feature-cache cron runs.
+    // covers a Mon→Tue overnight gap between daily digest runs.
     const NEW_WINDOW_MS = 36 * 60 * 60 * 1000;
     const cutoff = Date.now() - NEW_WINDOW_MS;
     const isNewlyFlagged = (f: Feature): boolean => {

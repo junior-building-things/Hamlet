@@ -33,7 +33,7 @@ interface SyncContextValue extends SyncState {
   setSyncState: (s: SyncState) => void;
   /** Mark "now" as the latest sync time (called after sync completes). */
   markSynced: () => void;
-  /** ISO timestamp of the most recent refresh-feature-cache cron run.
+  /** ISO timestamp of the most recent daily digest run.
    *  Polled once at mount + after every Sync All so the drawer's
    *  "Updated Xh ago" line stays roughly fresh without spamming the API. */
   refreshCronLastRunAt?: string | null;
@@ -48,14 +48,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [refreshCronLastRunAt, setRefreshCronLastRunAt] = useState<string | null>(null);
   const handlerRef = useRef<() => void | Promise<void>>(noop);
 
-  // Pull the refresh-feature-cache cron's lastAttemptTime once on mount
+  // Pull the daily digest's last run once on mount
   // and re-poll lazily after every sync-all completion. The drawer reads
   // this to compute the "Updated Xh ago" line.
   const refetchCronTimes = useCallback(async () => {
     try {
       const res = await fetch('/api/crons');
       const data = await res.json() as { jobs?: Array<{ id: string; lastAttemptTime?: string | null }> };
-      const job = (data.jobs ?? []).find(j => j.id === 'refresh-feature-cache');
+      const job = (data.jobs ?? []).find(j => j.id === 'hamlet-daily-digest');
       setRefreshCronLastRunAt(job?.lastAttemptTime ?? null);
     } catch { /* best-effort */ }
   }, []);
