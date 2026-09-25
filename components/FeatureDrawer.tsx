@@ -6,7 +6,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useSync } from '@/components/SyncContext';
 import { AV } from '@/lib/avatars';
 import { Switch } from '@/components/Switch';
-import { X, AlertTriangle, Activity, FileText, MessageCircleQuestion, Loader2, RotateCw } from 'lucide-react';
+import { X, AlertTriangle, FileText, MessageCircleQuestion, Loader2, RotateCw } from 'lucide-react';
 import Image from 'next/image';
 
 /**
@@ -234,15 +234,14 @@ export function FeatureDrawer({ feature, onClose }: Props) {
 
   // ── Activity feed: merge version slips, risk transitions, and PRD
   // updates (all populated by the digest pipeline), then sort newest-first
-  // and cap to the last 12. Last sync time is appended as a tail entry.
+  // and cap to the last 12.
   type ActivityEntry =
     | { kind: 'version_slip';   date: string; iso?: string; from: string; to: string }
     | { kind: 'risk_change';    date: string; iso?: string; from: string; to: string }
     | { kind: 'prd_update';     date: string; iso?: string; summary: string }
-    | { kind: 'question';       date: string; iso?: string; sender: string; text: string; source: 'chat' | 'prd_comment' }
-    | { kind: 'sync';           iso: string };
+    | { kind: 'question';       date: string; iso?: string; sender: string; text: string; source: 'chat' | 'prd_comment' };
 
-  type DatedEntry = Exclude<ActivityEntry, { kind: 'sync' }>;
+  type DatedEntry = ActivityEntry;
   const dated: DatedEntry[] = [
     ...(feature.versionChanges ?? []).map((c): DatedEntry => ({
       kind: 'version_slip', date: c.date, iso: c.iso, from: c.from, to: c.to,
@@ -261,9 +260,6 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   const sortKey = (e: DatedEntry) => e.iso ?? `${e.date}T00:00:00+08:00`;
   dated.sort((a, b) => sortKey(a) < sortKey(b) ? 1 : sortKey(a) > sortKey(b) ? -1 : 0);
   const activity: ActivityEntry[] = dated.slice(0, 12);
-  if (updatedAtIso) {
-    activity.push({ kind: 'sync', iso: updatedAtIso });
-  }
 
   return (
     <>
@@ -582,8 +578,7 @@ type ActivityEntryT =
   | { kind: 'version_slip'; date: string; iso?: string; from: string; to: string }
   | { kind: 'risk_change';  date: string; iso?: string; from: string; to: string }
   | { kind: 'prd_update';   date: string; iso?: string; summary: string }
-  | { kind: 'question';     date: string; iso?: string; sender: string; text: string; source: 'chat' | 'prd_comment' }
-  | { kind: 'sync';         iso: string };
+  | { kind: 'question';     date: string; iso?: string; sender: string; text: string; source: 'chat' | 'prd_comment' };
 
 const RISK_COLOR: Record<string, { bg: string; fg: string; border: string }> = {
   red:    { bg: 'oklch(0.72 0.18 22 / 0.12)',  fg: 'var(--rose)',       border: 'oklch(0.62 0.20 22 / 0.3)'  },
@@ -674,19 +669,7 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
       />
     );
   }
-  // Sync entry
-  return (
-    <ActivityRow
-      iconBg="var(--bg-elev-2)"
-      iconFg="var(--text-muted)"
-      iconBorder="var(--hairline-strong)"
-      icon={<Activity className="w-2.5 h-2.5" />}
-      actor="Updated"
-      actorColor="var(--text)"
-      body="latest sync"
-      meta={formatActivityTime({ iso: entry.iso })}
-    />
-  );
+  return null;
 }
 
 function ActivityRow({
