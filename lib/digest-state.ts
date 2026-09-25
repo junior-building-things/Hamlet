@@ -38,6 +38,8 @@ export interface PersistedChatRisk {
    * the ISO is also "when the current risk window started".
    */
   raisedAtIso: string;
+  /** Whether the summary came from the group chat or Meego comments. */
+  source?: 'chat' | 'meego';
 }
 
 export interface PersistedFeatureRisk {
@@ -88,7 +90,7 @@ export interface ProactiveWatch {
   meegoUrl: string;
   chatId?: string;
   /** Last values seen; unset until the first check records a baseline. */
-  snapshot?: { status: string; iosVersion: string };
+  snapshot?: { status: string; iosVersion: string; riskLevel?: string };
   lastCheckedAt?: string;
 }
 

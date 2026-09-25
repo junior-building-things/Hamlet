@@ -22,7 +22,7 @@ const HAMLET_FIELDS = [
   'bitsAndroidUrl', 'bitsIosUrl',
   'packageQrUrl', 'packageDownloadUrl', 'packageName', 'packageBuildTime',
   'iosPackageQrUrl', 'iosPackageDownloadUrl', 'iosPackageName', 'iosPackageBuildTime',
-  'commentSummary', 'riskLevel', 'riskNotes', 'riskHistory',
+  'commentSummary', 'riskLevel', 'riskNotes', 'riskHistory', 'riskSource',
   'versionHistory', 'versionChanges', 'versionChangesScannedThroughIso',
   'prdUpdates', 'unansweredQuestions',
 ] as const satisfies readonly (keyof Feature)[];

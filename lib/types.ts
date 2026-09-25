@@ -27,6 +27,12 @@ export interface PrdRequest {
   useHalfDayPrd?: boolean;
 }
 
+/** Where a risk reason came from, so the UI can link to it. */
+export interface RiskSource {
+  kind: 'chat' | 'meego';
+  url: string;
+}
+
 export interface Feature {
   id: string;
   name: string;
@@ -136,7 +142,9 @@ export interface Feature {
    *
    *   { date: 'YYYY-MM-DD', from: 'green', to: 'yellow' }
    */
-  riskHistory?: Array<{ date: string; iso?: string; from: 'red' | 'yellow' | 'green' | 'none'; to: 'red' | 'yellow' | 'green' | 'none' }>;
+  riskHistory?: Array<{ date: string; iso?: string; from: 'red' | 'yellow' | 'green' | 'none'; to: 'red' | 'yellow' | 'green' | 'none'; reason?: string; source?: RiskSource }>;
+  /** Where the current riskNotes reason came from. */
+  riskSource?: RiskSource;
   /**
    * Chronological log of PRD content updates detected by the digest.
    * Each entry is the Gemini-summarised diff that was appended to the

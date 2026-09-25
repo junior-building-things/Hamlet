@@ -240,7 +240,9 @@ CHAT (oldest first):
 \${messages}
 
 Respond with ONLY a single JSON object on one line, no markdown fences:
-{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, sentence case (capitalise the first letter only), no trailing period; empty string when level is none>"}
+{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, sentence case (capitalise the first letter only), no trailing period; empty string when level is none>","source":"chat"|"meego"}
+
+source: where the summary's evidence comes from — "meego" for Meego comments, "chat" for the group chat.
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
@@ -270,7 +272,9 @@ CHAT (oldest first):
 \${messages}
 
 Respond with ONLY a single JSON object on one line, no markdown fences:
-{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, sentence case (capitalise the first letter only), no trailing period; empty string when level is none>"}
+{"level":"none"|"yellow"|"red","summary":"<short clause, max 14 words, sentence case (capitalise the first letter only), no trailing period; empty string when level is none>","source":"chat"|"meego"}
+
+source: where the summary's evidence comes from — "meego" for Meego comments, "chat" for the group chat.
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 

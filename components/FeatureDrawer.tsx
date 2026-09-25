@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Feature } from '@/lib/types';
+import { Feature, RiskSource } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useSync } from '@/components/SyncContext';
 import { AV } from '@/lib/avatars';
@@ -167,7 +167,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
     // lowercase entries also read cleanly.
     const note = feature.riskNotes!.join(' · ');
     const cased = note ? note.charAt(0).toUpperCase() + note.slice(1) : note;
-    callouts.push({ tag, tone, note: cased });
+    callouts.push({ tag, tone, note: <>{cased}<SourceLink source={feature.riskSource} /></> });
   }
   if (recentPrdUpdate) {
     callouts.push({
@@ -237,7 +237,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
   // and cap to the last 12.
   type ActivityEntry =
     | { kind: 'version_slip';   date: string; iso?: string; from: string; to: string }
-    | { kind: 'risk_change';    date: string; iso?: string; from: string; to: string }
+    | { kind: 'risk_change';    date: string; iso?: string; from: string; to: string; reason?: string; source?: RiskSource }
     | { kind: 'prd_update';     date: string; iso?: string; summary: string }
     | { kind: 'question';       date: string; iso?: string; sender: string; text: string; source: 'chat' | 'prd_comment' };
 
@@ -247,7 +247,7 @@ export function FeatureDrawer({ feature, onClose }: Props) {
       kind: 'version_slip', date: c.date, iso: c.iso, from: c.from, to: c.to,
     })),
     ...(feature.riskHistory ?? []).map((r): DatedEntry => ({
-      kind: 'risk_change', date: r.date, iso: r.iso, from: r.from, to: r.to,
+      kind: 'risk_change', date: r.date, iso: r.iso, from: r.from, to: r.to, reason: r.reason, source: r.source,
     })),
     ...(feature.prdUpdates ?? []).map((p): DatedEntry => ({
       kind: 'prd_update', date: p.date, iso: p.iso, summary: p.summary,
@@ -577,7 +577,7 @@ function formatActivityTime(input: { iso?: string; date?: string }): string {
 
 type ActivityEntryT =
   | { kind: 'version_slip'; date: string; iso?: string; from: string; to: string }
-  | { kind: 'risk_change';  date: string; iso?: string; from: string; to: string }
+  | { kind: 'risk_change';  date: string; iso?: string; from: string; to: string; reason?: string; source?: RiskSource }
   | { kind: 'prd_update';   date: string; iso?: string; summary: string }
   | { kind: 'question';     date: string; iso?: string; sender: string; text: string; source: 'chat' | 'prd_comment' };
 
@@ -626,6 +626,8 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
             <strong style={{ color: 'var(--text)', fontWeight: 500 }}>
               {riskLabel(entry.from)} → {riskLabel(entry.to)}
             </strong>
+            {entry.reason && <>: {entry.reason}</>}
+            <SourceLink source={entry.source} />
           </>
         }
         meta={formatActivityTime(entry)}
@@ -671,6 +673,26 @@ function ActivityItem({ entry }: { entry: ActivityEntryT }) {
     );
   }
   return null;
+}
+
+/** " (enter group)" / " (open Meego)" after a risk reason, linking to where it came from. */
+function SourceLink({ source }: { source?: RiskSource }) {
+  if (!source?.url) return null;
+  return (
+    <>
+      {' '}
+      <a
+        href={source.url}
+        target="_blank"
+        rel="noreferrer"
+        className="underline"
+        style={{ color: 'var(--ai)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        ({source.kind === 'chat' ? 'enter group' : 'open Meego'})
+      </a>
+    </>
+  );
 }
 
 function ActivityRow({

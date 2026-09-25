@@ -212,6 +212,8 @@ export interface RiskFinding {
    * shows a version or planned-launch-date edit since the previous run.
    */
   delay?: { detail: string };
+  /** Where `reasons` came from, for linking in the UI. */
+  source?: import('./types').RiskSource;
 }
 
 /**
@@ -1514,6 +1516,7 @@ const CHAT_RISK_WINDOW_MS = 24 * 60 * 60 * 1000;
 export interface ChatRiskFinding {
   level: 'none' | 'yellow' | 'red';
   summary: string;
+  source?: 'chat' | 'meego';
 }
 
 /** Optional prior-risk context handed to Gemini so it can carry / clear / escalate. */
@@ -1521,6 +1524,7 @@ export interface PriorChatRisk {
   level: 'yellow' | 'red';
   summary: string;
   raisedAtIso: string;
+  source?: 'chat' | 'meego';
 }
 
 /**
@@ -1909,7 +1913,7 @@ export async function evaluateChatRisk(
   } catch (e) {
     console.warn(`[digests] chat read failed for ${featureName}:`, e);
     // Read failed: don't lose a prior risk just because we couldn't read.
-    return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
+    return prior ? { level: prior.level, summary: prior.summary, source: prior.source } : { level: 'none', summary: '' };
   }
 
   // Format chronologically (oldest first), strip out Lark text JSON wrapper.
@@ -1970,7 +1974,7 @@ export async function evaluateChatRisk(
       console.log(
         `[digests] LLM risk for "${featureName}" (no recent chat or comments, carrying prior): ${JSON.stringify({ level: prior.level, summary: prior.summary })}`,
       );
-      return { level: prior.level, summary: prior.summary };
+      return { level: prior.level, summary: prior.summary, source: prior.source };
     }
     return { level: 'none', summary: '' };
   }
@@ -2000,7 +2004,7 @@ export async function evaluateChatRisk(
     const raw = (await generateText(prompt, { model: modelName, label: promptId })).trim();
     // Strip optional ```json fences if Gemini ignored the instruction
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
-    const parsed = JSON.parse(cleaned) as { level?: string; summary?: string };
+    const parsed = JSON.parse(cleaned) as { level?: string; summary?: string; source?: string };
     const level: ChatRiskFinding['level'] =
       parsed.level === 'red' ? 'red' :
       parsed.level === 'yellow' ? 'yellow' :
@@ -2011,11 +2015,11 @@ export async function evaluateChatRisk(
       `[digests] LLM risk for "${featureName}" (${messages.length} msgs/7d, ${commentsFormatted ? 'with' : 'no'} Meego comments${priorTag}): ${JSON.stringify({ level, summary })}`,
     );
     if (level === 'none') return { level, summary: '' };
-    return { level, summary };
+    return { level, summary, source: parsed.source === 'meego' ? 'meego' : 'chat' };
   } catch (e) {
     console.warn(`[digests] Gemini chat risk eval failed for ${featureName}:`, e);
     // LLM failed — fall back to carrying the prior risk if any.
-    return prior ? { level: prior.level, summary: prior.summary } : { level: 'none', summary: '' };
+    return prior ? { level: prior.level, summary: prior.summary, source: prior.source } : { level: 'none', summary: '' };
   }
 }
 
@@ -4316,6 +4320,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
                 level: priorChat.level,
                 summary: priorChat.summary,
                 raisedAtIso: priorChat.raisedAtIso,
+                source: priorChat.source,
               }
             : undefined,
           feature.meegoUrl,
@@ -4338,6 +4343,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
             level: chatRisk.level,
             summary: chatRisk.summary,
             raisedAtIso: (priorExpired ? nowIso : priorChat?.raisedAtIso) ?? nowIso,
+            source: chatRisk.source,
           };
         }
         if (entry.chatRisk) {
@@ -4357,6 +4363,9 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         // misleading "QA not started…" tag.
         if (chatRisk.summary && finding.level !== 'green') {
           finding.reasons = [chatRisk.summary];
+          finding.source = chatRisk.source === 'meego' && feature.meegoUrl
+            ? { kind: 'meego', url: feature.meegoUrl }
+            : feature.chatId ? { kind: 'chat', url: `https://applink.larkoffice.com/client/chat/open?openChatId=${feature.chatId}` } : undefined;
         }
       }
 
@@ -4649,6 +4658,8 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           iso:  new Date().toISOString(),
           from: prev as 'red' | 'yellow' | 'green' | 'none',
           to:   next as 'red' | 'yellow' | 'green' | 'none',
+          reason: delta.riskNotes?.[0],
+          source: delta.riskSource,
         });
       }
       let versionScanned = 0;
@@ -4667,7 +4678,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         // Skipping them keeps Step 6b within the route's maxDuration
         // when the cache holds 100+ features.
         if (statusKey === 'end') {
-          deltas.set(fId, { riskLevel: undefined, riskNotes: undefined });
+          deltas.set(fId, { riskLevel: undefined, riskNotes: undefined, riskSource: undefined });
           continue;
         }
 
@@ -4710,6 +4721,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           const abNotes: string[] = finding ? [...finding.reasons] : [];
           if (finding?.delay) abNotes.unshift(finding.delay.detail);
           delta.riskNotes = abNotes.length > 0 ? abNotes : undefined;
+          delta.riskSource = finding?.delay && meegoUrl ? { kind: 'meego', url: meegoUrl } : finding?.source;
           trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
           continue;
@@ -4732,6 +4744,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           const notes: string[] = [...finding.reasons];
           if (finding.delay) notes.unshift(finding.delay.detail);
           delta.riskNotes = notes.length > 0 ? notes : undefined;
+          delta.riskSource = finding.delay && meegoUrl ? { kind: 'meego', url: meegoUrl } : finding.source;
           trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
           continue;
@@ -4742,6 +4755,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
           const latest = nextVersionChanges![nextVersionChanges!.length - 1];
           delta.riskLevel = 'red';
           delta.riskNotes = [`${latest.from} → ${latest.to}`];
+          delta.riskSource = meegoUrl ? { kind: 'meego', url: meegoUrl } : undefined;
           trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
           continue;
@@ -4763,6 +4777,7 @@ export async function runDailyDigests(opts: DigestRunOptions = {}): Promise<Dige
         if (DEFAULT_GREEN_STATUSES.has(statusName)) {
           delta.riskLevel = 'green';
           delta.riskNotes = undefined;
+          delta.riskSource = undefined;
           trackRiskTransition(delta, cached);
           deltas.set(fId, delta);
           continue;

@@ -12,6 +12,7 @@ import { readFeatureCache } from './feature-cache';
 const OWNER_OPEN_ID = 'ou_1e7fa98f1e46311d8a5e4554dc7a668e';
 const LARK_BASE_URL = process.env.LARK_BASE_URL ?? 'https://open.larksuite.com';
 const MAX_CHAT_MESSAGES = 60;
+const RISK_LABEL: Record<string, string> = { red: 'High', yellow: 'Medium', green: 'Low', none: 'None' };
 
 /** "45.10" > "45.8": compare dotted versions numerically. */
 function versionLater(a: string, b: string): boolean {
@@ -81,14 +82,12 @@ async function summariseChat(featureName: string, chatId: string, messages: Chat
  */
 export async function checkFeature(watch: ProactiveWatch, now = Date.now()): Promise<{ lines: string[]; next: ProactiveWatch }> {
   const synced = await syncFeatureStatus(watch.meegoUrl, undefined, watch.chatId);
-  const current = { status: synced.status ?? '', iosVersion: synced.iosVersion ?? '' };
-  // syncFeatureStatus can't always find the group without Thomas's token; the
-  // feature cache already knows it for most features.
-  let chatId = synced.chatId || watch.chatId;
-  if (!chatId) {
-    const id = watch.meegoUrl.match(/detail\/(\d+)/)?.[1];
-    chatId = (await readFeatureCache().catch(() => null))?.features.find(f => (f.meegoIssueId ?? f.id) === id)?.chatId;
-  }
+  // Risk comes from the digest (stored on the feature); the cache also knows the
+  // group chat when syncFeatureStatus can't find it without Thomas's token.
+  const id = watch.meegoUrl.match(/detail\/(\d+)/)?.[1];
+  const stored = (await readFeatureCache().catch(() => null))?.features.find(f => (f.meegoIssueId ?? f.id) === id);
+  const current = { status: synced.status ?? '', iosVersion: synced.iosVersion ?? '', riskLevel: stored?.riskLevel ?? 'none' };
+  const chatId = synced.chatId || watch.chatId || stored?.chatId;
   const next: ProactiveWatch = { ...watch, name: synced.name || watch.name, chatId, snapshot: current, lastCheckedAt: new Date(now).toISOString() };
   if (!watch.snapshot || !watch.lastCheckedAt) return { lines: [], next };
 
@@ -100,6 +99,14 @@ export async function checkFeature(watch: ProactiveWatch, now = Date.now()): Pro
   if (current.iosVersion && current.iosVersion !== before.iosVersion) {
     const delayed = before.iosVersion && versionLater(current.iosVersion, before.iosVersion);
     lines.push(`• Target version: ${before.iosVersion || '—'} → ${current.iosVersion}${delayed ? ' (delayed)' : ''}`);
+  }
+  // Snapshots from before risk was tracked have no riskLevel: treat as a baseline.
+  if (before.riskLevel !== undefined && current.riskLevel !== before.riskLevel) {
+    const reason = stored?.riskNotes?.[0];
+    const link = stored?.riskSource?.url
+      ? ` [${stored.riskSource.kind === 'chat' ? 'enter group' : 'open Meego'}](${stored.riskSource.url})`
+      : '';
+    lines.push(`• Risk: ${RISK_LABEL[before.riskLevel] ?? before.riskLevel} → ${RISK_LABEL[current.riskLevel] ?? current.riskLevel}${reason ? ` — ${reason}` : ''}${link}`);
   }
   if (chatId) {
     try {
