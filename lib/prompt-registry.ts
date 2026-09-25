@@ -278,7 +278,7 @@ source: where the summary's evidence comes from — "meego" for Meego comments, 
 
 Use "yellow" for moderate concerns, "red" for serious risks, "none" if nothing risky is currently active.`;
 
-const HAMLET_PRD_CHANGE_SUMMARY = `A PRD (Product Requirements Document) was edited. Compare the old and new versions and write a 1-sentence summary of what changed.
+const HAMLET_PRD_CHANGE_SUMMARY = `A PRD (Product Requirements Document) was edited. Compare the old and new versions and write one short sentence (at most 20 words) saying what changed. Name only the one or two most important changes in plain words — no lists, no sub-clauses, no section-by-section detail.
 
 Only REQUIREMENT CONTENT counts as a real change: new or removed sections, changed requirements, changed logic, new scope, changed metrics or targets.
 
@@ -290,7 +290,7 @@ Reply with EXACTLY "Minor wording edits" and nothing else if the only difference
 
 When in doubt between a real change and a cosmetic one, answer "Minor wording edits".
 
-Otherwise reply with ONLY the 1-sentence summary, no prefix.
+Otherwise reply with ONLY that sentence, no prefix. Example: "Added age-gating rules and a new error fallback section."
 
 OLD VERSION:
 \${prevText}
