@@ -29,7 +29,7 @@ export function FeatureListHeader({ hideStatus, hidePriority, hideAction, showCh
     'Team',
     'Risk',
     'Notes',
-    ...(showChangeLog ? ['Changelog'] : []),
+    ...(showChangeLog ? ['Changelog', 'Proactive'] : []),
     ...(hideAction ? [] : ['Action']),
     '', // Sync (placeholder — keeps span count = column count)
   ];

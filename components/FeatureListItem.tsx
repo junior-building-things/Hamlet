@@ -37,6 +37,8 @@ interface Props {
   showChangeLog?: boolean;
   /** Logged-in user's email; the change log can only be on when they're a listed PM. */
   userEmail?: string;
+  proactiveOn?: boolean;
+  onToggleProactive?: (feature: Feature) => void;
   /** Same gridTemplateColumns the header renders with so each row
    *  shares identical column tracks. */
   gridTemplateColumns?: string;
@@ -342,7 +344,7 @@ function FeatureNameTip({ feature }: { feature: Feature }) {
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, hasUpdate, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, hideAction, showChangeLog, userEmail, gridTemplateColumns }: Props) {
+export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync, completing, onComplete, hasUpdate, onToggleAgent, onFieldUpdate, hideStatus, hidePriority, hideAction, showChangeLog, userEmail, proactiveOn, onToggleProactive, gridTemplateColumns }: Props) {
   const [showPackage, setShowPackage] = useState(false);
   const [showIos, setShowIos] = useState(false);
   // Row clicks open the drawer (Phase C). Falls back to onEdit when no
@@ -541,6 +543,27 @@ export function FeatureListItem({ feature, syncing, onEdit, onOpenDetail, onSync
             >
               <span className={`relative inline-flex w-8 h-[18px] shrink-0 rounded-full transition-colors ${changeLogOn ? 'bg-[var(--ai)]' : 'bg-[var(--hairline)]'}`}>
                 <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${changeLogOn ? 'translate-x-[14px]' : ''}`} />
+              </span>
+            </button>
+          </Tip>
+        </div>
+      )}
+
+      {/* Proactive updates toggle */}
+      {showChangeLog && (
+        <div className="hidden sm:flex items-center py-2.5 pl-4" onClick={e => e.stopPropagation()}>
+          <Tip content={proactiveOn ? 'Junior DMs you when this feature changes' : 'Proactive updates off'}>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!!proactiveOn}
+              aria-label="Proactive updates"
+              aria-disabled={!onToggleProactive || !feature.meegoIssueId}
+              onClick={() => { if (feature.meegoIssueId) onToggleProactive?.(feature); }}
+              className={!onToggleProactive || !feature.meegoIssueId ? 'opacity-40 cursor-not-allowed' : ''}
+            >
+              <span className={`relative inline-flex w-8 h-[18px] shrink-0 rounded-full transition-colors ${proactiveOn ? 'bg-[var(--ai)]' : 'bg-[var(--hairline)]'}`}>
+                <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${proactiveOn ? 'translate-x-[14px]' : ''}`} />
               </span>
             </button>
           </Tip>

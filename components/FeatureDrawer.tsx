@@ -481,6 +481,7 @@ function ProactiveToggle({ feature }: { feature: Feature }) {
         body: JSON.stringify({ id, enabled: next, name: feature.name, meegoUrl: feature.meegoUrl }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      window.dispatchEvent(new CustomEvent('hamlet:proactive-changed', { detail: { id, enabled: next } }));
     } catch {
       setEnabled(!next);
       toast.error('Could not update Proactive updates');

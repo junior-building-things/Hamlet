@@ -120,6 +120,40 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
   const [syncingAll,     setSyncingAll]     = useState(false);
   const [syncingIds,     setSyncingIds]      = useState<Set<string>>(new Set());
   const [userEmail, setUserEmail] = useState<string>();
+
+  // Proactive updates live in GCS state (lib/proactive.ts), keyed by Meego id.
+  const [proactiveIds, setProactiveIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    fetch('/api/proactive')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { ids?: string[] } | null) => { if (d?.ids) setProactiveIds(new Set(d.ids)); })
+      .catch(() => {});
+    // The drawer's switch changes the same flag.
+    const onChange = (e: Event) => {
+      const { id, enabled } = (e as CustomEvent<{ id: string; enabled: boolean }>).detail;
+      setProactiveIds(prev => { const next = new Set(prev); if (enabled) next.add(id); else next.delete(id); return next; });
+    };
+    window.addEventListener('hamlet:proactive-changed', onChange);
+    return () => window.removeEventListener('hamlet:proactive-changed', onChange);
+  }, []);
+  async function toggleProactive(f: Feature) {
+    const id = f.meegoIssueId;
+    if (!id || !f.meegoUrl) return;
+    const enabled = !proactiveIds.has(id);
+    const notify = (on: boolean) => window.dispatchEvent(new CustomEvent('hamlet:proactive-changed', { detail: { id, enabled: on } }));
+    notify(enabled);
+    try {
+      const r = await fetch('/api/proactive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, enabled, name: f.name, meegoUrl: f.meegoUrl }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } catch {
+      notify(!enabled);
+      toast.error('Could not update Proactive updates');
+    }
+  }
   useEffect(() => {
     fetch('/api/auth/me')
       .then(r => r.ok ? r.json() : null)
@@ -629,6 +663,7 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
     cols.push('80px');                           // Risk dot + label ("Delayed" longest)
     cols.push('minmax(200px,1fr)');              // Notes — gets the leftover
     cols.push('90px');                           // PRD change log toggle
+    cols.push('90px');                           // Proactive updates toggle
     if (!hideAction) cols.push('80px');          // Action button
     cols.push('40px');                           // Sync icon
     return cols.join(' ');
@@ -764,6 +799,8 @@ export function ProjectView({ features, setFeatures, openDrawerForId, onDrawerOp
         hideAction={hideAction}
         showChangeLog
         userEmail={userEmail}
+        proactiveOn={!!f.meegoIssueId && proactiveIds.has(f.meegoIssueId)}
+        onToggleProactive={toggleProactive}
         gridTemplateColumns={gridTemplateColumns} />
     ));
   }

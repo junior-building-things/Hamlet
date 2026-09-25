@@ -3,11 +3,11 @@ import { loadDigestState, updateDigestState } from '@/lib/digest-state';
 
 export const dynamic = 'force-dynamic';
 
-/** GET ?id=<meego work item id> — whether Proactive updates are on for that feature. */
+/** GET ?id=<meego work item id> — whether Proactive updates are on for that feature; no id → every enabled id. */
 export async function GET(req: NextRequest) {
   const id = new URL(req.url).searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
   const state = await loadDigestState();
+  if (!id) return NextResponse.json({ ids: Object.keys(state.proactiveWatch ?? {}) });
   return NextResponse.json({ enabled: !!state.proactiveWatch?.[id] });
 }
 
