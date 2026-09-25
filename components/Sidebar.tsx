@@ -98,7 +98,6 @@ export function Sidebar({ activeView, onViewChange, onCreateFeature, user, featu
       >
         <Plus className="w-3 h-3 shrink-0" />
         <span>New Feature</span>
-        <span className="ml-auto font-mono text-[10px] opacity-50 px-1.5 py-px rounded bg-black/15 dark:bg-white/20">⌘N</span>
       </button>
 
       <NavSection label="Workspace" items={workspace} activeView={activeView} onViewChange={onViewChange} />

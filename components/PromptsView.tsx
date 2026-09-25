@@ -93,7 +93,6 @@ export function PromptsView() {
             onChange={e => setSearch(e.target.value)}
             className="bg-transparent text-[12px] text-[var(--text)] placeholder-[var(--text-dim)] outline-none w-full"
           />
-          <span className="font-mono text-[9.5px] text-[var(--text-dim)] px-1 py-px rounded border border-[var(--hairline)]">⌘K</span>
         </div>
         {(['all', 'hamlet', 'junior', 'rio', 'mia'] as const).map(s => {
           const active = filter === s;
